@@ -1,0 +1,12 @@
+node_modules/
+backend/node_modules/
+dist/
+
+.env
+backend/.env
+.env.*
+!.env.example
+
+*.local
+.DS_Store
+.claude/

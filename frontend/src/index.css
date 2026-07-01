@@ -1,0 +1,313 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Josefin+Sans:ital,wght@0,100..700;1,100..700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-brand-navy: #202a36;
+  --color-brand-green: #4b6741;
+  --color-brand-amber: #d97706;
+  --font-heading: 'Cinzel', serif;
+  --font-body: 'Josefin Sans', sans-serif;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   VK DESIGN TOKEN SYSTEM  — 5 luxury themes
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── 1. VarliKent Signature (default) ─────────────────────── */
+:root,
+html[data-theme="default"] {
+  /* Section backgrounds */
+  --vk-section-dark:      #1E1E1C;
+  --vk-section-dark-alt:  #2B2B28;
+  --vk-section-light:     #F6F3ED;
+  --vk-section-light-alt: #FCFAF6;
+
+  /* Greens */
+  --vk-green:       #5E7F52;
+  --vk-green-deep:  #3F5A3D;
+  --vk-green-brand: #4b6741;
+
+  /* Gold */
+  --vk-gold:        #C9A35A;
+  --vk-gold-hover:  #B88D3B;
+
+  /* Navigation */
+  --vk-nav-bg:      #ffffff;
+
+  /* Text */
+  --vk-text:         #1E1E1C;
+  --vk-text-muted:   #6B6B64;
+  --vk-text-on-dark: #ffffff;
+
+  /* Card / UI */
+  --vk-card-bg:      #ffffff;
+  --vk-border:       rgba(30,30,28,0.10);
+  --vk-input-bg:     #ffffff;
+  --vk-shadow:       0 2px 16px rgba(0,0,0,0.08);
+
+  /* RGB triplets for rgba() usage */
+  --vk-gold-rgb:    201, 163, 90;
+  --vk-green-rgb:   94, 127, 82;
+  --vk-dark-rgb:    30, 30, 28;
+
+  /* SettingsPage --t- aliases */
+  --t-accent:       var(--vk-green-brand);
+  --t-accent-h:     var(--vk-green-deep);
+  --t-bg:           var(--vk-section-light-alt);
+  --t-surface:      var(--vk-card-bg);
+  --t-text:         var(--vk-text);
+  --t-muted:        var(--vk-text-muted);
+  --t-border:       var(--vk-border);
+  --t-input-bg:     var(--vk-input-bg);
+  --t-input-border: var(--vk-border);
+  --t-shadow:       var(--vk-shadow);
+  --t-nav-bg:       var(--vk-nav-bg);
+}
+
+/* ── 2. Heritage Navy ─────────────────────────────────────── */
+html[data-theme="classic"] {
+  --vk-section-dark:      #101B2D;
+  --vk-section-dark-alt:  #07111F;
+  --vk-section-light:     #F6F0E6;
+  --vk-section-light-alt: #EEE8DC;
+
+  --vk-green:       #4D6B45;
+  --vk-green-deep:  #3A5030;
+  --vk-green-brand: #4D6B45;
+
+  --vk-gold:        #C9A35A;
+  --vk-gold-hover:  #B48A35;
+
+  --vk-nav-bg:      #101B2D;
+
+  --vk-text:         #111111;
+  --vk-text-muted:   #9CA3AF;
+  --vk-text-on-dark: #F7F3EA;
+
+  --vk-card-bg:      #ffffff;
+  --vk-border:       rgba(16,27,45,0.12);
+  --vk-input-bg:     #ffffff;
+  --vk-shadow:       0 2px 16px rgba(0,0,0,0.10);
+
+  --vk-gold-rgb:    201, 163, 90;
+  --vk-green-rgb:   77, 107, 69;
+  --vk-dark-rgb:    16, 27, 45;
+
+  --t-accent:       var(--vk-green-brand);
+  --t-accent-h:     var(--vk-green-deep);
+  --t-bg:           var(--vk-section-light-alt);
+  --t-surface:      var(--vk-card-bg);
+  --t-text:         var(--vk-text);
+  --t-muted:        var(--vk-text-muted);
+  --t-border:       var(--vk-border);
+  --t-input-bg:     var(--vk-input-bg);
+  --t-input-border: var(--vk-border);
+  --t-shadow:       var(--vk-shadow);
+  --t-nav-bg:       var(--vk-nav-bg);
+}
+
+/* ── 3. Dark Luxury ───────────────────────────────────────── */
+html[data-theme="dark"] {
+  --vk-section-dark:      #0E1110;
+  --vk-section-dark-alt:  #181C1A;
+  --vk-section-light:     #202622;
+  --vk-section-light-alt: #181C1A;
+
+  --vk-green:       #5E7F52;
+  --vk-green-deep:  #2F4733;
+  --vk-green-brand: #4D6B45;
+
+  --vk-gold:        #D1A85B;
+  --vk-gold-hover:  #B88D40;
+
+  --vk-nav-bg:      #0E1110;
+
+  --vk-text:         #F6F1E8;
+  --vk-text-muted:   #B6B0A6;
+  --vk-text-on-dark: #F6F1E8;
+
+  --vk-card-bg:      #202622;
+  --vk-border:       rgba(209,168,91,0.18);
+  --vk-input-bg:     #181C1A;
+  --vk-shadow:       0 2px 20px rgba(0,0,0,0.40);
+
+  --vk-gold-rgb:    209, 168, 91;
+  --vk-green-rgb:   94, 127, 82;
+  --vk-dark-rgb:    14, 17, 16;
+
+  --t-accent:       var(--vk-green-brand);
+  --t-accent-h:     var(--vk-green-deep);
+  --t-bg:           var(--vk-section-dark-alt);
+  --t-surface:      var(--vk-card-bg);
+  --t-text:         var(--vk-text);
+  --t-muted:        var(--vk-text-muted);
+  --t-border:       var(--vk-border);
+  --t-input-bg:     var(--vk-input-bg);
+  --t-input-border: var(--vk-border);
+  --t-shadow:       var(--vk-shadow);
+  --t-nav-bg:       var(--vk-nav-bg);
+}
+
+/* ── 4. Light Luxury ──────────────────────────────────────── */
+html[data-theme="light"] {
+  --vk-section-dark:      #314B35;
+  --vk-section-dark-alt:  #243825;
+  --vk-section-light:     #FBF8F1;
+  --vk-section-light-alt: #F3EEE4;
+
+  --vk-green:       #4D6B45;
+  --vk-green-deep:  #314B35;
+  --vk-green-brand: #4D6B45;
+
+  --vk-gold:        #C4A15A;
+  --vk-gold-hover:  #A8882E;
+
+  --vk-nav-bg:      #ffffff;
+
+  --vk-text:         #111827;
+  --vk-text-muted:   #6E746C;
+  --vk-text-on-dark: #F7F3EA;
+
+  --vk-card-bg:      #ffffff;
+  --vk-border:       #E5DED2;
+  --vk-input-bg:     #ffffff;
+  --vk-shadow:       0 2px 12px rgba(0,0,0,0.06);
+
+  --vk-gold-rgb:    196, 161, 90;
+  --vk-green-rgb:   77, 107, 69;
+  --vk-dark-rgb:    49, 75, 53;
+
+  --t-accent:       var(--vk-green-brand);
+  --t-accent-h:     var(--vk-green-deep);
+  --t-bg:           var(--vk-section-light-alt);
+  --t-surface:      var(--vk-card-bg);
+  --t-text:         var(--vk-text);
+  --t-muted:        var(--vk-text-muted);
+  --t-border:       var(--vk-border);
+  --t-input-bg:     var(--vk-input-bg);
+  --t-input-border: var(--vk-border);
+  --t-shadow:       var(--vk-shadow);
+  --t-nav-bg:       var(--vk-nav-bg);
+}
+
+/* ── 5. Forest Green ──────────────────────────────────────── */
+html[data-theme="forest"] {
+  --vk-section-dark:      #263D2C;
+  --vk-section-dark-alt:  #1A2E1E;
+  --vk-section-light:     #EEF3EA;
+  --vk-section-light-alt: #E4ECDF;
+
+  --vk-green:       #3F5A3D;
+  --vk-green-deep:  #263D2C;
+  --vk-green-brand: #4D6B45;
+
+  --vk-gold:        #C9A35A;
+  --vk-gold-hover:  #B48A35;
+
+  --vk-nav-bg:      #263D2C;
+
+  --vk-text:         #142018;
+  --vk-text-muted:   #4A6050;
+  --vk-text-on-dark: #F7F3EA;
+
+  --vk-card-bg:      #F8F4EA;
+  --vk-border:       rgba(38,61,44,0.15);
+  --vk-input-bg:     #EEF3EA;
+  --vk-shadow:       0 2px 16px rgba(38,61,44,0.12);
+
+  --vk-gold-rgb:    201, 163, 90;
+  --vk-green-rgb:   63, 90, 61;
+  --vk-dark-rgb:    38, 61, 44;
+
+  --t-accent:       var(--vk-green-brand);
+  --t-accent-h:     var(--vk-green-deep);
+  --t-bg:           var(--vk-section-light-alt);
+  --t-surface:      var(--vk-card-bg);
+  --t-text:         var(--vk-text);
+  --t-muted:        var(--vk-text-muted);
+  --t-border:       var(--vk-border);
+  --t-input-bg:     var(--vk-input-bg);
+  --t-input-border: var(--vk-border);
+  --t-shadow:       var(--vk-shadow);
+  --t-nav-bg:       var(--vk-nav-bg);
+}
+
+/* Forest section green glow */
+html[data-theme="forest"] section {
+  position: relative;
+}
+html[data-theme="forest"] section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(63,90,61,0.15) 0%, transparent 65%);
+}
+html[data-theme="forest"] section > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Dark Luxury body background ──────────────────────────── */
+html[data-theme="dark"] body,
+html[data-theme="dark"] #root {
+  background-color: var(--vk-section-dark);
+  color: var(--vk-text);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TYPOGRAPHY
+   ══════════════════════════════════════════════════════════════ */
+* {
+  font-family: 'Josefin Sans', sans-serif;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Cinzel', serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: #4b6741;
+  color: white;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ANIMATIONS
+   ══════════════════════════════════════════════════════════════ */
+@keyframes vk-draw {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.vk-logo-animate {
+  animation: vk-draw 0.6s ease-out forwards;
+}
+
+/* Blueprint grid pattern */
+.blueprint-grid {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Premium section divider */
+.section-rule {
+  width: 40px;
+  height: 1px;
+  background: var(--vk-gold);
+  display: block;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
