@@ -6,19 +6,17 @@ if (!microsoftClientId) {
   console.error('Missing VITE_MICROSOFT_CLIENT_ID in frontend .env')
 }
 
-const productionOrigin = 'https://www.varlikent.com'
-
-const appOrigin =
+const authOrigin =
   window.location.hostname === 'localhost'
     ? window.location.origin
-    : productionOrigin
+    : 'https://varlikent.com'
 
 export const msalInstance = new PublicClientApplication({
   auth: {
     clientId: microsoftClientId,
     authority: 'https://login.microsoftonline.com/common',
-    redirectUri: `${appOrigin}/blank.html`,
-    postLogoutRedirectUri: appOrigin,
+    redirectUri: `${authOrigin}/blank.html`,
+    postLogoutRedirectUri: authOrigin,
     navigateToLoginRequestUrl: false,
   },
   cache: {
