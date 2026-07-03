@@ -10,8 +10,9 @@ export const msalInstance = new PublicClientApplication({
   auth: {
     clientId: microsoftClientId,
     authority: 'https://login.microsoftonline.com/common',
-    redirectUri: `${window.location.origin}/redirect.html`,
-    postLogoutRedirectUri: `${window.location.origin}/redirect.html`,
+    redirectUri: `${window.location.origin}/blank.html`,
+    postLogoutRedirectUri: window.location.origin,
+    navigateToLoginRequestUrl: false,
   },
   cache: {
     cacheLocation: 'sessionStorage',
