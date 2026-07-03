@@ -127,9 +127,10 @@ router.post('/favourites/:propertyId', protect, async (req, res, next) => {
   try {
     const user = await User.findByIdAndUpdate(
       req.user._id,
-      { $addToSet: { favourites: req.params.propertyId } },
+      { $addToSet: { favourites: req.params.propertyId } }, // $addToSet prevents duplicates, add this value to the array only if it is not already there.
       { new: true }
     ).select('-password')
+
     res.json({ success: true, favourites: user.favourites })
   } catch (err) {
     next(err)
@@ -141,7 +142,7 @@ router.delete('/favourites/:propertyId', protect, async (req, res, next) => {
   try {
     const user = await User.findByIdAndUpdate(
       req.user._id,
-      { $pull: { favourites: req.params.propertyId } },
+      { $pull: { favourites: req.params.propertyId } }, // $pull removes the specified value from the array
       { new: true }
     ).select('-password')
     res.json({ success: true, favourites: user.favourites })
@@ -165,8 +166,8 @@ router.put('/:id/role', protect, canManageUsers, async (req, res, next) => {
     if (req.body.isActive !== undefined) target.isActive = req.body.isActive
     await target.save()
 
-    const userObj = target.toObject()
-    delete userObj.password
+    const userObj = target.toObject() //convert the mongoose document to a plain JavaScript object
+    delete userObj.password //bcz now we delete the password field from the user object before sending it in the response
     res.json({ success: true, user: userObj })
   } catch (err) {
     next(err)
@@ -212,6 +213,7 @@ router.put('/:id/password', protect, canChangePasswords, async (req, res, next) 
     }
 
     const target = await User.findById(req.params.id)
+    
     if (!target) return res.status(404).json({ success: false, message: 'User not found' })
 
     // Only owner can change another owner's password
