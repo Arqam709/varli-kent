@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useGoogleLogin } from '@react-oauth/google'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -8,6 +8,7 @@ import { assets } from '../assets/assets'
 import api from '../lib/api'
 import { useMsal } from '@azure/msal-react'
 import { microsoftLoginRequest } from '../lib/msal'
+import { InteractionStatus } from '@azure/msal-browser'
 
 const LoginPage = () => {
   const [email, setEmail] = useState('')
@@ -15,13 +16,74 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false)
 
   const { login, loginWithToken } = useAuth()
-  const { instance } = useMsal()
+  const { instance, accounts, inProgress } = useMsal()
   const { t, language } = useLanguage()
   const a = t.auth
 
   const navigate = useNavigate()
   const location = useLocation()
   const from = location.state?.from?.pathname || '/'
+  const microsoftHandledRef = useRef(false)
+  
+
+useEffect(() => {
+  const completeMicrosoftLogin = async () => {
+    if (microsoftHandledRef.current) return
+    if (inProgress !== InteractionStatus.None) return
+
+    const account = instance.getActiveAccount() || accounts[0]
+    if (!account) return
+
+    microsoftHandledRef.current = true
+    setLoading(true)
+
+    try {
+      instance.setActiveAccount(account)
+
+      const tokenResponse = await instance.acquireTokenSilent({
+        ...microsoftLoginRequest,
+        account,
+      })
+
+      const res = await api.post('/auth/microsoft', {
+        idToken: tokenResponse.idToken,
+      })
+
+      const { token, user } = res.data
+
+      loginWithToken(user, token)
+
+      toast.success(
+        language === 'tr'
+          ? 'Microsoft ile giriş yapıldı'
+          : language === 'ar'
+            ? 'تم تسجيل الدخول باستخدام Microsoft'
+            : 'Signed in with Microsoft'
+      )
+
+      navigate(from, { replace: true })
+    } catch (error) {
+      console.log('Microsoft redirect completion error:', error)
+      console.log('Backend response:', error.response?.data)
+
+      toast.error(
+        error.response?.data?.message ||
+        error.message ||
+        (
+          language === 'tr'
+            ? 'Microsoft ile giriş başarısız'
+            : language === 'ar'
+              ? 'فشل تسجيل الدخول باستخدام Microsoft'
+              : 'Microsoft sign in failed'
+        )
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  completeMicrosoftLogin()
+}, [accounts, inProgress, instance, loginWithToken, navigate, from, language])
 
   
 
@@ -116,28 +178,12 @@ const handleMicrosoftLogin = async () => {
   try {
     setLoading(true)
 
-    const tokenResponse = await instance.loginPopup(microsoftLoginRequest)
-
-    const res = await api.post('/auth/microsoft', {
-      idToken: tokenResponse.idToken,
+    await instance.loginRedirect({
+      ...microsoftLoginRequest,
+      redirectUri: `${window.location.origin}/login`,
     })
-
-    const { token, user } = res.data
-
-    loginWithToken(user, token)
-
-    toast.success(
-      language === 'tr'
-        ? 'Microsoft ile giriş yapıldı'
-        : language === 'ar'
-          ? 'تم تسجيل الدخول باستخدام Microsoft'
-          : 'Signed in with Microsoft'
-    )
-
-    navigate(from, { replace: true })
   } catch (error) {
-    console.log('Microsoft login error:', error)
-    console.log('Backend response:', error.response?.data)
+    console.log('Microsoft redirect start error:', error)
 
     toast.error(
       error.response?.data?.message ||
@@ -150,7 +196,7 @@ const handleMicrosoftLogin = async () => {
             : 'Microsoft sign in failed'
       )
     )
-  } finally {
+
     setLoading(false)
   }
 }
