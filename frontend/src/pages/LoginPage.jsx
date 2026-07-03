@@ -116,15 +116,7 @@ const handleMicrosoftLogin = async () => {
   try {
     setLoading(true)
 
-    const authOrigin =
-  window.location.hostname === 'localhost'
-    ? window.location.origin
-    : 'https://varlikent.com'
-
-const tokenResponse = await instance.loginPopup({
-  ...microsoftLoginRequest,
-  redirectUri: `${authOrigin}/blank.html`,
-})
+    const tokenResponse = await instance.loginPopup(microsoftLoginRequest)
 
     const res = await api.post('/auth/microsoft', {
       idToken: tokenResponse.idToken,

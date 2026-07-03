@@ -9,7 +9,7 @@ if (!microsoftClientId) {
 const authOrigin =
   window.location.hostname === 'localhost'
     ? window.location.origin
-    : 'https://varlikent.com'
+    : 'https://www.varlikent.com'
 
 export const msalInstance = new PublicClientApplication({
   auth: {
