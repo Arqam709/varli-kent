@@ -24,10 +24,15 @@ const LoginPage = () => {
   const location = useLocation()
   const from = location.state?.from?.pathname || '/'
   const microsoftHandledRef = useRef(false)
-  
+
 
 useEffect(() => {
   const completeMicrosoftLogin = async () => {
+    const isMicrosoftLoginPending =
+  sessionStorage.getItem('varlikent_microsoft_login_pending') === 'true'
+
+if (!isMicrosoftLoginPending) return
+
     if (microsoftHandledRef.current) return
     if (inProgress !== InteractionStatus.None) return
 
@@ -178,11 +183,16 @@ const handleMicrosoftLogin = async () => {
   try {
     setLoading(true)
 
+    sessionStorage.setItem('varlikent_microsoft_login_pending', 'true')
+
     await instance.loginRedirect({
       ...microsoftLoginRequest,
       redirectUri: `${window.location.origin}/login`,
+      prompt: 'select_account',
     })
   } catch (error) {
+    sessionStorage.removeItem('varlikent_microsoft_login_pending')
+
     console.log('Microsoft redirect start error:', error)
 
     toast.error(
