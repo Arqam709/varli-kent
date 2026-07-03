@@ -116,7 +116,10 @@ const handleMicrosoftLogin = async () => {
   try {
     setLoading(true)
 
-    const tokenResponse = await instance.loginPopup(microsoftLoginRequest)
+    const tokenResponse = await instance.loginPopup({
+  ...microsoftLoginRequest,
+  redirectUri: `${window.location.origin}/blank.html`,
+})
 
     const res = await api.post('/auth/microsoft', {
       idToken: tokenResponse.idToken,
