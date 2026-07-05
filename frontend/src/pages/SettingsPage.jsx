@@ -24,7 +24,7 @@ const Field = ({ label, children }) => (
 
 const Input = (props) => (
   <input
-    {...props}
+    {...props} //all the things you pass to input
     className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 transition"
     style={{
       background: 'var(--t-input-bg)',
@@ -166,6 +166,7 @@ const SettingsPage = () => {
             {user?.avatar ? (
               <img src={user.avatar} alt="Avatar" className="h-16 w-16 rounded-full object-cover ring-2" style={{ ringColor: 'var(--t-accent)' }} />
             ) : (
+              //show users name first letter
               <div className="h-16 w-16 rounded-full flex items-center justify-center text-xl font-bold text-white" style={{ background: 'var(--t-accent)' }}>
                 {user?.name?.charAt(0)?.toUpperCase() || '?'}
               </div>
@@ -266,10 +267,13 @@ const SettingsPage = () => {
         <Section title="Account Details" description="Read-only information about your account.">
           <div className="space-y-0">
             {[
-              { label: 'Account ID', value: user?._id },
-              { label: 'Role', value: roleLabel },
+              { label: 'Account ID', value: user?._id || 'N/A' },
+              { label: 'Role', value: user ? roleLabel : 'N/A' },
               { label: 'Member since', value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A' },
-              { label: 'Status', value: user?.isActive === false ? 'Suspended' : 'Active' },
+              {
+  label: 'Status',
+  value: user ? (user.isActive === false ? 'Suspended' : 'Active') : 'N/A'
+}
             ].map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between py-3 border-b last:border-0" style={{ borderColor: 'var(--t-border)' }}>
                 <span className="text-sm" style={{ color: 'var(--t-muted)' }}>{label}</span>

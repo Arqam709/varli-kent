@@ -13,6 +13,14 @@ const router = express.Router()
 const signToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' })
 
+const safeUser = (user) => {
+  const userObj = user.toObject()
+  delete userObj.password
+  delete userObj.resetPasswordToken
+  delete userObj.resetPasswordExpires
+  return userObj
+}
+
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 
@@ -83,10 +91,7 @@ router.post(
       const user = await User.create({ name, email, password, role: 'user' })
       const token = signToken(user._id)
 
-      const userObj = user.toObject()
-      delete userObj.password
-
-      res.status(201).json({ success: true, token, user: userObj })
+      res.status(201).json({ success: true, token, user: safeUser(user) })
     } catch (err) {
       next(err)
     }
@@ -120,10 +125,7 @@ router.post(
       }
 
       const token = signToken(user._id)
-      const userObj = user.toObject()
-      delete userObj.password
-
-      res.json({ success: true, token, user: userObj })
+      res.json({ success: true, token, user: safeUser(user) })
     } catch (err) {
       next(err)
     }
@@ -236,6 +238,15 @@ router.post('/google', async (req, res) => {
         email: googleUser.email.toLowerCase(),
         avatar: googleUser.picture,
         password: Math.random().toString(36).slice(-12),
+        provider: 'google',
+        role: 'user',
+      })
+    }
+
+    if (user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account is deactivated',
       })
     }
 
@@ -244,14 +255,7 @@ router.post('/google', async (req, res) => {
     res.json({
       success: true,
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        permissions: user.permissions,
-        avatar: user.avatar,
-      },
+      user: safeUser(user),
     })
   } catch (error) {
     console.log('Google auth error:', error)
@@ -260,11 +264,6 @@ router.post('/google', async (req, res) => {
       message: 'Google login failed',
     })
   }
-})
-
-// POST /api/auth/apple
-router.post('/apple', (req, res) => {
-  res.json({ message: 'Apple OAuth - configure APPLE_CLIENT_ID in .env' })
 })
 
 // POST /api/auth/microsoft
@@ -310,6 +309,7 @@ router.post('/microsoft', async (req, res) => {
         email,
         avatar: null,
         password: crypto.randomBytes(24).toString('hex'),
+        provider: 'microsoft',
         role: 'user',
       })
     }
@@ -324,17 +324,10 @@ router.post('/microsoft', async (req, res) => {
     const token = signToken(user._id)
 
     res.json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        permissions: user.permissions,
-        avatar: user.avatar,
-      },
-    })
+  success: true,
+  token,
+  user: safeUser(user),
+})
   } catch (error) {
     console.log('Microsoft auth error:', error)
 
