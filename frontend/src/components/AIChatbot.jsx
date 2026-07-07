@@ -305,6 +305,15 @@ export default function AIChatbot() {
                                 {property.priceLabel || property.price}
                               </p>
 
+                              {property.matchReason && (
+                                <p
+                                  className="mt-2 text-[11px] italic leading-snug"
+                                  style={{ color: C.muted }}
+                                >
+                                  {property.matchReason}
+                                </p>
+                              )}
+
                               <Link
                                 to={`/properties/${property._id}`}
                                 onClick={closeChat}
