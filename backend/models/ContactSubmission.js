@@ -15,6 +15,11 @@ const contactSubmissionSchema = new mongoose.Schema({
     enum: ['New', 'Replied', 'Archived'],
     default: 'New',
   },
+  source: {
+    type: String,
+    enum: ['website', 'ai_assistant'],
+    default: 'website',
+  },
   createdAt: { type: Date, default: Date.now },
 })
 

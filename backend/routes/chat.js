@@ -2,6 +2,14 @@
 import express from 'express'
 import Property from '../models/Property.js'
 import { parsePropertyMessageWithGemini } from '../utils/geminiPropertyParser.js'
+import { findConceptForWord } from '../utils/lifestyleConcepts.js'
+import { handleLeadFlow } from '../services/chatLeadFlow.js'
+import {
+  searchPropertiesByMeaning,
+  buildSemanticSearchQuery,
+  buildSemanticHardFilter,
+  RESIDENTIAL_PROPERTY_TYPES,
+} from '../services/propertySemanticSearch.js'
 import mongoose from 'mongoose'
 
 const router = express.Router()
@@ -18,6 +26,7 @@ nextQuestion: null,
   descriptionQuery: null,
   listingType: null,
   propertyType: null,
+  propertyTypes: [],
   district: null,
   districts: [],
   beds: null,
@@ -83,11 +92,27 @@ const messageHasNewCriteria = (parsedFromMessage = {}) => {
 // Büyükçekmece", which states TWO things at once).
 const STRUCTURED_CRITERIA_FIELDS = CRITERIA_FIELDS.filter((field) => field !== 'descriptionQuery')
 
-const countNewStructuredCriteria = (parsedFromMessage = {}) => {
-  let count = STRUCTURED_CRITERIA_FIELDS.filter((field) => hasValue(parsedFromMessage[field])).length
+// Only counts a field as "new" if it genuinely differs from what's already
+// known (currentFilters) — not merely present in parsedFromMessage. Gemini
+// routinely echoes back already-known scalar fields (listingType,
+// propertyType) on continuation messages out of its own "carry forward
+// context" instinct; treating those echoes as fresh criteria wrongly
+// classified plain continuation replies ("no, show me what you have") as
+// multi-field fresh searches, which then cleared preserved
+// lifestyle/semantic search context that should have survived.
+const countNewStructuredCriteria = (parsedFromMessage = {}, currentFilters = {}) => {
+  let count = STRUCTURED_CRITERIA_FIELDS.filter((field) => {
+    const value = parsedFromMessage[field]
+    return hasValue(value) && value !== currentFilters[field]
+  }).length
 
   if (Array.isArray(parsedFromMessage.districts) && parsedFromMessage.districts.length > 0) {
-    count += 1
+    const currentDistricts = Array.isArray(currentFilters.districts) ? currentFilters.districts : []
+    const sameDistricts =
+      parsedFromMessage.districts.length === currentDistricts.length &&
+      parsedFromMessage.districts.every((d) => currentDistricts.includes(d))
+
+    if (!sameDistricts) count += 1
   }
 
   return count
@@ -230,6 +255,7 @@ safe.descriptionQuery =
     : null
 
   safe.districts = Array.isArray(safe.districts) ? safe.districts : []
+  safe.propertyTypes = Array.isArray(safe.propertyTypes) ? safe.propertyTypes : []
   safe.mustHave = Array.isArray(safe.mustHave) ? safe.mustHave : []
   safe.niceToHave = Array.isArray(safe.niceToHave) ? safe.niceToHave : []
   safe.lifestyle = Array.isArray(safe.lifestyle) ? safe.lifestyle : []
@@ -280,6 +306,16 @@ const mergeParsedWithContext = (currentFilters = {}, newParsed = {}) => {
     merged.district = null
   }
 
+  // Same pattern for property type: multiple/uncertain types use
+  // propertyTypes[] and clear the single propertyType. A genuine single-type
+  // statement ("actually just apartment") clears any remembered ambiguity.
+  if (Array.isArray(newParsed.propertyTypes) && newParsed.propertyTypes.length > 0) {
+    merged.propertyTypes = newParsed.propertyTypes
+    merged.propertyType = null
+  } else if (hasValue(newParsed.propertyType)) {
+    merged.propertyTypes = []
+  }
+
   // Keep previous arrays unless Gemini gives new meaningful arrays
   merged.mustHave =
     Array.isArray(newParsed.mustHave) && newParsed.mustHave.length > 0
@@ -321,6 +357,16 @@ const hasSoftDescriptionSearch = (parsed = {}) => {
   )
 }
 
+// Gemini's own ask_question decision must never block a search that already
+// has enough lifestyle/description content to run (semantic or
+// keyword/concept search) — missing district/budget specifically should
+// never block a lifestyle search. buildMissingInfoQuestion already only
+// ever blocks on missing listingType/propertyType and already skips
+// entirely once hasSoftDescriptionSearch is true; this keeps the
+// Gemini-trusted early branch consistent with that same rule instead of
+// bypassing it.
+const shouldSkipGeminiAskQuestion = (parsed) => hasSoftDescriptionSearch(parsed)
+
 const buildNonPropertyReply = (parsed) => {
   if (parsed.intentType === 'casual_chat' || parsed.replyType === 'casual_reply') {
     return "I'm doing well, thank you. I'm here to help you find the right property. Are you looking to buy, rent, or just exploring?"
@@ -345,7 +391,10 @@ const buildNonPropertyReply = (parsed) => {
   return null
 }
 
-const buildMissingInfoQuestion = (parsed) => {
+const hasKnownPropertyType = (parsed) =>
+  Boolean(parsed.propertyType) || (Array.isArray(parsed.propertyTypes) && parsed.propertyTypes.length > 0)
+
+const buildMissingInfoQuestion = (parsed, message = '') => {
   // If user gave a lifestyle/description request, search descriptions first.
   // Example: "I want a safe home for my children"
   if (hasSoftDescriptionSearch(parsed)) {
@@ -356,7 +405,11 @@ const buildMissingInfoQuestion = (parsed) => {
     return 'Are you looking to buy or rent?'
   }
 
-  if (!parsed.propertyType) {
+  if (!hasKnownPropertyType(parsed)) {
+    if (messageExpressesTypeUncertainty(message)) {
+      return 'Would you prefer apartment, villa, office, or should I show residential properties?'
+    }
+
     return 'What type of property are you looking for — apartment, villa, office, or something else?'
   }
 
@@ -504,7 +557,14 @@ const buildMongoFilter = (parsed) => {
   const filter = { status: 'Available' }
 
   if (parsed.listingType) filter.listingType = parsed.listingType
-  if (parsed.propertyType) filter.propertyType = parsed.propertyType
+
+  if (Array.isArray(parsed.propertyTypes) && parsed.propertyTypes.length > 1) {
+    filter.propertyType = { $in: parsed.propertyTypes }
+  } else if (parsed.propertyType) {
+    filter.propertyType = parsed.propertyType
+  } else if (Array.isArray(parsed.propertyTypes) && parsed.propertyTypes.length === 1) {
+    filter.propertyType = parsed.propertyTypes[0]
+  }
 
   const districtList = [
     ...(parsed.district ? [parsed.district] : []),
@@ -684,30 +744,6 @@ const stripStructuredTerms = (text = '') => {
 // a property whose description only says "school", and vice versa.
 const toSingular = (word) => (word.length > 4 && word.endsWith('s') ? word.slice(0, -1) : word)
 
-// ─── Lifestyle concept groups (deterministic, no AI) ──────────────────────────
-// A property is only a genuine lifestyle match if it contains a keyword from
-// a concept the visitor actually asked about — not just any word that
-// happened to appear in Gemini's expanded free-text description query (which
-// tends to pad in loosely-related synonyms, e.g. "family friendly" for a
-// plain "near school" request).
-const LIFESTYLE_CONCEPTS = [
-  { name: 'school', keywords: ['school', 'schools', 'educational', 'education', 'kindergarten', 'university', 'campus'] },
-  { name: 'seaView', keywords: ['sea', 'seaside', 'view', 'deniz', 'manzara', 'waterfront', 'coast', 'coastal'] },
-  { name: 'metroTransport', keywords: ['metro', 'subway', 'transport', 'transportation', 'bus', 'station', 'marmaray'] },
-  { name: 'family', keywords: ['family', 'families', 'children', 'child', 'kids', 'childfriendly'] },
-  { name: 'peacefulSafe', keywords: ['peaceful', 'quiet', 'calm', 'secure', 'security', 'safe', 'safety'] },
-  { name: 'parkGreen', keywords: ['park', 'parks', 'green', 'garden', 'gardens'] },
-  { name: 'investment', keywords: ['investment', 'yield', 'rentalincome', 'appreciation', 'roi'] },
-  { name: 'luxury', keywords: ['luxury', 'premium', 'highend', 'prestigious'] },
-]
-
-const findConceptForWord = (word) => {
-  const singular = toSingular(word)
-  return LIFESTYLE_CONCEPTS.find(
-    (concept) => concept.keywords.includes(word) || concept.keywords.includes(singular)
-  )
-}
-
 // Prefer Gemini's short, tagged lifestyle/requirement phrases — they stay
 // close to what the visitor actually said. Only fall back to the broader
 // descriptionQuery (which Gemini tends to pad with loosely-related
@@ -775,18 +811,107 @@ const hasLifestyleCombinePhrase = (message = '') => {
   return LIFESTYLE_COMBINE_PATTERNS.some((pattern) => pattern.test(text))
 }
 
+// Phrases that mean "I don't have a preference, just show me what's
+// available" when answering a district/budget-style follow-up. These must
+// never be read as a fresh search or as a semantic search query — the
+// query always comes from `parsed` (see buildSemanticSearchQuery), never
+// the raw message text, so a "no preference" reply can't accidentally
+// become the thing being searched for.
+const NO_PREFERENCE_PATTERNS = [
+  /\bno preference\b/,
+  /\bany area\b/,
+  /\bany district\b/,
+  /\bno particular\b/,
+  /^\s*no\b/,
+  /\bshow me what you have\b/,
+  /\bwhatever you have\b/,
+  /\bdon'?t have (a )?preference\b/,
+  /\bnot sure\b/,
+]
+
+const isNoPreferenceAnswer = (message = '') => {
+  const text = message.trim().toLowerCase()
+  return NO_PREFERENCE_PATTERNS.some((pattern) => pattern.test(text))
+}
+
+// ─── Multiple/uncertain property type detection (deterministic) ──────────────
+// Gemini's JSON schema only has a single `propertyType` field, so it has no
+// way to express "apartment or villa" — it must pick one and silently drop
+// the uncertainty. Detected here from the raw message text instead, and used
+// to OVERRIDE whatever single guess Gemini/keywordFallbackParser made.
+const PROPERTY_TYPE_KEYWORDS = [
+  ['apartment', 'Apartment'],
+  ['flat', 'Apartment'],
+  ['villa', 'Villa'],
+  ['penthouse', 'Penthouse'],
+  ['duplex', 'Duplex'],
+  ['studio', 'Studio'],
+  ['office', 'Office'],
+  ['land', 'Land'],
+  ['shop', 'Shop'],
+]
+
+const detectMentionedPropertyTypes = (message = '') => {
+  const text = message.toLowerCase()
+  const found = []
+
+  PROPERTY_TYPE_KEYWORDS.forEach(([keyword, type]) => {
+    if (text.includes(keyword) && !found.includes(type)) {
+      found.push(type)
+    }
+  })
+
+  return found
+}
+
+const RESIDENTIAL_REQUEST_PATTERNS = [/\bresidential\b/]
+
+const messageRequestsResidential = (message = '') => {
+  const text = message.trim().toLowerCase()
+  return RESIDENTIAL_REQUEST_PATTERNS.some((pattern) => pattern.test(text))
+}
+
+const TYPE_UNCERTAINTY_PATTERNS = [/\bnot sure\b/, /\bdon'?t know\b/, /\bno idea\b/, /\bany type\b/, /\bwhatever\b/]
+
+const messageExpressesTypeUncertainty = (message = '') => {
+  const text = message.trim().toLowerCase()
+  return TYPE_UNCERTAINTY_PATTERNS.some((pattern) => pattern.test(text))
+}
+
+// Mutates parsedFromMessage in place — called right after normalizeParsed,
+// before it's merged into the conversation's remembered parsed filters.
+// "show residential properties" wins outright; otherwise, 2+ distinct
+// property types mentioned in the same message ("apartment or villa", "not
+// sure apartment or villa", "either apartment or villa") set propertyTypes[]
+// and clear the single propertyType, so neither parser's arbitrary pick wins.
+const applyRawTextPropertyTypeSignals = (parsedFromMessage, message) => {
+  if (messageRequestsResidential(message)) {
+    parsedFromMessage.propertyTypes = RESIDENTIAL_PROPERTY_TYPES
+    parsedFromMessage.propertyType = null
+    return
+  }
+
+  const mentionedTypes = detectMentionedPropertyTypes(message)
+
+  if (mentionedTypes.length > 1) {
+    parsedFromMessage.propertyTypes = mentionedTypes
+    parsedFromMessage.propertyType = null
+  }
+}
+
 // A short answer to a pending clarifying question ("buy", "Beylikdüzü",
 // "under 5 million", "no district yet") introduces no lifestyle concept of
 // its own and states at most one new structured detail. A message stating
 // two or more structured details at once ("Show me apartments in
 // Büyükçekmece") is a fresh, self-contained search instead. An explicit
-// continuity phrase ("same requirements in Kadıköy") always counts as a
-// slot answer regardless of how many structured details it also states,
-// since the visitor is explicitly saying "change only this."
-const isShortSlotAnswer = (message = '', parsedFromMessage = {}, newLifestyleConceptsCount = 0) => {
+// continuity phrase ("same requirements in Kadıköy") or a "no preference"
+// answer always counts as a slot answer regardless of how many fields
+// parsedFromMessage happens to restate.
+const isShortSlotAnswer = (message = '', parsedFromMessage = {}, currentFilters = {}, newLifestyleConceptsCount = 0) => {
   if (newLifestyleConceptsCount > 0) return false
   if (hasLifestyleCombinePhrase(message)) return true
-  return countNewStructuredCriteria(parsedFromMessage) <= 1
+  if (isNoPreferenceAnswer(message)) return true
+  return countNewStructuredCriteria(parsedFromMessage, currentFilters) <= 1
 }
 
 // Detects which known lifestyle concepts are literally invoked by a piece of
@@ -928,7 +1053,7 @@ const buildNextUsefulQuestion = (parsed = {}) => {
     return 'Are you looking to buy or rent?'
   }
 
-  if (!parsed.propertyType) {
+  if (!hasKnownPropertyType(parsed)) {
     return 'Do you prefer an apartment, villa, or another property type?'
   }
 
@@ -971,12 +1096,32 @@ const getRelaxedFeatureLabels = (parsed = {}, mustHaveFilter = {}) => {
   ).map(([, label]) => label)
 }
 
+// ─── Property type pluralization (for multi-type replies/match reasons) ──────
+const PROPERTY_TYPE_PLURAL_OVERRIDES = { Duplex: 'Duplexes' }
+
+const pluralizePropertyType = (type) =>
+  (PROPERTY_TYPE_PLURAL_OVERRIDES[type] || `${type}s`).toLowerCase()
+
+const hasMultiplePropertyTypes = (parsed = {}) =>
+  Array.isArray(parsed.propertyTypes) && parsed.propertyTypes.length > 1
+
+// "apartments and villas" when multiple types are known, else the existing
+// singular phrase, else null (nothing to say about property type at all).
+const describePropertyTypesPhrase = (parsed = {}) => {
+  if (hasMultiplePropertyTypes(parsed)) {
+    return parsed.propertyTypes.map(pluralizePropertyType).join(' and ')
+  }
+
+  return parsed.propertyType ? parsed.propertyType.toLowerCase() : null
+}
+
 // ─── Build reply text ─────────────────────────────────────────────────────────
 const buildReply = ({
   properties,
   fallbackLevel,
   parsed,
   matchedViaDescription = false,
+  matchedViaSemantic = false,
   descriptionSearchAttempted = false,
   relaxedFeatureLabels = [],
 }) => {
@@ -993,14 +1138,16 @@ const buildReply = ({
     return "I couldn't find any available properties right now. Try adjusting your district, budget, or property type."
   }
 
-  // Only claim a "description match" when every one of these properties was
-  // actually verified to contain the requested lifestyle content (see
-  // searchByDescription's significant-term filtering) — never just because a
-  // $text query technically ran.
-  if (matchedViaDescription) {
+  // Only claim a meaning/description match when these properties were
+  // actually verified (semantic similarity threshold, or
+  // searchByDescription's significant-term filtering) — never just because
+  // a query technically ran.
+  if (matchedViaDescription || matchedViaSemantic) {
     const propertyText = count === 1 ? '1 property' : `${count} properties`
 
-    let reply = `I found ${propertyText} that may match your request based on the property descriptions.`
+    let reply = matchedViaSemantic
+      ? `I found ${propertyText} that may match your request by meaning.`
+      : `I found ${propertyText} that may match your request based on the property descriptions.`
 
     if (parsed.descriptionQuery) {
       reply += ` I searched for details related to: ${parsed.descriptionQuery}.`
@@ -1010,8 +1157,11 @@ const buildReply = ({
       reply += ` I also filtered it for ${parsed.listingType.toLowerCase()} properties.`
     }
 
-    if (parsed.propertyType) {
-      reply += ` I also matched the property type: ${parsed.propertyType.toLowerCase()}.`
+    const semanticPropertyTypesPhrase = describePropertyTypesPhrase(parsed)
+    if (semanticPropertyTypesPhrase) {
+      reply += hasMultiplePropertyTypes(parsed)
+        ? ` I also matched the property types: ${semanticPropertyTypesPhrase}.`
+        : ` I also matched the property type: ${semanticPropertyTypesPhrase}.`
     }
 
     if (nextQuestion) {
@@ -1021,7 +1171,9 @@ const buildReply = ({
     return reply
   }
 
-  const propertyLabel = parsed.propertyType
+  // "properties" (not e.g. "villas") for the count word when multiple types
+  // are in play — the specific types are named separately in `parts` below.
+  const propertyLabel = !hasMultiplePropertyTypes(parsed) && parsed.propertyType
     ? parsed.propertyType.toLowerCase()
     : 'property'
 
@@ -1037,7 +1189,8 @@ const buildReply = ({
 
   const parts = []
 
-  if (parsed.propertyType) parts.push(parsed.propertyType.toLowerCase())
+  const propertyTypesPhrase = describePropertyTypesPhrase(parsed)
+  if (propertyTypesPhrase) parts.push(propertyTypesPhrase)
   if (parsed.listingType) parts.push(`for ${parsed.listingType.toLowerCase()}`)
   if (parsed.maxPrice) parts.push(`up to ₺${Number(parsed.maxPrice).toLocaleString('tr-TR')}`)
   if (allDistricts.length > 0) parts.push(`in ${allDistricts.join(' or ')}`)
@@ -1114,7 +1267,7 @@ const buildReply = ({
 // ─── Match reason (deterministic, no AI) ──────────────────────────────────────
 // Built purely from `parsed` filters + real property fields — never from Gemini —
 // so it always stays truthful to what was actually searched and found.
-const buildMatchReason = (property, parsed = {}, matchedViaDescription = false) => {
+const buildMatchReason = (property, parsed = {}, matchedViaDescription = false, matchedViaSemantic = false) => {
   const requestedDistricts = [
     ...(parsed.district ? [parsed.district] : []),
     ...(Array.isArray(parsed.districts) ? parsed.districts : []),
@@ -1127,6 +1280,11 @@ const buildMatchReason = (property, parsed = {}, matchedViaDescription = false) 
 
   const listingTypeMatches = Boolean(parsed.listingType) && property.listingType === parsed.listingType
   const propertyTypeMatches = Boolean(parsed.propertyType) && property.propertyType === parsed.propertyType
+  const propertyTypeInRequestedSet =
+    !propertyTypeMatches &&
+    Array.isArray(parsed.propertyTypes) &&
+    parsed.propertyTypes.length > 1 &&
+    parsed.propertyTypes.includes(property.propertyType)
   const bedsMatches = Boolean(parsed.beds) && Number(property.beds) === Number(parsed.beds)
   const bathsMatches = Boolean(parsed.baths) && Number(property.baths) === Number(parsed.baths)
 
@@ -1163,11 +1321,18 @@ const buildMatchReason = (property, parsed = {}, matchedViaDescription = false) 
   if (districtMatches) primaryParts.push(`in ${property.district}`)
 
   const extraParts = []
+  if (propertyTypeInRequestedSet) extraParts.push('is one of the property types you mentioned')
   if (bedsMatches) extraParts.push(`has your requested ${property.beds} bedrooms`)
   if (bathsMatches) extraParts.push(`has your requested ${property.baths} bathrooms`)
   if (budgetMatches) extraParts.push('fits your budget')
   if (matchedFeatures.length > 0) extraParts.push(`has ${matchedFeatures.join(', ')}`)
-  if (matchedViaDescription && parsed.descriptionQuery) {
+  if (matchedViaSemantic) {
+    extraParts.push(
+      parsed.descriptionQuery
+        ? `matches the meaning of what you described ("${parsed.descriptionQuery}")`
+        : 'matches the lifestyle/meaning of what you described'
+    )
+  } else if (matchedViaDescription && parsed.descriptionQuery) {
     extraParts.push(`matches what you described ("${parsed.descriptionQuery}")`)
   }
 
@@ -1198,6 +1363,7 @@ router.post('/', async (req, res, next) => {
       history = [],
       currentFilters = {},
       shownPropertyIds = [],
+      lastShownProperties = [],
     } = req.body
 
     if (!message || !message.trim()) {
@@ -1245,6 +1411,12 @@ router.post('/', async (req, res, next) => {
     // 3. Normalize and extract simple budget numbers
     parsedFromMessage = normalizeParsed(parsedFromMessage, message)
 
+    // 3b. Override with deterministically-detected multiple/uncertain
+    // property types or a "show residential properties" request — neither
+    // Gemini nor keywordFallbackParser can express these in a single
+    // propertyType field, so this always wins over whatever they guessed.
+    applyRawTextPropertyTypeSignals(parsedFromMessage, message)
+
     // 4. Merge previous search memory with the latest message
     let parsed = mergeParsedWithContext(currentFilters, parsedFromMessage)
     // If Gemini clearly says this is a fresh description search,
@@ -1254,11 +1426,13 @@ if (
   parsedFromMessage.descriptionQuery &&
   !parsedFromMessage.listingType &&
   !parsedFromMessage.propertyType &&
+  (!Array.isArray(parsedFromMessage.propertyTypes) || parsedFromMessage.propertyTypes.length === 0) &&
   !parsedFromMessage.district &&
   (!Array.isArray(parsedFromMessage.districts) || parsedFromMessage.districts.length === 0)
 ) {
   parsed.listingType = null
   parsed.propertyType = null
+  parsed.propertyTypes = []
   parsed.district = null
   parsed.districts = []
   parsed.beds = null
@@ -1289,12 +1463,14 @@ const messageRepeatsOldCriteria =
   hasValue(parsedFromMessage.district) ||
   (Array.isArray(parsedFromMessage.districts) && parsedFromMessage.districts.length > 0) ||
   hasValue(parsedFromMessage.propertyType) ||
+  (Array.isArray(parsedFromMessage.propertyTypes) && parsedFromMessage.propertyTypes.length > 0) ||
   hasExplicitContinuityPhrase(message)
 
 if (listingTypeChanged && !messageRepeatsOldCriteria) {
   parsed.district = null
   parsed.districts = []
   parsed.propertyType = null
+  parsed.propertyTypes = []
 }
 
 // If this message is a genuine lifestyle/description-style search (e.g.
@@ -1335,7 +1511,7 @@ const conceptsToDrop = new Set(
 // me apartments in Büyükçekmece") is a fresh, self-contained search
 // instead, and should NOT inherit stale lifestyle content just because it
 // didn't repeat it.
-const isSlotFillingAnswer = isShortSlotAnswer(message, parsedFromMessage, newLifestyleConceptsInMessage.size)
+const isSlotFillingAnswer = isShortSlotAnswer(message, parsedFromMessage, currentFilters, newLifestyleConceptsInMessage.size)
 
 const isLifestyleConceptSwitch =
   newLifestyleConceptsInMessage.size > 0 &&
@@ -1394,6 +1570,37 @@ if (isSlotFillingAnswer && hasSoftDescriptionSearch(currentFilters)) {
     if (pageKey === 'sale') parsed.listingType = 'Sale'
     if (pageKey === 'rent') parsed.listingType = 'Rent'
 
+    // 5b. Lead capture — fully delegated to services/chatLeadFlow.js so this
+    // route doesn't keep growing with lead-flow logic. It owns its own
+    // state machine (collecting/confirming/submitted), confirmation,
+    // corrections, and the actual save — chat.js just reacts to the result.
+    const leadResult = await handleLeadFlow({
+      message,
+      parsed,
+      parsedFromMessage,
+      currentFilters,
+      pageKey,
+      lastShownProperties,
+    })
+
+    if (leadResult.handled) {
+      return res.json({
+        success: true,
+        reply: leadResult.reply,
+        properties: [],
+        parsed: { ...parsed, pendingLead: leadResult.pendingLead ?? null },
+        filterUsed: null,
+        exactMatch: null,
+        aiUsed,
+      })
+    }
+
+    if ('pendingLead' in leadResult) {
+      // An in-progress lead was just abandoned (fresh search detected) —
+      // clear it explicitly so it can't silently resurface on a later turn.
+      parsed.pendingLead = leadResult.pendingLead
+    }
+
     const nonPropertyReply = buildNonPropertyReply(parsed)
 
 if (nonPropertyReply) {
@@ -1408,7 +1615,7 @@ if (nonPropertyReply) {
   })
 }
 
-if (parsed.replyType === 'ask_question' && parsed.nextQuestion) {
+if (parsed.replyType === 'ask_question' && parsed.nextQuestion && !shouldSkipGeminiAskQuestion(parsed)) {
   return res.json({
     success: true,
     reply: parsed.nextQuestion,
@@ -1426,7 +1633,7 @@ if (parsed.replyType === 'ask_question' && parsed.nextQuestion) {
     console.log('Final merged parsed:', parsed)
 
     // 6. Ask only if important info is still missing after merging memory
-    const missingQuestion = buildMissingInfoQuestion(parsed)
+    const missingQuestion = buildMissingInfoQuestion(parsed, message)
 
     if (missingQuestion) {
       return res.json({
@@ -1475,29 +1682,60 @@ let descriptionSearchUsed = false
 let descriptionSearchQuery = null
 let descriptionSearchError = null
 let matchedViaDescription = false
+let matchedViaSemantic = false
 
 const descriptionSearchAttempted = hasSoftDescriptionSearch(parsed)
 
 if (descriptionSearchAttempted) {
-  const descriptionResult = await searchByDescription({
-    parsed,
-    filter,
-    message,
-  })
+  // Try semantic (meaning-based) search first — it's the only thing that
+  // generalizes across phrasings like "sea facing" / "water view" / "deniz
+  // manzaralı" without a keyword dictionary. It only ever runs on the same
+  // hard-filtered candidate pool as the existing search (never the whole
+  // collection), so it can't override listingType/propertyType/district/
+  // budget/features. Any failure (missing embeddings, embedding API error)
+  // falls straight through to the existing searchByDescription — unchanged.
+  let semanticResults = []
 
-  properties = descriptionResult.properties
-  descriptionSearchUsed = descriptionResult.descriptionSearchUsed
-  descriptionSearchQuery = descriptionResult.descriptionSearchQuery
-  descriptionSearchError = descriptionResult.descriptionSearchError
+  try {
+    const semanticQuery = buildSemanticSearchQuery(parsed)
 
-  // If description search finds no VERIFIED match, fall back to normal
-  // field search rather than showing unrelated "description matches".
-  if (properties.length === 0) {
-    const fallbackResult = await searchWithFallback(filter, mustHaveFilter)
-    properties = fallbackResult.properties
-    fallbackLevel = fallbackResult.fallbackLevel
+    if (semanticQuery) {
+      const semanticHardFilter = buildSemanticHardFilter({ filter, message })
+      console.log('Semantic search attempted. Query:', semanticQuery)
+      semanticResults = await searchPropertiesByMeaning({ query: semanticQuery, hardFilter: semanticHardFilter })
+    }
+  } catch (err) {
+    console.log('Semantic search failed, falling back to keyword/concept search:', err.message)
+    semanticResults = []
+  }
+
+  if (semanticResults.length > 0) {
+    properties = semanticResults.map((property) => ({ ...property, matchedViaSemantic: true }))
+    matchedViaSemantic = true
+    console.log(`Semantic search matched ${properties.length} propert${properties.length === 1 ? 'y' : 'ies'}.`)
   } else {
-    matchedViaDescription = true
+    console.log('Semantic search found no strong matches — falling back to searchByDescription.')
+
+    const descriptionResult = await searchByDescription({
+      parsed,
+      filter,
+      message,
+    })
+
+    properties = descriptionResult.properties
+    descriptionSearchUsed = descriptionResult.descriptionSearchUsed
+    descriptionSearchQuery = descriptionResult.descriptionSearchQuery
+    descriptionSearchError = descriptionResult.descriptionSearchError
+
+    // If description search finds no VERIFIED match, fall back to normal
+    // field search rather than showing unrelated "description matches".
+    if (properties.length === 0) {
+      const fallbackResult = await searchWithFallback(filter, mustHaveFilter)
+      properties = fallbackResult.properties
+      fallbackLevel = fallbackResult.fallbackLevel
+    } else {
+      matchedViaDescription = true
+    }
   }
 } else {
   const fallbackResult = await searchWithFallback(filter, mustHaveFilter)
@@ -1513,7 +1751,7 @@ properties = properties.map((property) => {
 
   return {
     ...plain,
-    matchReason: buildMatchReason(plain, parsed, matchedViaDescription),
+    matchReason: buildMatchReason(plain, parsed, matchedViaDescription, matchedViaSemantic),
   }
 })
 
@@ -1522,6 +1760,7 @@ const reply = buildReply({
   fallbackLevel,
   parsed,
   matchedViaDescription,
+  matchedViaSemantic,
   descriptionSearchAttempted,
   relaxedFeatureLabels,
 })

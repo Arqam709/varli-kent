@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai'
+import { sanitizeConcepts, CANONICAL_CONCEPT_IDS } from './lifestyleConcepts.js'
 
 const cleanJson = (text = '') => {
   return text
@@ -63,7 +64,7 @@ Available intentType:
 - "property_followup": visitor continues a previous property search, like "show me more", "what about Esenyurt", "same but cheaper".
 - "casual_chat": visitor says hello, asks how you are, thanks you, or makes small talk.
 - "emotional_message": visitor shares feelings or a personal emotional message, like "my day was bad".
-- "contact_request": visitor wants to speak to an agent, call, WhatsApp, schedule a visit, ask for contact, or book a viewing.
+- "contact_request": visitor wants to speak to an agent, be called or contacted, or make/arrange/book/schedule an appointment, viewing, visit, or tour — including phrased as a question like "can you make an appointment for me", "can I visit it", "can I see it", or "is this still available".
 - "website_service_question": visitor asks about VarliKent services like architecture, renovation, construction, interior design, or general website/service information.
 - "unknown": message is unclear or unrelated.
 
@@ -86,6 +87,7 @@ MESSAGE TYPE RULES:
 - If casual chat, do not invent property filters.
 - If emotional message, do not act like a doctor or therapist. Be kind and guide back gently.
 - If contact request, do not search properties unless property criteria are also clearly present.
+- Even if the visitor was just discussing property search, a message asking to make/arrange/book/schedule an appointment, viewing, visit, or tour, or asking to be called/contacted, is "contact_request" — NOT "property_followup" — regardless of the previous conversation topic.
 
 SEARCH MODE RULES:
 - Use searchMode: "field" when the visitor gives clear database fields such as buy, rent, villa, apartment, district, budget, bedrooms, bathrooms, pool, garden, parking.
@@ -112,6 +114,16 @@ Available listingType: "Sale" or "Rent"
 Available propertyType: "Apartment", "Villa", "Penthouse", "Duplex", "Studio", "Office", "Commercial", "Land", "Shop", "Warehouse", "Hotel", "Farm"
 Available searchMode: "field", "description", "hybrid"
 Boolean features: furnished, balcony, elevator, pool, garden, parking
+
+Available lifestyleConcepts ids — this is a CLOSED vocabulary. Use ONLY these exact ids, never invent new ones, never use synonyms as ids: ${CANONICAL_CONCEPT_IDS.join(', ')}
+
+STRUCTURED MEANING FIELDS (in addition to lifestyle/descriptionQuery, not instead of them — always fill both when relevant):
+- lifestyleConcepts: array of canonical concept ids (from the closed vocabulary above) that the visitor is currently asking for. Map paraphrases to the closest matching id(s). Example: "near schools for my children" => ["school", "family"]. Leave [] if no lifestyle concept applies.
+- excludedConcepts: array of canonical concept ids the visitor explicitly no longer wants. Example: "sea view is not important anymore" => excludedConcepts: ["sea_view"]. Leave [] normally.
+- changedMind: true only when the visitor is explicitly replacing an earlier stated preference with a new one in the same message (e.g. "actually I don't care about X anymore, I want Y instead"). Otherwise false.
+- noPreference: true only when the visitor explicitly says they have no preference on some criteria (e.g. "no preference", "any area is fine", "show me what you have"). Otherwise false.
+- propertyTypes: array of ALL property types explicitly mentioned when the visitor names more than one (e.g. "apartment or villa" => ["Apartment", "Villa"]). Leave [] when only one or zero types are mentioned.
+- uncertainPropertyType: true only when the visitor explicitly expresses uncertainty between two or more property types (e.g. "not sure apartment or villa", "either is fine"). When true, also set propertyType to null and still fill propertyTypes with the mentioned options.
 
 Parsing rules:
 - buy / buying / purchase / satılık => listingType "Sale"
@@ -140,6 +152,8 @@ Return JSON in this exact shape:
   "nextQuestion": null,
   "listingType": null,
   "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": null,
   "districts": [],
   "beds": null,
@@ -157,6 +171,10 @@ Return JSON in this exact shape:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -175,6 +193,8 @@ Correct JSON:
   "nextQuestion": "Are you looking to buy or rent?",
   "listingType": null,
   "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": null,
   "districts": [],
   "beds": null,
@@ -192,6 +212,10 @@ Correct JSON:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -210,6 +234,8 @@ Correct JSON:
   "nextQuestion": null,
   "listingType": null,
   "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": null,
   "districts": [],
   "beds": null,
@@ -227,6 +253,10 @@ Correct JSON:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": ["safe for children", "safe community", "family-friendly"],
+  "lifestyleConcepts": ["family", "peaceful_safe"],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -245,6 +275,8 @@ Correct JSON:
   "nextQuestion": null,
   "listingType": "Sale",
   "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": null,
   "districts": [],
   "beds": null,
@@ -262,6 +294,10 @@ Correct JSON:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": ["safe for children", "rich community", "family-friendly"],
+  "lifestyleConcepts": ["family", "peaceful_safe"],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -280,6 +316,8 @@ Correct JSON:
   "nextQuestion": null,
   "listingType": null,
   "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": null,
   "districts": [],
   "beds": null,
@@ -297,6 +335,10 @@ Correct JSON:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -315,6 +357,8 @@ Correct JSON:
   "nextQuestion": null,
   "listingType": null,
   "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": null,
   "districts": [],
   "beds": null,
@@ -332,6 +376,10 @@ Correct JSON:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -357,6 +405,8 @@ Correct JSON:
   "nextQuestion": null,
   "listingType": "Rent",
   "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": "Esenyurt",
   "districts": [],
   "beds": null,
@@ -374,6 +424,227 @@ Correct JSON:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Memory example (contact/appointment request after a property search):
+Conversation:
+Visitor: Show me properties for sale
+Assistant: What type of property are you interested in?
+Visitor: apartment
+Assistant: Do you have a preferred district or budget?
+Visitor: beylikdüzü
+Assistant: I found 1 apartment for sale in Beylikdüzü.
+Visitor: can you make an appointment for me
+
+Correct JSON:
+{
+  "intent": "contact_request",
+  "intentType": "contact_request",
+  "replyType": "contact_reply",
+  "searchMode": "field",
+  "descriptionQuery": null,
+  "nextQuestion": null,
+  "listingType": "Sale",
+  "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": "Beylikdüzü",
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 6 (lifestyle concept extraction):
+Visitor: near schools for my children
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_search",
+  "replyType": "search",
+  "searchMode": "description",
+  "descriptionQuery": "family friendly home near schools for children",
+  "nextQuestion": null,
+  "listingType": null,
+  "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": null,
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": ["near schools", "family-friendly"],
+  "lifestyleConcepts": ["school", "family"],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 7 (concept exclusion + changed mind):
+Visitor: sea view is not important anymore, schools are more important
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_followup",
+  "replyType": "search",
+  "searchMode": "description",
+  "descriptionQuery": "home near schools",
+  "nextQuestion": null,
+  "listingType": null,
+  "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": null,
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": ["near schools"],
+  "lifestyleConcepts": ["school"],
+  "excludedConcepts": ["sea_view"],
+  "changedMind": true,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 8 (no preference):
+Conversation:
+Visitor: I need an apartment
+Assistant: Are you looking to buy or rent?
+Visitor: rent and my budget is 15000
+Assistant: Do you have a preferred district?
+Visitor: no preference, show me what you have
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_followup",
+  "replyType": "search",
+  "searchMode": "field",
+  "descriptionQuery": null,
+  "nextQuestion": null,
+  "listingType": "Rent",
+  "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": null,
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": 15000,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": true,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 9 (uncertain property type):
+Visitor: buy but I am not sure apartment or villa
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_search",
+  "replyType": "ask_question",
+  "searchMode": "field",
+  "descriptionQuery": null,
+  "nextQuestion": "Do you have a preferred district or budget?",
+  "listingType": "Sale",
+  "propertyType": null,
+  "propertyTypes": ["Apartment", "Villa"],
+  "uncertainPropertyType": true,
+  "district": null,
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -384,13 +655,26 @@ ${conversationBlock}
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
     })
 
     const text = cleanJson(response.text)
     console.log('Gemini raw text:', text)
-    return JSON.parse(text)
+    const parsed = JSON.parse(text)
+
+    // Defensive coercion for the new structured-meaning fields only (Phase C
+    // — observation/test-only, nothing downstream reads these yet). Existing
+    // fields are returned exactly as Gemini produced them, unchanged.
+    return {
+      ...parsed,
+      propertyTypes: Array.isArray(parsed.propertyTypes) ? parsed.propertyTypes : [],
+      uncertainPropertyType: Boolean(parsed.uncertainPropertyType),
+      lifestyleConcepts: sanitizeConcepts(parsed.lifestyleConcepts),
+      excludedConcepts: sanitizeConcepts(parsed.excludedConcepts),
+      changedMind: Boolean(parsed.changedMind),
+      noPreference: Boolean(parsed.noPreference),
+    }
   } catch (err) {
     console.log('Gemini parser failed:', err.message)
     return null

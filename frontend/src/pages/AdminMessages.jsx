@@ -97,6 +97,9 @@ const AdminMessages = () => {
                         {msg.phone}
                       </span>
                       <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium">{msg.interestType}</span>
+                      {msg.source === 'ai_assistant' && (
+                        <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700">🤖 AI Assistant</span>
+                      )}
                       <span className="text-xs text-slate-400">{new Date(msg.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>

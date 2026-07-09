@@ -345,7 +345,7 @@ export default function AIChatbot() {
                     border: `1px solid ${C.border}`,
                   }}
                 >
-                  Searching properties...
+                  Thinking...
                 </div>
               </div>
             )}

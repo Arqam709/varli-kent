@@ -41,6 +41,15 @@ const propertySchema = new mongoose.Schema({
     default: 'Available',
   },
   createdAt: { type: Date, default: Date.now },
+  // Optional — populated by scripts/backfillPropertyEmbeddings.js for
+  // semantic (meaning-based) lifestyle search. `default: undefined` keeps
+  // Mongoose from auto-initializing this array field to `[]`, so it stays
+  // genuinely absent on properties that haven't been embedded yet.
+  descriptionEmbedding: {
+    type: [Number],
+    default: undefined,
+  },
+  embeddingUpdatedAt: { type: Date },
 })
 
 propertySchema.index(

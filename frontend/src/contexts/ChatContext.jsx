@@ -55,6 +55,19 @@ const getShownPropertyIds = (messages = []) => {
   return Array.from(ids)
 }
 
+const getLastShownProperties = (messages = []) => {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (Array.isArray(messages[i]?.properties) && messages[i].properties.length > 0) {
+      return messages[i].properties.map((property) => ({
+        _id: property._id,
+        title: property.title,
+      }))
+    }
+  }
+
+  return []
+}
+
 export const ChatProvider = ({ children }) => {
   const [open, setOpen] = useState(false)
   const [chats, setChats] = useState({})
@@ -104,6 +117,7 @@ export const ChatProvider = ({ children }) => {
         : getLastParsedFromMessages(previousMessages)
 
     const shownPropertyIds = getShownPropertyIds(previousMessages)
+    const lastShownProperties = getLastShownProperties(previousMessages)
 
     const userMessage = {
       role: 'user',
@@ -128,6 +142,7 @@ export const ChatProvider = ({ children }) => {
         currentFilters,
         history: historyForBackend,
         shownPropertyIds,
+        lastShownProperties,
       })
 
       const res = await api.post('/chat', {
@@ -136,6 +151,7 @@ export const ChatProvider = ({ children }) => {
         history: historyForBackend,
         currentFilters,
         shownPropertyIds,
+        lastShownProperties,
       })
 
       const assistantMessage = {
