@@ -416,6 +416,43 @@ const buildMissingInfoQuestion = (parsed, message = '') => {
   return null
 }
 
+// District list, shared by keywordFallbackParser and the district-scope
+// clarification logic below (extracted so both stay in sync off one list).
+const KNOWN_DISTRICTS = [
+  'Esenyurt',
+  'Büyükçekmece',
+  'Buyukcekmece',
+  'Beylikdüzü',
+  'Beylikduzu',
+  'Başakşehir',
+  'Basaksehir',
+  'Kadıköy',
+  'Kadikoy',
+  'Beşiktaş',
+  'Besiktas',
+  'Şişli',
+  'Sisli',
+  'Üsküdar',
+  'Uskudar',
+  'Sarıyer',
+  'Sariyer',
+  'Bakırköy',
+  'Bakirkoy',
+  'Kağıthane',
+  'Kagithane',
+  'Fatih',
+  'Zeytinburnu',
+  'Avcılar',
+  'Avcilar',
+  'Bahçelievler',
+  'Bahcelievler',
+]
+
+const detectMentionedDistricts = (message = '') => {
+  const text = message.toLowerCase()
+  return KNOWN_DISTRICTS.filter((d) => text.includes(d.toLowerCase()))
+}
+
 // ─── Keyword fallback parser ──────────────────────────────────────────────────
 const keywordFallbackParser = (message) => {
   const text = message.toLowerCase()
@@ -454,37 +491,7 @@ const keywordFallbackParser = (message) => {
     }
   }
 
-  const districts = [
-    'Esenyurt',
-    'Büyükçekmece',
-    'Buyukcekmece',
-    'Beylikdüzü',
-    'Beylikduzu',
-    'Başakşehir',
-    'Basaksehir',
-    'Kadıköy',
-    'Kadikoy',
-    'Beşiktaş',
-    'Besiktas',
-    'Şişli',
-    'Sisli',
-    'Üsküdar',
-    'Uskudar',
-    'Sarıyer',
-    'Sariyer',
-    'Bakırköy',
-    'Bakirkoy',
-    'Kağıthane',
-    'Kagithane',
-    'Fatih',
-    'Zeytinburnu',
-    'Avcılar',
-    'Avcilar',
-    'Bahçelievler',
-    'Bahcelievler',
-  ]
-
-  const matched = districts.filter((d) => text.includes(d.toLowerCase()))
+  const matched = detectMentionedDistricts(message)
 
   if (matched.length === 1) parsed.district = matched[0]
   if (matched.length > 1) parsed.districts = matched
@@ -955,6 +962,96 @@ const dropConceptsFromPhrases = (phrases = [], conceptsToDrop) => {
   })
 }
 
+// ─── District scope clarification (Phase D, slice 1) ─────────────────────
+// When a lifestyle pivot ("my wife wants sea view") arrives while an old,
+// unconfirmed district is still active from an earlier turn, ask once
+// whether to keep that district or broaden — instead of silently keeping it
+// (which can hide a better-fitting property in another district) or
+// silently clearing it (which would drop a district the visitor never asked
+// to abandon).
+//
+// propertyType/listingType are deliberately NOT handled here: an explicit
+// restatement ("villa with sea view") already overwrites them correctly via
+// the normal merge in mergeParsedWithContext, and when not restated, keeping
+// them silently is exactly the wanted behavior — there's no "silently wrong"
+// failure mode for those two fields the way there is for district, so they
+// don't need a clarification step.
+const DISTRICT_BROADEN_PATTERNS = [
+  /\banywhere\b/,
+  /\bother districts?\b/,
+  /\bother areas?\b/,
+  /\ball districts?\b/,
+  /\bany district\b/,
+  /\beverywhere\b/,
+]
+
+const DISTRICT_KEEP_PATTERNS = [/\bkeep\b/, /\bstay\b/, /^\s*yes\b/]
+
+// Classifies what a message says about the currently-active district:
+// - 'replace': names a specific new district (that new value wins outright,
+//   already applied by the normal merge above — nothing extra to do here)
+// - 'broaden': wants the district restriction dropped ("anywhere", "other districts")
+// - 'keep': explicit continuity/confirmation ("same district", "keep", "yes")
+// - 'unclear': says nothing decisive about district either way
+// Shared by both the first-time trigger check and answers to a pending
+// clarification, so "what counts as an answer" is defined in exactly one place.
+const resolveDistrictScopeAnswer = (message = '') => {
+  if (detectMentionedDistricts(message).length > 0) return 'replace'
+
+  const text = message.trim().toLowerCase()
+
+  if (DISTRICT_BROADEN_PATTERNS.some((pattern) => pattern.test(text))) return 'broaden'
+  if (hasExplicitContinuityPhrase(message) || DISTRICT_KEEP_PATTERNS.some((pattern) => pattern.test(text))) {
+    return 'keep'
+  }
+
+  return 'unclear'
+}
+
+// Canonical concept ids (e.g. "sea_view") mentioned anywhere in a piece of
+// text — general-purpose enough to run on a raw message (for the district
+// clarification question below) or on parsed query content / property text
+// (for the match-reason lifestyle labeling further down).
+const extractConceptIds = (text = '') => {
+  const ids = new Set()
+
+  text
+    .toLowerCase()
+    .split(/\s+/)
+    .map(normalizeWord)
+    .forEach((word) => {
+      const concept = findConceptForWord(word)
+      if (concept) ids.add(concept.id)
+    })
+
+  return Array.from(ids)
+}
+
+const humanizeConceptIds = (ids = []) =>
+  ids.length > 0 ? ids.map((id) => id.replace(/_/g, '-')).join(' and ') : 'that'
+
+const describeDistrictPhrase = (parsed = {}) => {
+  if (parsed.district) return parsed.district
+  if (Array.isArray(parsed.districts) && parsed.districts.length > 0) return parsed.districts.join(' or ')
+  return null
+}
+
+const buildDistrictScopeQuestion = (parsed, conceptIds) => {
+  const district = describeDistrictPhrase(parsed)
+  const typeLabel = hasMultiplePropertyTypes(parsed)
+    ? parsed.propertyTypes.map(pluralizePropertyType).join(' and ')
+    : parsed.propertyType
+    ? pluralizePropertyType(parsed.propertyType)
+    : 'properties'
+
+  return `Should I keep searching in ${district}, or include other districts with ${humanizeConceptIds(conceptIds)} ${typeLabel}?`
+}
+
+const buildDistrictScopeRetryQuestion = (parsed) => {
+  const district = describeDistrictPhrase(parsed)
+  return `Sorry, just to confirm — should I keep searching in ${district}, or search other districts too?`
+}
+
 const propertyMatchesSignificantTerm = (property, terms = []) => {
   // No meaningful vocabulary to check against (e.g. everything was a
   // structured/connector word) — don't reject results we have no way to verify.
@@ -1264,6 +1361,54 @@ const buildReply = ({
   return nextQuestion ? `${sentence}. ${nextQuestion}` : `${sentence}.`
 }
 
+// Concept id -> natural clause fragment for the match reason. Never expose
+// the raw id itself (e.g. "sea_view", "peaceful_safe") to the visitor.
+const LIFESTYLE_CONCEPT_MATCH_LABELS = {
+  school: 'is near schools',
+  sea_view: 'has a sea view',
+  metro_transport: 'is close to metro and transport links',
+  family: 'is family-friendly',
+  peaceful_safe: 'is in a peaceful, safe area',
+  park_green: 'is near a park or green space',
+  investment: 'looks like a good investment opportunity',
+  luxury: 'has a luxury feel',
+}
+
+// Which lifestyle concepts (if any) genuinely justify this specific
+// property's match. Evidence sources match rule 5's list — descriptionQuery,
+// lifestyle, mustHave, niceToHave, requirements — all read through
+// getConceptSourcePhrases, the exact same function searchByDescription's own
+// relevance check already uses, so the explanation stays tied to what was
+// actually verified rather than restating the raw query.
+//
+// For a $text/concept-verified match (matchedViaDescription), a concept is
+// only claimed if THIS property's own title/description/address/district
+// actually contains one of that concept's keywords — mirrors
+// propertyMatchesSignificantTerm's per-property check, but per-concept, so
+// the explanation never claims a quality this specific listing doesn't show.
+// For a semantic match, that per-property keyword check is skipped —
+// embeddings match on meaning, not literal keywords, so the semantic score
+// that already gated this property's inclusion is itself the supporting
+// "semantic match metadata" rule 5 allows.
+const getLifestyleMatchLabels = (property, parsed, matchedViaDescription, matchedViaSemantic) => {
+  if (!matchedViaDescription && !matchedViaSemantic) return []
+
+  const requestedConceptIds = extractConceptIds(getConceptSourcePhrases(parsed).join(' '))
+  if (requestedConceptIds.length === 0) return []
+
+  let confirmedConceptIds = requestedConceptIds
+
+  if (matchedViaDescription) {
+    const propertyText = [property.title, property.description, property.address, property.district]
+      .filter(Boolean)
+      .join(' ')
+    const presentConceptIds = extractConceptIds(propertyText)
+    confirmedConceptIds = requestedConceptIds.filter((id) => presentConceptIds.includes(id))
+  }
+
+  return confirmedConceptIds.map((id) => LIFESTYLE_CONCEPT_MATCH_LABELS[id]).filter(Boolean)
+}
+
 // ─── Match reason (deterministic, no AI) ──────────────────────────────────────
 // Built purely from `parsed` filters + real property fields — never from Gemini —
 // so it always stays truthful to what was actually searched and found.
@@ -1326,7 +1471,12 @@ const buildMatchReason = (property, parsed = {}, matchedViaDescription = false, 
   if (bathsMatches) extraParts.push(`has your requested ${property.baths} bathrooms`)
   if (budgetMatches) extraParts.push('fits your budget')
   if (matchedFeatures.length > 0) extraParts.push(`has ${matchedFeatures.join(', ')}`)
-  if (matchedViaSemantic) {
+
+  const lifestyleLabels = getLifestyleMatchLabels(property, parsed, matchedViaDescription, matchedViaSemantic)
+
+  if (lifestyleLabels.length > 0) {
+    extraParts.push(...lifestyleLabels)
+  } else if (matchedViaSemantic) {
     extraParts.push(
       parsed.descriptionQuery
         ? `matches the meaning of what you described ("${parsed.descriptionQuery}")`
@@ -1340,10 +1490,18 @@ const buildMatchReason = (property, parsed = {}, matchedViaDescription = false, 
   if (primaryParts.length > 0) clauses.push(`it is ${primaryParts.join(' ')}`)
   clauses.push(...extraParts)
 
-  let reason =
-    clauses.length > 0
-      ? `This matches because ${clauses.join(', and ')}.`
-      : 'This is one of our available listings that may interest you.'
+  // extraParts entries are verb-first fragments ("has a sea view", "fits your
+  // budget") written to follow "it is X, and ..." — when primaryParts is
+  // empty (e.g. a pure lifestyle search with no propertyType/listingType/
+  // district match), there is no "it" yet, so the sentence needs one added
+  // explicitly rather than starting mid-clause ("...because has a sea view.").
+  let reason
+  if (clauses.length === 0) {
+    reason = 'This is one of our available listings that may interest you.'
+  } else {
+    const body = primaryParts.length > 0 ? clauses.join(', and ') : `it ${clauses.join(', and ')}`
+    reason = `This matches because ${body}.`
+  }
 
   if (requestedDistricts.length > 0 && !districtMatches) {
     reason += ` It is from ${
@@ -1564,6 +1722,95 @@ if (isSlotFillingAnswer && hasSoftDescriptionSearch(currentFilters)) {
   parsed.niceToHave = []
   parsed.requirements = []
   parsed.descriptionQuery = null
+}
+
+// ─── District scope clarification (Phase D, slice 1) ──────────────────
+// Resolve a pending clarification from a prior turn, or ask a new one if
+// this message just introduced a lifestyle concept while an old,
+// unconfirmed district is still active. See helper comments above for why
+// only district (not propertyType/listingType) is handled this way.
+const existingScopeClarification =
+  currentFilters?.pendingClarification?.type === 'lifestyle_scope'
+    ? currentFilters.pendingClarification
+    : null
+
+if (existingScopeClarification) {
+  const looksLikeAbandonment =
+    isShowMoreRequest(message) ||
+    countNewStructuredCriteria(parsedFromMessage, currentFilters) >= 2 ||
+    parsedFromMessage.intentType === 'contact_request'
+
+  if (looksLikeAbandonment) {
+    // Not an answer to the clarification — drop it silently and let the
+    // message fall through to its own normal handling (show-more, a fresh
+    // multi-field search, or the lead flow).
+    parsed.pendingClarification = null
+  } else {
+    const districtAnswer = resolveDistrictScopeAnswer(message)
+
+    if (districtAnswer === 'broaden') {
+      parsed.district = null
+      parsed.districts = []
+      parsed.pendingClarification = null
+    } else if (districtAnswer === 'keep' || districtAnswer === 'replace') {
+      // 'keep': parsed.district already holds the old value.
+      // 'replace': parsed.district already holds the new value from the
+      // normal merge above. Either way, nothing left to apply here.
+      parsed.pendingClarification = null
+    } else if (existingScopeClarification.retryCount >= 1) {
+      // Already retried once — stop asking and fall back to the safest
+      // default (keep) rather than asking a third time.
+      parsed.pendingClarification = null
+    } else {
+      return res.json({
+        success: true,
+        reply: buildDistrictScopeRetryQuestion(parsed),
+        properties: [],
+        parsed: {
+          ...parsed,
+          pendingClarification: {
+            ...existingScopeClarification,
+            retryCount: existingScopeClarification.retryCount + 1,
+          },
+        },
+        filterUsed: null,
+        exactMatch: null,
+        aiUsed,
+      })
+    }
+  }
+} else if (!isShowMoreRequest(message) && newLifestyleConceptsInMessage.size > 0) {
+  const hasOldDistrict = Boolean(parsed.district) || (Array.isArray(parsed.districts) && parsed.districts.length > 0)
+
+  if (hasOldDistrict) {
+    const districtAnswer = resolveDistrictScopeAnswer(message)
+
+    if (districtAnswer === 'broaden') {
+      parsed.district = null
+      parsed.districts = []
+    } else if (districtAnswer === 'unclear') {
+      const conceptIds = extractConceptIds(message)
+
+      return res.json({
+        success: true,
+        reply: buildDistrictScopeQuestion(parsed, conceptIds),
+        properties: [],
+        parsed: {
+          ...parsed,
+          pendingClarification: {
+            type: 'lifestyle_scope',
+            unresolvedFields: ['district'],
+            lifestyleConcepts: conceptIds,
+            retryCount: 0,
+          },
+        },
+        filterUsed: null,
+        exactMatch: null,
+        aiUsed,
+      })
+    }
+    // 'replace' and 'keep' need no action — parsed.district already correct.
+  }
 }
 
     // 5. Page context wins

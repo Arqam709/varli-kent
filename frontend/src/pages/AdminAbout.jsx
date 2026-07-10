@@ -100,7 +100,7 @@ const AdminAbout = () => {
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
   const setList = (listKey, idx, field, val) => setForm(f => {
-    const arr = [...f[listKey]]
+    const arr = [...f[listKey]] //it copies the team array 
     arr[idx] = { ...arr[idx], [field]: val }
     return { ...f, [listKey]: arr }
   })

@@ -15,13 +15,11 @@ import mongoose from 'mongoose'
 import connectDB from '../config/db.js'
 import Property from '../models/Property.js'
 import { getEmbedding } from '../utils/embeddings.js'
+import { buildPropertyEmbeddingText } from '../services/propertyEmbeddingService.js'
 
 dotenv.config()
 
 const force = process.argv.includes('--force')
-
-const buildEmbeddingText = (property) =>
-  [property.title, property.description, property.district, property.address].filter(Boolean).join('. ')
 
 const run = async () => {
   await connectDB()
@@ -41,7 +39,7 @@ const run = async () => {
   for (let i = 0; i < properties.length; i++) {
     const property = properties[i]
     const label = `[${i + 1}/${properties.length}] ${property.title}`
-    const text = buildEmbeddingText(property)
+    const text = buildPropertyEmbeddingText(property)
 
     if (!text.trim()) {
       console.log(`${label} — skipped (no title/description/district/address text)`)
