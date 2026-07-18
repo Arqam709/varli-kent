@@ -7,6 +7,7 @@ const inputCls = 'w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm 
 const labelCls = 'block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1'
 
 const emptyPhase = { label: '', pct: 0, order: 0 }
+
 const emptyProject = {
   name: '', location: '', completion: '', status: 'active', visible: true, featured: false, order: 0,
   phases: [
@@ -52,6 +53,7 @@ const AdminProjects = () => {
   const closeModal = () => { setModal(null); setError('') }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
   const setPhase = (i, field, val) => setForm(f => {
     const phases = [...f.phases]
     phases[i] = { ...phases[i], [field]: val }
@@ -84,7 +86,7 @@ const AdminProjects = () => {
     setDeleting(id)
     try {
       await api.delete(`/projects/${id}`)
-      setProjects(prev => prev.filter(proj => proj._id !== id))
+      setProjects(prev => prev.filter(proj => proj._id !== id)) //this remove deleted project from the UI without needing to reload all projects 
     } catch {
       setError('Delete failed')
     } finally {
