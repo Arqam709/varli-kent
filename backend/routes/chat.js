@@ -17,12 +17,15 @@ import {
 } from '../services/chatMessageParsing.js'
 import {
   buildNonPropertyReply,
-  shouldSkipGeminiAskQuestion,
-  buildMissingInfoQuestion,
+  renderSlotQuestion,
   buildReply,
-  getRelaxedFeatureLabels,
   buildMatchReason,
 } from '../services/chatReplyBuilder.js'
+import { getRelaxedFeatureIds } from '../services/chatReplyPlan.js'
+import { createOrRetryPendingQuestion } from '../services/chatPendingQuestion.js'
+import { decideTurnAction, decideFollowUp, detectMixedListingTypes } from '../services/chatPolicyEngine.js'
+import { normalizeChatLanguage } from '../utils/chatLanguage.js'
+import { renderNonPropertyPageReply } from '../services/chatReplyRenderer.js'
 
 import { runPropertySearch } from '../services/chatPropertySearch.js'
 import {
@@ -46,6 +49,11 @@ router.post('/', optionalAuth, async (req, res, next) => {
       lastShownProperties = [],
       conversationId = null,
     } = req.body
+
+    // Phase 1 (language plumbing only): validate and normalize, never trust
+    // the raw client value. Nothing downstream reads this yet — no reply
+    // text, Gemini prompt, or persistence changes in this phase.
+    const language = normalizeChatLanguage(req.body.language)
 
     if (!message || !message.trim()) {
       return res.status(400).json({
@@ -79,7 +87,7 @@ router.post('/', optionalAuth, async (req, res, next) => {
       pageKey.startsWith('/properties/')
 
     if (!isPropertyPage) {
-      const nonPropertyPageReply = 'For now, I can help with property searches. Service pages will be supported soon.'
+      const nonPropertyPageReply = renderNonPropertyPageReply(language)
       let responseConversationId = null
 
       if (req.user) {
@@ -104,6 +112,7 @@ router.post('/', optionalAuth, async (req, res, next) => {
         properties: [],
         parsed: currentFilters,
         conversationId: responseConversationId,
+        language,
       })
     }
 
@@ -113,10 +122,13 @@ router.post('/', optionalAuth, async (req, res, next) => {
       ? history.slice(0, -1)
       : []
 
-    // 1. Parse only the latest user message
+    // 1. Parse only the latest user message. `language` is passed only as a
+    // weak interpretive hint inside the prompt (Phase 4) — it never changes
+    // canonical output and is not used by anything downstream of parsing.
     let parsedFromMessage = await parsePropertyMessageWithGemini(
       message,
-      historyWithoutCurrentMessage
+      historyWithoutCurrentMessage,
+      language
     )
 
     const aiUsed = Boolean(parsedFromMessage)
@@ -155,6 +167,7 @@ const districtScopeResult = handleDistrictScopeClarification({
   parsedFromMessage,
   parsed,
   newLifestyleConceptsInMessage,
+  language,
 })
 
 parsed = districtScopeResult.parsed
@@ -190,6 +203,7 @@ if (districtScopeResult.handled) {
     exactMatch: null,
     aiUsed,
     conversationId: responseConversationId,
+    language,
   })
 }
 
@@ -208,6 +222,7 @@ if (districtScopeResult.handled) {
       currentFilters,
       pageKey,
       lastShownProperties,
+      language,
     })
 
     if (leadResult.handled) {
@@ -251,6 +266,7 @@ if (districtScopeResult.handled) {
         exactMatch: null,
         aiUsed,
         conversationId: responseConversationId,
+        language,
       })
     }
 
@@ -260,7 +276,7 @@ if (districtScopeResult.handled) {
       parsed.pendingLead = leadResult.pendingLead
     }
 
-    const nonPropertyReply = buildNonPropertyReply(parsed)
+    const nonPropertyReply = buildNonPropertyReply(parsed, language)
 
 if (nonPropertyReply) {
   let responseConversationId = null
@@ -290,37 +306,7 @@ if (nonPropertyReply) {
     exactMatch: null,
     aiUsed,
     conversationId: responseConversationId,
-  })
-}
-
-if (parsed.replyType === 'ask_question' && parsed.nextQuestion && !shouldSkipGeminiAskQuestion(parsed)) {
-  let responseConversationId = null
-
-  if (req.user) {
-    const persistenceResult = await recordChatExchange({
-      userId: req.user._id,
-      conversationId,
-      pageKey,
-      userMessageText: message,
-      assistantReplyText: parsed.nextQuestion,
-      propertyIds: [],
-      event: 'clarification_requested',
-      history,
-      parsed,
-      lead: null,
-    })
-    responseConversationId = persistenceResult.conversationId || conversationId || null
-  }
-
-  return res.json({
-    success: true,
-    reply: parsed.nextQuestion,
-    properties: [],
-    parsed,
-    filterUsed: null,
-    exactMatch: null,
-    aiUsed,
-    conversationId: responseConversationId,
+    language,
   })
 }
 
@@ -329,10 +315,22 @@ if (parsed.replyType === 'ask_question' && parsed.nextQuestion && !shouldSkipGem
     console.log('Old filters from frontend:', currentFilters)
     console.log('Final merged parsed:', parsed)
 
-    // 6. Ask only if important info is still missing after merging memory
-    const missingQuestion = buildMissingInfoQuestion(parsed, message)
+    // 6. Single authoritative ask-vs-search decision (Phase 4). Replaces the
+    // old independent Gemini ask_question branch and buildMissingInfoQuestion
+    // branch — those decided routing in isolation; chatPolicyEngine.js is now
+    // the only place that decides. Gemini's own replyType/nextQuestion are no
+    // longer read for routing here — they are suggestions the engine may
+    // disregard (see decideTurnAction's doc comment).
+    const isShowMore = isShowMoreRequest(message)
 
-    if (missingQuestion) {
+    const turnAction = decideTurnAction({ parsed, pageKey, isShowMore })
+    console.log('Policy decision (pre-search):', turnAction.reason)
+
+    if (turnAction.type === 'ask') {
+      const questionText = renderSlotQuestion(turnAction.slots, language)
+
+      parsed.pendingQuestion = createOrRetryPendingQuestion(parsed.pendingQuestion, turnAction.slots, parsed.turn)
+
       let responseConversationId = null
 
       if (req.user) {
@@ -341,7 +339,7 @@ if (parsed.replyType === 'ask_question' && parsed.nextQuestion && !shouldSkipGem
           conversationId,
           pageKey,
           userMessageText: message,
-          assistantReplyText: missingQuestion,
+          assistantReplyText: questionText,
           propertyIds: [],
           event: 'clarification_requested',
           history,
@@ -353,17 +351,21 @@ if (parsed.replyType === 'ask_question' && parsed.nextQuestion && !shouldSkipGem
 
       return res.json({
         success: true,
-        reply: missingQuestion,
+        reply: questionText,
         properties: [],
         parsed,
         conversationId: responseConversationId,
         filterUsed: null,
         exactMatch: null,
         aiUsed,
+        language,
       })
     }
 
-    // 7. Build MongoDB filter and search
+    // 7. Build MongoDB filter and search. turnAction.scope is a presentation
+    // hint only — the filter naturally omits listingType/propertyType/
+    // district/budget whenever their value is null (deferred/declined
+    // transitions already clear the value), so no filter logic changes here.
     const filter = buildMongoFilter(parsed)
 
     // mustHave is strict: enforce it as a real hard filter now, and carry it
@@ -373,13 +375,15 @@ if (parsed.replyType === 'ask_question' && parsed.nextQuestion && !shouldSkipGem
     Object.assign(filter, mustHaveFilter)
 
     // Feature toggles requested directly (not via mustHave) that fallback is
-    // allowed to drop — used only to tell the visitor honestly if that happens.
-    const relaxedFeatureLabels = getRelaxedFeatureLabels(parsed, mustHaveFilter)
+    // allowed to drop — used only to tell the visitor honestly if that
+    // happens. Ids, not labels: language-independent, resolved to a
+    // localized word only at render time inside buildReply.
+    const relaxedFeatureIds = getRelaxedFeatureIds(parsed, mustHaveFilter)
 
     // Only exclude previously shown properties on a plain "show me more"
     // continuation. If this message itself introduces new/changed criteria,
     // treat it as a fresh search and let previously shown properties reappear.
-    const isShowMore = isShowMoreRequest(message)
+    // (isShowMore was already computed above, for the policy engine.)
     const isFreshSearch = !isShowMore && messageHasNewCriteria(parsedFromMessage)
 
     const validShownPropertyIds = isShowMore && Array.isArray(shownPropertyIds)
@@ -401,7 +405,10 @@ let {
   descriptionSearchUsed,
   descriptionSearchQuery,
   descriptionSearchError,
+  searchEvidence,
 } = await runPropertySearch({ parsed, filter, mustHaveFilter, message })
+
+console.log('Search evidence:', searchEvidence)
 
 // Attach a short, deterministic "why this matches you" reason to each
 // property — computed from real property fields + the parsed filters that
@@ -411,9 +418,43 @@ properties = properties.map((property) => {
 
   return {
     ...plain,
-    matchReason: buildMatchReason(plain, parsed, matchedViaDescription, matchedViaSemantic),
+    matchReason: buildMatchReason(plain, parsed, matchedViaDescription, matchedViaSemantic, language),
   }
 })
+
+// Phase 4: post-search follow-up decision — the second and only other call
+// into the policy engine. suppressFollowUp carries forward from the
+// pre-search decision (e.g. a noPreference turn) rather than being
+// re-derived, so there is exactly one suppression source, not two.
+const mixedListingTypes = detectMixedListingTypes(properties)
+
+const followUpDecision = decideFollowUp(
+  { parsed, suppressFollowUp: turnAction.suppressFollowUp === true },
+  {
+    count: properties.length,
+    // searchEvidence.mode is chatPropertySearch.js's machine-readable verdict;
+    // 'fallback' = a soft/open-ended requirement was requested but nothing was
+    // verified. The policy uses only this abstract outcome, never the message.
+    mode: searchEvidence.mode,
+    fallbackLevel,
+    matchedViaSemantic,
+    matchedViaDescription,
+    descriptionSearchAttempted,
+    mixedListingTypes,
+  }
+)
+console.log('Policy decision (post-search):', followUpDecision.reason)
+
+// When the policy resolved this turn as an unverified soft-requirement
+// outcome, it deliberately does NOT continue the hard-slot sequence. Any
+// pending slot question left over from an earlier turn is now irrelevant and
+// must not survive to trigger a stale retry later. Tied strictly to the
+// current search result (softOutcome), never to message vocabulary. Narrow
+// and safe: only fallback outcomes set softOutcome, and they always carry
+// offerSlot null, so this never clobbers a legitimate in-progress question.
+if (followUpDecision.softOutcome) {
+  parsed.pendingQuestion = null
+}
 
 const reply = buildReply({
   properties,
@@ -422,8 +463,19 @@ const reply = buildReply({
   matchedViaDescription,
   matchedViaSemantic,
   descriptionSearchAttempted,
-  relaxedFeatureLabels,
+  relaxedFeatureIds,
+  followUp: followUpDecision,
+  mixedListingTypes,
+  language,
 })
+
+if (followUpDecision.offerSlot) {
+  parsed.pendingQuestion = createOrRetryPendingQuestion(
+    parsed.pendingQuestion,
+    [followUpDecision.offerSlot],
+    parsed.turn
+  )
+}
 
 let responseConversationId = null
 
@@ -455,6 +507,7 @@ if (req.user) {
   exactMatch: fallbackLevel === 0,
   aiUsed,
   conversationId: responseConversationId,
+  language,
 })
   } catch (err) {
     next(err)

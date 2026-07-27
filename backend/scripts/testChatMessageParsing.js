@@ -9,6 +9,8 @@
 
 import {
   defaultParsed,
+  PER_TURN_DIALOGUE_FIELDS,
+  stripPerTurnFields,
   normalizeParsed,
   extractBudgetFromText,
   hasSoftDescriptionSearch,
@@ -19,6 +21,8 @@ import {
   messageRequestsResidential,
   messageExpressesTypeUncertainty,
   applyRawTextPropertyTypeSignals,
+  canonicalizeListingType,
+  canonicalizePropertyType,
 } from '../services/chatMessageParsing.js'
 import { RESIDENTIAL_PROPERTY_TYPES } from '../services/propertySemanticSearch.js'
 
@@ -273,6 +277,154 @@ assertTrue('propertyType set -> true', hasKnownPropertyType({ propertyType: 'Vil
 assertTrue('propertyTypes non-empty -> true', hasKnownPropertyType({ propertyTypes: ['Apartment', 'Villa'] }))
 assertTrue('neither set -> false', !hasKnownPropertyType({ propertyType: null, propertyTypes: [] }))
 assertTrue('empty object -> false', !hasKnownPropertyType({}))
+
+line()
+console.log('stripPerTurnFields (Phase 1 boundary)')
+line()
+
+assertEqual(
+  'strips every per-turn dialogue field',
+  stripPerTurnFields({
+    intent: 'property_search',
+    intentType: 'casual_chat',
+    replyType: 'ask_question',
+    nextQuestion: 'Are you looking to buy or rent?',
+    needsClarification: true,
+    clarifyingQuestion: 'old clarification',
+    noPreference: true,
+    changedMind: true,
+    uncertainPropertyType: true,
+    excludedConcepts: ['sea_view'],
+  }),
+  {}
+)
+
+assertEqual(
+  'durable criteria, lifestyle memory, and special durable state pass through untouched',
+  stripPerTurnFields({
+    replyType: 'ask_question',
+    nextQuestion: 'stale question',
+    listingType: 'Sale',
+    propertyType: 'Apartment',
+    district: 'Büyükçekmece',
+    maxPrice: 5000000,
+    searchMode: 'description',
+    descriptionQuery: 'sea view',
+    lifestyle: ['sea view'],
+    mustHave: ['pool'],
+    pendingLead: { status: 'collecting', name: 'Arqam' },
+    pendingClarification: { type: 'lifestyle_scope', retryCount: 0 },
+  }),
+  {
+    listingType: 'Sale',
+    propertyType: 'Apartment',
+    district: 'Büyükçekmece',
+    maxPrice: 5000000,
+    searchMode: 'description',
+    descriptionQuery: 'sea view',
+    lifestyle: ['sea view'],
+    mustHave: ['pool'],
+    pendingLead: { status: 'collecting', name: 'Arqam' },
+    pendingClarification: { type: 'lifestyle_scope', retryCount: 0 },
+  }
+)
+
+assertTrue('does not mutate its input', (() => {
+  const input = { nextQuestion: 'stale', listingType: 'Sale' }
+  stripPerTurnFields(input)
+  return input.nextQuestion === 'stale'
+})())
+
+assertTrue(
+  'every listed per-turn field is genuinely stripped (list and function stay in sync)',
+  PER_TURN_DIALOGUE_FIELDS.every((field) => !(field in stripPerTurnFields({ [field]: 'anything' })))
+)
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 4 (multilingual Gemini parsing): canonicalization guard.
+//
+// These tests do NOT prove Gemini understands Turkish/Arabic input — only a
+// live call can prove that (see scripts/testGeminiMultilingualSmoke.js).
+// They only prove that IF a listingType/propertyType value ever arrived
+// translated (from Gemini or any other future source), it gets mapped back
+// to the canonical English enum — or dropped to null — before it can reach
+// the Mongo filter as an unmatchable string.
+// ═══════════════════════════════════════════════════════════════════════
+line()
+console.log('Phase 4: canonicalizeListingType')
+line()
+
+assertEqual('canonical "Sale" passes through unchanged', canonicalizeListingType('Sale'), 'Sale')
+assertEqual('canonical "Rent" passes through unchanged', canonicalizeListingType('Rent'), 'Rent')
+assertEqual('Turkish "kiralık" maps to "Rent"', canonicalizeListingType('kiralık'), 'Rent')
+assertEqual('Turkish "satılık" maps to "Sale"', canonicalizeListingType('satılık'), 'Sale')
+assertEqual('ASCII-folded "kiralik" maps to "Rent"', canonicalizeListingType('kiralik'), 'Rent')
+assertEqual('Arabic "للإيجار" maps to "Rent"', canonicalizeListingType('للإيجار'), 'Rent')
+assertEqual('Arabic "للبيع" maps to "Sale"', canonicalizeListingType('للبيع'), 'Sale')
+assertEqual('null stays null', canonicalizeListingType(null), null)
+assertEqual('undefined becomes null', canonicalizeListingType(undefined), null)
+assertEqual('unrecognized gibberish becomes null (not silently passed through)', canonicalizeListingType('Zorglub'), null)
+assertEqual('case/whitespace-insensitive synonym match (" KIRALIK ")', canonicalizeListingType(' KIRALIK '), 'Rent')
+
+line()
+console.log('Phase 4: canonicalizePropertyType')
+line()
+
+assertEqual('canonical "Apartment" passes through unchanged', canonicalizePropertyType('Apartment'), 'Apartment')
+assertEqual('canonical "Villa" passes through unchanged', canonicalizePropertyType('Villa'), 'Villa')
+assertEqual('Turkish "daire" maps to "Apartment"', canonicalizePropertyType('daire'), 'Apartment')
+assertEqual('Turkish "villa" maps to "Villa"', canonicalizePropertyType('villa'), 'Villa')
+assertEqual('Turkish "arsa" maps to "Land"', canonicalizePropertyType('arsa'), 'Land')
+assertEqual('Turkish "dükkan" maps to "Shop"', canonicalizePropertyType('dükkan'), 'Shop')
+assertEqual('Arabic "شقة" maps to "Apartment"', canonicalizePropertyType('شقة'), 'Apartment')
+assertEqual('Arabic "فيلا" maps to "Villa"', canonicalizePropertyType('فيلا'), 'Villa')
+assertEqual('Arabic "مكتب" maps to "Office"', canonicalizePropertyType('مكتب'), 'Office')
+assertEqual('null stays null', canonicalizePropertyType(null), null)
+assertEqual('unrecognized word ("House") becomes null, not passed through', canonicalizePropertyType('House'), null)
+
+line()
+console.log('Phase 4: normalizeParsed applies the canonicalization guard end-to-end')
+line()
+
+assertEqual(
+  'a fake Gemini-shaped output with canonical English values passes through unchanged',
+  (() => {
+    const result = normalizeParsed({ listingType: 'Rent', propertyType: 'Apartment' }, 'hello')
+    return { listingType: result.listingType, propertyType: result.propertyType }
+  })(),
+  { listingType: 'Rent', propertyType: 'Apartment' }
+)
+
+assertEqual(
+  'a fake Gemini-shaped output with translated Turkish values is canonicalized',
+  (() => {
+    const result = normalizeParsed({ listingType: 'Kiralık', propertyType: 'Daire' }, 'hello')
+    return { listingType: result.listingType, propertyType: result.propertyType }
+  })(),
+  { listingType: 'Rent', propertyType: 'Apartment' }
+)
+
+assertEqual(
+  'a fake Gemini-shaped output with translated Arabic values is canonicalized',
+  (() => {
+    const result = normalizeParsed({ listingType: 'للإيجار', propertyType: 'شقة' }, 'hello')
+    return { listingType: result.listingType, propertyType: result.propertyType }
+  })(),
+  { listingType: 'Rent', propertyType: 'Apartment' }
+)
+
+assertEqual(
+  'propertyTypes array: canonical + translated + invalid entries all resolve correctly',
+  normalizeParsed({ propertyTypes: ['Villa', 'daire', 'شقة', 'Zorglub'] }, 'hello').propertyTypes,
+  ['Villa', 'Apartment', 'Apartment']
+)
+
+assertTrue('normalizeParsed does not mutate its input object', (() => {
+  const input = { listingType: 'Kiralık', propertyType: 'Daire' }
+  const before = JSON.stringify(input)
+  normalizeParsed(input, 'hello')
+  return JSON.stringify(input) === before
+})())
 
 line()
 console.log('SUMMARY')

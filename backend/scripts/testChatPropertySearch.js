@@ -24,10 +24,9 @@ import {
   searchWithFallback,
   searchByDescription,
   stripStructuredTerms,
-  getRelevanceCheckTerms,
-  propertyMatchesSignificantTerm,
   getDescriptionSearchQuery,
   runPropertySearch,
+  evaluateSoftCriteriaEvidence,
 } from '../services/chatPropertySearch.js'
 
 dotenv.config()
@@ -368,46 +367,13 @@ const run = async () => {
       getDescriptionSearchQuery({ descriptionQuery: 'apartment rent sale' }, ''),
       'apartment rent sale'
     )
-    assertEqual(
-      'concept keyword expansion (schools -> full school-concept synonym set)',
-      getRelevanceCheckTerms({ lifestyle: ['near schools'] }),
-      ['school', 'schools', 'educational', 'education', 'kindergarten', 'university', 'campus']
-    )
-    assertEqual(
-      'unknown words are kept literally',
-      getRelevanceCheckTerms({ lifestyle: ['modern kitchen'] }),
-      ['modern', 'kitchen']
-    )
-    assertEqual('empty when nothing tagged', getRelevanceCheckTerms({}), [])
-
-    // ═══════════════════════════════════════════════════════════════════
-    // G. per-property relevance verification (pure, no DB)
-    // ═══════════════════════════════════════════════════════════════════
-    line()
-    console.log('G. per-property relevance verification')
-    line()
-
-    const prop = (overrides) => ({
-      title: 'Sample Title', description: 'Sample description', address: 'Sample address', district: 'Sample district',
-      ...overrides,
-    })
-
-    assertTrue('title match', propertyMatchesSignificantTerm(prop({ title: 'A home near the metro station' }), ['metro']))
-    assertTrue('description match', propertyMatchesSignificantTerm(prop({ description: 'Close to schools and parks' }), ['school']))
-    assertTrue('address match', propertyMatchesSignificantTerm(prop({ address: 'Near the sea coast' }), ['coast']))
-    assertTrue('district match', propertyMatchesSignificantTerm(prop({ district: 'Kadıköy near the water' }), ['water']))
-    assertTrue(
-      'concept-word match via toSingular (property says "school", term is "schools")',
-      propertyMatchesSignificantTerm(prop({ description: 'Walking distance to the local school' }), ['schools'])
-    )
-    assertTrue(
-      'no significant term present -> rejected',
-      propertyMatchesSignificantTerm(prop({ description: 'nothing relevant at all' }), ['golf']) === false
-    )
-    assertTrue(
-      'empty terms array -> not rejected (nothing to verify against)',
-      propertyMatchesSignificantTerm(prop({}), []) === true
-    )
+    // NOTE: candidate relevance verification (formerly getRelevanceCheckTerms
+    // + propertyMatchesSignificantTerm, an "any one token overlapped ->
+    // verified" check) was replaced by the evidence-unit coverage layer in
+    // services/descriptionEvidence.js. Its full unit-construction, coverage,
+    // multilingual-concept, and false-positive tests live in the dedicated
+    // scripts/testDescriptionEvidence.js suite. searchByDescription's use of
+    // it end-to-end is exercised in section H below.
 
     // ═══════════════════════════════════════════════════════════════════
     // H. searchByDescription (seeded fixtures)
@@ -533,6 +499,71 @@ const run = async () => {
 
       console.log('  (info) "semantic success stops later searches" is NOT covered by a focused test here —')
       console.log('  see report section 14 for why (requires a live, non-deterministic Gemini embedding call).')
+
+      // ─── J. search-evidence contract (real-DB fixtures) ─────────────────
+      // Same three calls as above, exercising searchEvidence specifically —
+      // the fix for the villa/school honesty bug.
+      assertEqual('no soft-search request -> searchEvidence.mode: exact', noSoftResult.searchEvidence.mode, 'exact')
+      assertEqual('no soft-search request -> searchEvidence.relaxed: false', noSoftResult.searchEvidence.relaxed, false)
+
+      assertEqual('soft search verified -> searchEvidence.mode: description', softSuccessResult.searchEvidence.mode, 'description')
+      assertEqual('soft search verified -> searchEvidence.relaxed: false', softSuccessResult.searchEvidence.relaxed, false)
+      assertEqual(
+        'soft search verified -> matchedSoftCriteria includes school',
+        softSuccessResult.searchEvidence.matchedSoftCriteria,
+        ['school']
+      )
+      assertEqual(
+        'soft search verified -> unmatchedSoftCriteria empty',
+        softSuccessResult.searchEvidence.unmatchedSoftCriteria,
+        []
+      )
+      assertEqual(
+        'soft search verified -> descriptionQueryVerified: true',
+        softSuccessResult.searchEvidence.descriptionQueryVerified,
+        true
+      )
+
+      assertEqual('soft search mismatch -> searchEvidence.mode: fallback', softMismatchResult.searchEvidence.mode, 'fallback')
+      assertEqual(
+        'soft search mismatch -> searchEvidence.relaxed: true (hard-only fallback, regardless of concept vocabulary)',
+        softMismatchResult.searchEvidence.relaxed,
+        true
+      )
+
+      // The exact bug pattern: TWO soft criteria requested, only ONE present
+      // across the returned set — evidence must distinguish them, not
+      // collapse into one pooled "matched" flag.
+      const partialResult = await runPropertySearch({
+        parsed: { listingType: 'Sale', propertyType: 'Apartment', lifestyle: ['near schools', 'sea view'] },
+        filter,
+        mustHaveFilter: {},
+        message: 'apartment near schools with a sea view',
+      })
+      assertEqual(
+        'partial soft match -> matchedSoftCriteria contains only the confirmed concept',
+        partialResult.searchEvidence.matchedSoftCriteria,
+        ['school']
+      )
+      assertEqual(
+        'partial soft match -> unmatchedSoftCriteria contains the unconfirmed concept',
+        partialResult.searchEvidence.unmatchedSoftCriteria,
+        ['sea_view']
+      )
+      assertEqual(
+        'partial soft match -> descriptionQueryVerified: true (at least one criterion confirmed)',
+        partialResult.searchEvidence.descriptionQueryVerified,
+        true
+      )
+
+      // Direct unit check of the evidence function itself, against the same
+      // real fixtures, with everything unmatched.
+      const noneEvidence = evaluateSoftCriteriaEvidence(
+        [byTitle[`${TEMP_PREFIX} H Generic Listing`]],
+        { lifestyle: ['near schools'] }
+      )
+      assertEqual('evaluateSoftCriteriaEvidence: nothing confirmed -> descriptionQueryVerified: false', noneEvidence.descriptionQueryVerified, false)
+      assertEqual('evaluateSoftCriteriaEvidence: unmatchedSoftCriteria contains school', noneEvidence.unmatchedSoftCriteria, ['school'])
     }
   } finally {
     if (inserted.length > 0) {

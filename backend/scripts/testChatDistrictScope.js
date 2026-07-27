@@ -495,6 +495,60 @@ line()
   assertTrue('handled: pendingClarification is a plain object', typeof handled.pendingClarification === 'object' && handled.pendingClarification !== null)
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 3: district-scope question/retry localization in tr/ar.
+// resolveDistrictScopeAnswer/extractConceptIds (and everything above this
+// section, which calls buildDistrictScopeQuestion/buildDistrictScopeRetryQuestion
+// with no language argument) are completely unchanged — Phase 3 only adds
+// a `language` parameter to the two question-rendering functions.
+// ═══════════════════════════════════════════════════════════════════════
+line()
+console.log('Phase 3: buildDistrictScopeQuestion in tr/ar')
+line()
+
+const questionTr = buildDistrictScopeQuestion({ district: 'Kadıköy', propertyType: 'Apartment' }, ['school'], 'tr')
+assertTrue('tr question mentions the district (Kadıköy)', questionTr.includes('Kadıköy'))
+assertTrue('tr question mentions the school concept topic (okullara yakınlık)', questionTr.includes('okullara yakınlık'))
+
+const questionAr = buildDistrictScopeQuestion({ district: 'Kadıköy', propertyType: 'Apartment' }, ['school'], 'ar')
+assertTrue('ar question mentions the district (Kadıköy)', questionAr.includes('Kadıköy'))
+assertTrue('ar question mentions the school concept topic (القرب من المدارس)', questionAr.includes('القرب من المدارس'))
+
+const questionNoConceptsTr = buildDistrictScopeQuestion({ district: 'Kadıköy', propertyType: 'Apartment' }, [], 'tr')
+assertTrue('tr question with no concept ids falls back to the generic "bunu" phrase', questionNoConceptsTr.includes('bunu'))
+
+const questionNoConceptsAr = buildDistrictScopeQuestion({ district: 'Kadıköy', propertyType: 'Apartment' }, [], 'ar')
+assertTrue('ar question with no concept ids falls back to the generic "ذلك" phrase', questionNoConceptsAr.includes('ذلك'))
+
+line()
+console.log('Phase 3: buildDistrictScopeRetryQuestion in tr/ar')
+line()
+
+const retryTr = buildDistrictScopeRetryQuestion({ district: 'Kadıköy' }, 'tr')
+assertTrue('tr retry question mentions the district (Kadıköy)', retryTr.includes('Kadıköy'))
+
+const retryAr = buildDistrictScopeRetryQuestion({ district: 'Kadıköy' }, 'ar')
+assertTrue('ar retry question mentions the district (Kadıköy)', retryAr.includes('Kadıköy'))
+
+line()
+console.log('Phase 3: language fallback and no mutation')
+line()
+
+assertEqual(
+  'buildDistrictScopeQuestion with unsupported language falls back to English content',
+  buildDistrictScopeQuestion({ district: 'Kadıköy', propertyType: 'Apartment' }, ['school'], 'de'),
+  buildDistrictScopeQuestion({ district: 'Kadıköy', propertyType: 'Apartment' }, ['school'], 'en')
+)
+
+assertTrue('buildDistrictScopeQuestion does not mutate parsed or conceptIds when called with a language', (() => {
+  const parsed = { district: 'Kadıköy', propertyType: 'Apartment' }
+  const conceptIds = ['school']
+  const beforeParsed = JSON.stringify(parsed)
+  const beforeConceptIds = JSON.stringify(conceptIds)
+  buildDistrictScopeQuestion(parsed, conceptIds, 'ar')
+  return JSON.stringify(parsed) === beforeParsed && JSON.stringify(conceptIds) === beforeConceptIds
+})())
+
 line()
 console.log('SUMMARY')
 line()

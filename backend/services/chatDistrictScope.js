@@ -32,6 +32,16 @@ import {
   hasExplicitContinuityPhrase,
   normalizeWord,
 } from './chatConversationMemory.js'
+import {
+  safeLanguage,
+  propertyTypeLabelForms,
+  genericPropertyLabelForms,
+  conceptTopicPhrase,
+  joinList,
+  renderDistrictScopeQuestion,
+  renderDistrictScopeRetryQuestion,
+  districtScopeConceptFallback,
+} from './chatReplyRenderer.js'
 
 const DISTRICT_BROADEN_PATTERNS = [
   /\banywhere\b/,
@@ -88,7 +98,10 @@ export const extractConceptIds = (text = '') => {
   return Array.from(ids)
 }
 
-const humanizeConceptIds = (ids = []) =>
+// English-only, byte-identical to the pre-Phase-3 implementation — used
+// only when language === 'en', so existing callers/tests that don't pass a
+// language keep getting exactly this wording.
+const humanizeConceptIdsEn = (ids = []) =>
   ids.length > 0 ? ids.map((id) => id.replace(/_/g, '-')).join(' and ') : 'that'
 
 const describeDistrictPhrase = (parsed = {}) => {
@@ -97,22 +110,80 @@ const describeDistrictPhrase = (parsed = {}) => {
   return null
 }
 
-// Exported for the same test-isolation reason as resolveDistrictScopeAnswer above.
-export const buildDistrictScopeQuestion = (parsed, conceptIds) => {
-  const district = describeDistrictPhrase(parsed)
-  const typeLabel = hasMultiplePropertyTypes(parsed)
-    ? parsed.propertyTypes.map(pluralizePropertyType).join(' and ')
-    : parsed.propertyType
-    ? pluralizePropertyType(parsed.propertyType)
-    : 'properties'
+// Localized type-label phrase ("apartments and villas" / "daire ve villalar" /
+// "شقق وفلل"). English path stays byte-identical to before (same
+// pluralizePropertyType + plain ' and ' join); tr/ar use the property-type
+// label map + natural list joining instead.
+const describeTypeLabel = (parsed = {}, language = 'en') => {
+  if (language === 'en') {
+    return hasMultiplePropertyTypes(parsed)
+      ? parsed.propertyTypes.map(pluralizePropertyType).join(' and ')
+      : parsed.propertyType
+      ? pluralizePropertyType(parsed.propertyType)
+      : 'properties'
+  }
 
-  return `Should I keep searching in ${district}, or include other districts with ${humanizeConceptIds(conceptIds)} ${typeLabel}?`
+  if (hasMultiplePropertyTypes(parsed)) {
+    return joinList(
+      parsed.propertyTypes.map((type) => propertyTypeLabelForms(type, language)?.other).filter(Boolean),
+      language,
+      'and'
+    )
+  }
+
+  return parsed.propertyType
+    ? propertyTypeLabelForms(parsed.propertyType, language)?.other
+    : genericPropertyLabelForms(language)?.other
+}
+
+// Localized concept-topic phrase ("sea-view and family" style id-derived
+// text for English, unchanged; natural topic phrases — "a sea view and
+// family-friendly suitability" — for tr/ar, via conceptLabels.js).
+const describeConceptsPhrase = (conceptIds = [], language = 'en') => {
+  if (language === 'en') return humanizeConceptIdsEn(conceptIds)
+
+  if (conceptIds.length === 0) return districtScopeConceptFallback(language)
+
+  const topics = conceptIds.map((id) => conceptTopicPhrase(id, language)).filter(Boolean)
+  return topics.length > 0 ? joinList(topics, language, 'and') : districtScopeConceptFallback(language)
+}
+
+// Exported for the same test-isolation reason as resolveDistrictScopeAnswer
+// above. `language` defaults to 'en', reproducing the exact pre-Phase-3
+// English sentence when omitted.
+//
+// Known limitation, unchanged by this phase: resolveDistrictScopeAnswer
+// (above) still only recognizes ENGLISH answer phrasing ("anywhere", "keep",
+// "yes") — so a Turkish/Arabic visitor gets a localized QUESTION here but
+// must still answer in a recognizable English pattern for it to be
+// understood deterministically. That is deferred to a later
+// dialogue-pattern phase, not solved here.
+export const buildDistrictScopeQuestion = (parsed, conceptIds, language = 'en') => {
+  // Normalized BEFORE the 'en' check: an unsupported language (e.g. a stray
+  // 'de') must fall back to the exact English path, not accidentally take
+  // the tr/ar-style natural-language branch with English concept topics.
+  const normalizedLanguage = safeLanguage(language)
+  const district = describeDistrictPhrase(parsed)
+  const typeLabel = describeTypeLabel(parsed, normalizedLanguage)
+  const concepts = describeConceptsPhrase(conceptIds, normalizedLanguage)
+
+  if (normalizedLanguage === 'en') {
+    return `Should I keep searching in ${district}, or include other districts with ${concepts} ${typeLabel}?`
+  }
+
+  return renderDistrictScopeQuestion({ district, concepts, typeLabel }, normalizedLanguage)
 }
 
 // Exported for the same test-isolation reason as resolveDistrictScopeAnswer above.
-export const buildDistrictScopeRetryQuestion = (parsed) => {
+export const buildDistrictScopeRetryQuestion = (parsed, language = 'en') => {
+  const normalizedLanguage = safeLanguage(language)
   const district = describeDistrictPhrase(parsed)
-  return `Sorry, just to confirm — should I keep searching in ${district}, or search other districts too?`
+
+  if (normalizedLanguage === 'en') {
+    return `Sorry, just to confirm — should I keep searching in ${district}, or search other districts too?`
+  }
+
+  return renderDistrictScopeRetryQuestion(district, normalizedLanguage)
 }
 
 // ─── Wrapper ───────────────────────────────────────────────────────────────
@@ -141,6 +212,7 @@ export const handleDistrictScopeClarification = ({
   parsedFromMessage,
   parsed,
   newLifestyleConceptsInMessage,
+  language = 'en',
 }) => {
   const existingScopeClarification =
     currentFilters?.pendingClarification?.type === 'lifestyle_scope'
@@ -175,7 +247,7 @@ export const handleDistrictScopeClarification = ({
         // default (keep) rather than asking a third time.
         parsed.pendingClarification = null
       } else {
-        const districtScopeRetryReply = buildDistrictScopeRetryQuestion(parsed)
+        const districtScopeRetryReply = buildDistrictScopeRetryQuestion(parsed, language)
 
         return {
           handled: true,
@@ -200,7 +272,7 @@ export const handleDistrictScopeClarification = ({
         parsed.districts = []
       } else if (districtAnswer === 'unclear') {
         const conceptIds = extractConceptIds(message)
-        const districtScopeQuestionReply = buildDistrictScopeQuestion(parsed, conceptIds)
+        const districtScopeQuestionReply = buildDistrictScopeQuestion(parsed, conceptIds, language)
 
         return {
           handled: true,

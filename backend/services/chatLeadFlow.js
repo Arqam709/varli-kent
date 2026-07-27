@@ -31,6 +31,12 @@ import {
   resolveOrdinalIndex,
   buildPropertyDisambiguationQuestion,
 } from '../utils/leadCapture.js'
+import {
+  renderLeadThankYou,
+  renderLeadSaveFailure,
+  renderLeadCancellation,
+  renderLeadCorrectionPrefix,
+} from './chatReplyRenderer.js'
 
 // Same field list buildMongoFilter/messageHasNewCriteria in chat.js watch —
 // duplicated narrowly here rather than imported, so this service doesn't
@@ -67,12 +73,15 @@ const resolvePropertyFromPage = async (pageKey) => {
   return { propertyId: String(propertyDoc._id), propertyTitle: propertyDoc.title }
 }
 
-const submitLead = async (pendingLead, parsed) => {
+const submitLead = async (pendingLead, parsed, language = 'en') => {
   try {
     const submission = await ContactSubmission.create({
       name: pendingLead.name,
       email: pendingLead.email,
       phone: pendingLead.phone,
+      // buildInterestType()/buildLeadMessage() are never passed a language —
+      // both are internal/staff-facing (persisted DB value + notification
+      // body), not visitor-facing. See utils/leadCapture.js's file header.
       interestType: buildInterestType(parsed),
       message: buildLeadMessage({ pendingLead, parsed, message: pendingLead.originalMessage }),
       source: 'ai_assistant',
@@ -82,7 +91,7 @@ const submitLead = async (pendingLead, parsed) => {
 
     return {
       handled: true,
-      reply: `Thank you, ${pendingLead.name}! I've passed your details to our team and they will reach out to you at ${pendingLead.phone} soon.`,
+      reply: renderLeadThankYou(pendingLead.name, pendingLead.phone, language),
       pendingLead: { ...pendingLead, status: 'submitted' },
     }
   } catch (err) {
@@ -90,8 +99,7 @@ const submitLead = async (pendingLead, parsed) => {
 
     return {
       handled: true,
-      reply:
-        "I collected your details but couldn't save them just now — please try the contact form or WhatsApp instead, and our team will assist you.",
+      reply: renderLeadSaveFailure(language),
       pendingLead: { ...pendingLead, status: 'confirming' },
     }
   }
@@ -102,7 +110,7 @@ const submitLead = async (pendingLead, parsed) => {
 // advance to the confirmation summary. Shared by the fresh-entry path and
 // the post-disambiguation path (both land here once a property, if any, is
 // resolved).
-const continueCollecting = ({ base, message, parsed, hasNewLeadIntent }) => {
+const continueCollecting = ({ base, message, parsed, hasNewLeadIntent, language = 'en' }) => {
   const pendingLead = { ...base, status: 'collecting' }
 
   const newEmail = extractEmail(message)
@@ -128,12 +136,16 @@ const continueCollecting = ({ base, message, parsed, hasNewLeadIntent }) => {
   const missingFields = getMissingLeadFields(pendingLead)
 
   if (missingFields.length > 0) {
-    return { handled: true, reply: buildMissingFieldsQuestion(missingFields, pendingLead.propertyTitle), pendingLead }
+    return {
+      handled: true,
+      reply: buildMissingFieldsQuestion(missingFields, pendingLead.propertyTitle, language),
+      pendingLead,
+    }
   }
 
   pendingLead.status = 'confirming'
 
-  return { handled: true, reply: buildConfirmationSummary(pendingLead, parsed), pendingLead }
+  return { handled: true, reply: buildConfirmationSummary(pendingLead, parsed, language), pendingLead }
 }
 
 // req.body.currentFilters/pageKey/message/lastShownProperties and the
@@ -149,6 +161,7 @@ export const handleLeadFlow = async ({
   currentFilters,
   pageKey,
   lastShownProperties = [],
+  language = 'en',
 }) => {
   const PENDING_STATUSES = ['collecting', 'confirming', 'clarifying_property']
 
@@ -191,12 +204,13 @@ export const handleLeadFlow = async ({
         message,
         parsed,
         hasNewLeadIntent,
+        language,
       })
     }
 
     return {
       handled: true,
-      reply: buildPropertyDisambiguationQuestion(candidates),
+      reply: buildPropertyDisambiguationQuestion(candidates, language),
       pendingLead: existingPendingLead,
     }
   }
@@ -206,13 +220,13 @@ export const handleLeadFlow = async ({
     if (detectCancellationIntent(message)) {
       return {
         handled: true,
-        reply: "No problem — I won't send these details. Let me know if you change your mind.",
+        reply: renderLeadCancellation(language),
         pendingLead: null,
       }
     }
 
     if (detectConfirmationIntent(message)) {
-      return submitLead(existingPendingLead, parsed)
+      return submitLead(existingPendingLead, parsed, language)
     }
 
     // Not a clear yes/no — check for a correction. Name corrections require
@@ -233,12 +247,12 @@ export const handleLeadFlow = async ({
     if (correctedTime && correctedTime !== updated.preferredTime) { updated.preferredTime = correctedTime; changed = true }
 
     if (changed) {
-      return { handled: true, reply: buildConfirmationSummary(updated, parsed), pendingLead: updated }
+      return { handled: true, reply: buildConfirmationSummary(updated, parsed, language), pendingLead: updated }
     }
 
     return {
       handled: true,
-      reply: `Sorry, I didn't quite catch that. ${buildConfirmationSummary(existingPendingLead, parsed)}`,
+      reply: `${renderLeadCorrectionPrefix(language)}${buildConfirmationSummary(existingPendingLead, parsed, language)}`,
       pendingLead: existingPendingLead,
     }
   }
@@ -250,6 +264,7 @@ export const handleLeadFlow = async ({
       message,
       parsed,
       hasNewLeadIntent,
+      language,
     })
   }
 
@@ -267,13 +282,14 @@ export const handleLeadFlow = async ({
         message,
         parsed,
         hasNewLeadIntent,
+        language,
       })
     }
 
     if (lastShownProperties.length > 1) {
       return {
         handled: true,
-        reply: buildPropertyDisambiguationQuestion(lastShownProperties),
+        reply: buildPropertyDisambiguationQuestion(lastShownProperties, language),
         pendingLead: {
           name: null, phone: null, email: null, preferredTime: null,
           propertyId: null, propertyTitle: null,
@@ -298,5 +314,6 @@ export const handleLeadFlow = async ({
     message,
     parsed,
     hasNewLeadIntent,
+    language,
   })
 }

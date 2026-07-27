@@ -14,7 +14,15 @@
 // clarification.
 
 import { findConceptForWord } from '../utils/lifestyleConcepts.js'
-import { defaultParsed, hasSoftDescriptionSearch } from './chatMessageParsing.js'
+import { defaultParsed, hasSoftDescriptionSearch, stripPerTurnFields } from './chatMessageParsing.js'
+import {
+  normalizeSlotStatus,
+  normalizeTurn,
+  setSlotStatus,
+  slotHasValue,
+  detectShadowSlotSignals,
+} from './chatSlotState.js'
+import { normalizePendingQuestion, resolvePendingAnswer } from './chatPendingQuestion.js'
 
 const hasValue = (value) => {
   if (value === null || value === undefined) return false
@@ -145,16 +153,16 @@ const hasFeatureContinuityPhrase = (message = '') => {
 }
 
 const mergeParsedWithContext = (currentFilters = {}, newParsed = {}) => {
+  // Phase 1 boundary: old state may only contribute DURABLE fields. Per-turn
+  // dialogue fields (nextQuestion, replyType, ...) are stripped here, before
+  // the spread, so they cannot leak in through the seed — removing them from
+  // fieldsToMerge alone would not be enough.
   const merged = {
     ...defaultParsed,
-    ...currentFilters,
+    ...stripPerTurnFields(currentFilters),
   }
 
   const fieldsToMerge = [
-    'intent',
-    'intentType',
-'replyType',
-'nextQuestion',
     'searchMode',
   'descriptionQuery',
     'listingType',
@@ -217,10 +225,35 @@ const mergeParsedWithContext = (currentFilters = {}, newParsed = {}) => {
       ? newParsed.requirements
       : merged.requirements || []
 
-  // Do not blindly trust Gemini clarification after we already have memory.
-  // We will decide missing info ourselves.
+  // ─── Per-turn dialogue fields (Phase 1 boundary) ──────────────────────
+  // Copied unconditionally from THIS turn's parse — old values were already
+  // stripped from the seed above, so a stale nextQuestion/replyType/
+  // noPreference is structurally unable to reappear, even when the current
+  // turn's value is null/false.
+  merged.intent = newParsed.intent ?? defaultParsed.intent
+  merged.intentType = newParsed.intentType ?? defaultParsed.intentType
+  merged.replyType = newParsed.replyType ?? defaultParsed.replyType
+  merged.nextQuestion = newParsed.nextQuestion ?? null
+  merged.noPreference = newParsed.noPreference === true
+  merged.changedMind = newParsed.changedMind === true
+  merged.uncertainPropertyType = newParsed.uncertainPropertyType === true
+  merged.excludedConcepts = Array.isArray(newParsed.excludedConcepts) ? newParsed.excludedConcepts : []
+
+  // Clarification flags stay backend-owned: do not blindly trust Gemini
+  // clarification after we already have memory — we decide missing info
+  // ourselves.
   merged.needsClarification = false
   merged.clarifyingQuestion = null
+
+  // ─── Slot-status normalization (Phase 2, shadow mode) ─────────────────
+  // Client-round-tripped slotStatus is sanitized here at the same durable-
+  // state boundary Phase 1 established: unknown slots/statuses/shapes are
+  // dropped, and value-wins runs against the POST-merge values so a value
+  // set by this very turn immediately deletes its now-stale status entry.
+  // The turn counter is normalized here but incremented only in
+  // resolveConversationState (exactly once per request).
+  merged.slotStatus = normalizeSlotStatus(currentFilters?.slotStatus, merged)
+  merged.turn = normalizeTurn(currentFilters?.turn)
 
   return merged
 }
@@ -248,6 +281,13 @@ const getConceptSourcePhrases = (parsed = {}) => {
 // when a NEW lifestyle concept appears alongside an OLD one already active in
 // memory. Without one of these, a new concept REPLACES the old one instead
 // of stacking on top of it (see isLifestyleConceptSwitch in the main route).
+// NOTE: a bare /\band\b/ was intentionally removed here. "and" is an ordinary
+// within-sentence conjunction ("a music studio and a soundproof room") far
+// more often than a cross-turn "combine with my previous search" signal, so
+// it caused hasLifestyleCombinePhrase to fire on new descriptive requests,
+// blocking the lifestyle-switch path and wrongly unioning stale criteria. The
+// remaining patterns are explicit additive references to a PRIOR request
+// ("also", "as well", "plus", "same requirements", "keep the same").
 const LIFESTYLE_COMBINE_PATTERNS = [
   /\balso\b/,
   /\bsame requirements\b/,
@@ -258,7 +298,6 @@ const LIFESTYLE_COMBINE_PATTERNS = [
   /\bkeep the same\b/,
   /\btoo\b/,
   /\bas well\b/,
-  /\band\b/,
 ]
 
 const hasLifestyleCombinePhrase = (message = '') => {
@@ -366,6 +405,13 @@ const dropConceptsFromPhrases = (phrases = [], conceptsToDrop) => {
 export const resolveConversationState = ({ message, currentFilters, parsedFromMessage }) => {
   // 4. Merge previous search memory with the latest message
   let parsed = mergeParsedWithContext(currentFilters, parsedFromMessage)
+
+  // Phase 2: increment the durable turn counter. This is the ONLY increment
+  // site, and resolveConversationState is chat.js's single conversation-
+  // state entry point (called once per POST /api/chat), so the counter can
+  // never advance twice in one request. The merge above only normalizes the
+  // old value; it never increments.
+  parsed.turn += 1
   // If Gemini clearly says this is a fresh description search,
   // do not allow old frontend filters like "Villa" to accidentally narrow it.
   if (
@@ -490,7 +536,7 @@ export const resolveConversationState = ({ message, currentFilters, parsedFromMe
     parsed.descriptionQuery = null
   } else if (shouldCombineLifestyle) {
     // An explicit combine phrase was used ("also", "same requirements",
-    // "both", "plus", "too", "and", ...) — union old + new rather than
+    // "both", "plus", "too", "as well", ...) — union old + new rather than
     // trusting either Gemini's array or the plain merge alone.
     const unionArrays = (a, b) => Array.from(new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]))
 
@@ -512,6 +558,38 @@ export const resolveConversationState = ({ message, currentFilters, parsedFromMe
     parsed.requirements = []
     parsed.descriptionQuery = null
   }
+
+  // ─── Pending-question resolution (Phase 3) ─────────────────────────────
+  // Runs after every value-resetting branch above has settled, so slot
+  // values are final when the interpreter checks them. The pending question
+  // (normalized + expired against the just-incremented turn) supplies the
+  // TARGET for vague answers — that anchoring is what makes defer/decline
+  // interpretation safe. Statuses are written only for valueless slots, so
+  // values, filters, and routing stay untouched (policy consumption is
+  // Phase 4). show-more / new-criteria flags are computed here and passed
+  // in, to keep chatPendingQuestion.js free of a service import cycle.
+  const pendingResolution = resolvePendingAnswer({
+    pendingQuestion: normalizePendingQuestion(currentFilters?.pendingQuestion, parsed.turn),
+    state: parsed,
+    message,
+    parsedFromMessage,
+    isShowMore: isShowMoreRequest(message),
+    newCriteriaCount: countNewStructuredCriteria(parsedFromMessage, currentFilters),
+  })
+
+  parsed = pendingResolution.state
+  parsed.pendingQuestion = pendingResolution.pendingQuestion
+
+  // ─── Shadow slot-status writes (Phase 2 — recorded, consumed by nothing)
+  // Only VALUELESS governed slots without an existing status entry may
+  // receive one: pending-targeted resolution above is authoritative and must
+  // not be overwritten by these broader shadow guesses. Shadow writes never
+  // touch criteria values, filters, or routing.
+  detectShadowSlotSignals(message, parsedFromMessage).forEach(({ slot, status }) => {
+    if (!slotHasValue(parsed, slot) && !parsed.slotStatus?.[slot]) {
+      parsed.slotStatus = setSlotStatus(parsed.slotStatus, slot, status, parsed.turn)
+    }
+  })
 
   return { parsed, newLifestyleConceptsInMessage }
 }

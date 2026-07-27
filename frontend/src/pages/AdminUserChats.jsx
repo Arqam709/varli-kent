@@ -375,8 +375,7 @@ const AdminUserChats = () => {
     setUsersLoading(true)
     setUsersError(false)
 
-    api
-      .get('/admin/chats/users', {
+    api.get('/admin/chats/users', {
         params: {
           page: userPage,
           limit: 20,
@@ -408,15 +407,14 @@ const AdminUserChats = () => {
     if (!canAccess) return
     loadUsers()
   }, [canAccess, loadUsers])
-
+//useCallback tells React : Keep the same function in memory until one of its dependencies changes.
   const loadConversationsForUser = useCallback(
     (userId) => {
       const requestId = ++conversationsRequestRef.current
       setConversationsLoading(true)
       setConversationsError(false)
 
-      api
-        .get('/admin/chats', {
+      api.get('/admin/chats', {
           params: {
             user: userId,
             page: conversationPage,
@@ -430,6 +428,21 @@ const AdminUserChats = () => {
           const newConversations = res.data.conversations || []
           setConversations(newConversations)
           setConversationsPagination(res.data.pagination || null)
+          /*
+          )
+
+This is the most complex part of the function.
+
+Its purpose is:
+
+If the previously selected conversation is not in the newly loaded list, clear the selection.
+
+This may happen when:
+
+The admin changes from Active to Archived.
+The admin changes page.
+The admin activates the Leads Only filter.
+The admin selects a different user. */
           setSelectedConversationId((prevId) =>
             prevId && !newConversations.some((c) => c._id === prevId) ? null : prevId
           )

@@ -4,6 +4,38 @@
 // side effects. Given the same input, always returns the same output. The
 // conversation state machine (pending/confirming/save) lives in
 // services/chatLeadFlow.js, which is the only place these are called from.
+//
+// Phase 3 (backend deterministic reply localization): the visitor-facing
+// question/summary builders below (buildMissingFieldsQuestion,
+// buildConfirmationSummary, buildPropertyDisambiguationQuestion) gained an
+// optional trailing `language = 'en'` parameter and now render through
+// services/chatReplyRenderer.js. buildInterestType() and buildLeadMessage()
+// are deliberately UNCHANGED and take no language parameter: their output is
+// not visitor-facing — buildInterestType()'s return value is persisted
+// directly to ContactSubmission.interestType (a canonical, staff-facing
+// value the admin panel filters on), and buildLeadMessage() builds the
+// internal staff notification body. Translating either would make the same
+// DB field hold different literal values depending on what language a lead
+// happened to arrive in, and would send staff notifications in whatever
+// language the visitor picked — neither is acceptable, so both stay fixed,
+// canonical English. The one place buildInterestType()'s value reaches a
+// visitor at all is the confirmation summary's "Interest:" line, which maps
+// it through a separate DISPLAY-ONLY label (chatMessages.js's
+// leadFlow.interestTypeDisplay) — the canonical value itself is never
+// touched.
+//
+// All detection/extraction functions (detectLeadIntent,
+// detectConfirmationIntent, detectCancellationIntent, extractEmail,
+// extractPhone, extractNameFromPhrase, extractBareName, extractPreferredTime,
+// resolveOrdinalIndex) are English-only raw-text pattern matching — this is
+// the dialogue-act layer, explicitly out of scope for Phase 3 (deferred to a
+// later multilingual-patterns phase) — left completely unchanged.
+
+import {
+  renderMissingFieldsQuestion,
+  renderConfirmationSummary,
+  renderPropertyDisambiguationQuestion,
+} from '../services/chatReplyRenderer.js'
 
 // ─── Intent detection ──────────────────────────────────────────────────────
 // Primary signal is Gemini's own intentType/replyType classification
@@ -168,16 +200,27 @@ export const isValidPhone = (phone) => {
   return digits.length >= 7 && digits.length <= 15
 }
 
+// Canonical field ids (name/phone/email) — not English words. Phase 3
+// changed this from returning ready-made English phrases ('phone number')
+// to returning ids, specifically so buildMissingFieldsQuestion can resolve
+// each id to a localized field name at render time instead of the display
+// word being baked into the detection result. This does not change WHICH
+// fields are detected as missing, in what order, or how many — only the
+// token identifying each one — so it does not touch the lead state machine.
 export const getMissingLeadFields = (pendingLead = {}) => {
   const missing = []
 
   if (!pendingLead.name) missing.push('name')
-  if (!pendingLead.phone || !isValidPhone(pendingLead.phone)) missing.push('phone number')
+  if (!pendingLead.phone || !isValidPhone(pendingLead.phone)) missing.push('phone')
   if (!pendingLead.email || !isValidEmail(pendingLead.email)) missing.push('email')
 
   return missing
 }
 
+// English-only legacy helper — no longer used internally (see
+// buildMissingFieldsQuestion below, which now goes through
+// chatReplyRenderer.js's joinList for all three languages), kept
+// exported/unchanged in case anything external still references it.
 export const joinFieldNames = (items) => {
   if (items.length === 0) return ''
   if (items.length === 1) return items[0]
@@ -190,20 +233,11 @@ export const joinFieldNames = (items) => {
 // also invite a preferred appointment time (optional, not gated on).
 // propertyTitle, when known, tailors the intro to "arrange an appointment
 // for this property" instead of the generic "have our team reach out".
-export const buildMissingFieldsQuestion = (missingFields, propertyTitle = null) => {
-  if (missingFields.length === 0) return null
-
-  const intro = propertyTitle
-    ? 'Sure, I can help arrange an appointment for this property.'
-    : 'Great, I can have our team reach out to you.'
-
-  if (missingFields.length === 1) {
-    return `${intro} Could you also share your ${missingFields[0]}?`
-  }
-
-  const fieldsWithTimeInvite = [...missingFields, 'preferred appointment time']
-  return `${intro} Please send your ${joinFieldNames(fieldsWithTimeInvite)} in one message.`
-}
+// `missingFields` are canonical ids from getMissingLeadFields (name/phone/
+// email) — `language` defaults to 'en', reproducing the exact pre-Phase-3
+// English wording when omitted.
+export const buildMissingFieldsQuestion = (missingFields, propertyTitle = null, language = 'en') =>
+  renderMissingFieldsQuestion(missingFields, propertyTitle, language)
 
 // ─── Property disambiguation ────────────────────────────────────────────────
 const ORDINAL_WORDS = ['first', 'second', 'third', 'fourth', 'fifth']
@@ -222,17 +256,11 @@ export const resolveOrdinalIndex = (message = '') => {
   return -1
 }
 
-const joinWithOr = (items) => {
-  if (items.length === 0) return ''
-  if (items.length === 1) return items[0]
-  if (items.length === 2) return `${items[0]} or ${items[1]}`
-  return `${items.slice(0, -1).join(', ')}, or ${items[items.length - 1]}`
-}
-
-export const buildPropertyDisambiguationQuestion = (candidateProperties = []) => {
-  const labels = candidateProperties.map((_, index) => ORDINAL_WORDS[index] || `#${index + 1}`)
-  return `Which property would you like to schedule the appointment for — the ${joinWithOr(labels)} one?`
-}
+// `language` defaults to 'en', reproducing the exact pre-Phase-3 English
+// wording (same ordinal words, same Oxford-comma-with-"or" join) when
+// omitted.
+export const buildPropertyDisambiguationQuestion = (candidateProperties = [], language = 'en') =>
+  renderPropertyDisambiguationQuestion(candidateProperties.length, language)
 
 // ─── ContactSubmission mapping ──────────────────────────────────────────────
 export const buildInterestType = (parsed = {}) => {
@@ -259,29 +287,13 @@ export const describeSearchContext = (parsed = {}) => {
   return parts.length > 0 ? parts.join(' ') : null
 }
 
-export const buildConfirmationSummary = (pendingLead, parsed) => {
-  const lines = [
-    'I have these details:',
-    `Name: ${pendingLead.name}`,
-    `Phone: ${pendingLead.phone}`,
-    `Email: ${pendingLead.email}`,
-    `Interest: ${buildInterestType(parsed)}`,
-  ]
-
-  if (pendingLead.propertyTitle) {
-    lines.push(`Property: ${pendingLead.propertyTitle}`)
-  } else {
-    const contextLine = describeSearchContext(parsed)
-    if (contextLine) lines.push(`Property/search: ${contextLine}`)
-  }
-
-  if (pendingLead.preferredTime) {
-    lines.push(`Preferred contact time: ${pendingLead.preferredTime}`)
-  }
-
-  lines.push('', 'Should I send this to our team?')
-
-  return lines.join('\n')
+// `language` defaults to 'en', reproducing the exact pre-Phase-3 English
+// summary when omitted. buildInterestType(parsed) itself is never touched —
+// only its DISPLAY on the "Interest:" line is localized (see the file
+// header note on why buildInterestType/buildLeadMessage stay canonical).
+export const buildConfirmationSummary = (pendingLead, parsed, language = 'en') => {
+  const searchContextText = pendingLead.propertyTitle ? null : describeSearchContext(parsed)
+  return renderConfirmationSummary(pendingLead, buildInterestType(parsed), searchContextText, language)
 }
 
 export const buildLeadMessage = ({ pendingLead, parsed, message }) => {

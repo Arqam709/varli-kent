@@ -17,15 +17,32 @@
 // original camelCase identifier routes/chat.js already compares against
 // (detectConceptsInText, phraseConceptNames, dropConceptsFromPhrases) and is
 // left untouched so this stays a purely additive change.
+// Phase 5 (multilingual deterministic fallback parsing) added the Turkish/
+// Arabic entries in each keyword list below — single whitespace-separated
+// tokens only (this matcher is word-by-word, see extractConceptIdsFromText),
+// not multi-word phrases. Purely additive: every pre-existing English/Turkish
+// keyword is untouched.
+//
+// Arabic also gets the common "ال" (definite article, "the") prefixed form
+// listed explicitly alongside the bare noun (e.g. both "مدرسة" and
+// "المدرسة") since the prefix is fused onto the word with no space —
+// normalizeWord only strips punctuation, not this grammatical prefix, so
+// "المدارس" would otherwise silently fail to match "مدارس". This is a small,
+// explicit alternate-spelling list, not general Arabic morphological
+// analysis. Turkish grammatical case suffixes (e.g. dative "okullara" =
+// "to schools", not the listed nominative "okullar") are NOT similarly
+// covered — that would require real stemming, out of scope for this
+// optional, deliberately minimal lifestyle-fallback signal; only the base
+// (nominative/plural) Turkish form is recognized.
 export const LIFESTYLE_CONCEPTS = [
-  { id: 'school', name: 'school', keywords: ['school', 'schools', 'educational', 'education', 'kindergarten', 'university', 'campus'] },
-  { id: 'sea_view', name: 'seaView', keywords: ['sea', 'seaside', 'view', 'deniz', 'manzara', 'waterfront', 'coast', 'coastal'] },
-  { id: 'metro_transport', name: 'metroTransport', keywords: ['metro', 'subway', 'transport', 'transportation', 'bus', 'station', 'marmaray'] },
-  { id: 'family', name: 'family', keywords: ['family', 'families', 'children', 'child', 'kids', 'childfriendly'] },
-  { id: 'peaceful_safe', name: 'peacefulSafe', keywords: ['peaceful', 'quiet', 'calm', 'secure', 'security', 'safe', 'safety'] },
-  { id: 'park_green', name: 'parkGreen', keywords: ['park', 'parks', 'green', 'garden', 'gardens'] },
-  { id: 'investment', name: 'investment', keywords: ['investment', 'yield', 'rentalincome', 'appreciation', 'roi'] },
-  { id: 'luxury', name: 'luxury', keywords: ['luxury', 'premium', 'highend', 'prestigious'] },
+  { id: 'school', name: 'school', keywords: ['school', 'schools', 'educational', 'education', 'kindergarten', 'university', 'campus', 'okul', 'okullar', 'eğitim', 'egitim', 'مدرسة', 'مدارس', 'المدرسة', 'المدارس'] },
+  { id: 'sea_view', name: 'seaView', keywords: ['sea', 'seaside', 'view', 'deniz', 'manzara', 'waterfront', 'coast', 'coastal', 'بحر', 'شاطئ', 'إطلالة', 'اطلالة', 'البحر', 'الشاطئ'] },
+  { id: 'metro_transport', name: 'metroTransport', keywords: ['metro', 'subway', 'transport', 'transportation', 'bus', 'station', 'marmaray', 'otobüs', 'otobus', 'durak', 'مترو', 'مواصلات', 'محطة', 'المترو', 'المحطة'] },
+  { id: 'family', name: 'family', keywords: ['family', 'families', 'children', 'child', 'kids', 'childfriendly', 'aile', 'çocuk', 'cocuk', 'çocuklar', 'cocuklar', 'عائلة', 'أطفال', 'اطفال', 'العائلة'] },
+  { id: 'peaceful_safe', name: 'peacefulSafe', keywords: ['peaceful', 'quiet', 'calm', 'secure', 'security', 'safe', 'safety', 'sakin', 'huzurlu', 'güvenli', 'guvenli', 'güvenlik', 'guvenlik', 'هادئ', 'آمن', 'امن', 'أمان', 'امان', 'الأمان'] },
+  { id: 'park_green', name: 'parkGreen', keywords: ['park', 'parks', 'green', 'garden', 'gardens', 'yeşil', 'yesil', 'bahçe', 'bahce', 'حديقة', 'خضراء', 'الحديقة'] },
+  { id: 'investment', name: 'investment', keywords: ['investment', 'yield', 'rentalincome', 'appreciation', 'roi', 'yatırım', 'yatirim', 'استثمار', 'الاستثمار'] },
+  { id: 'luxury', name: 'luxury', keywords: ['luxury', 'premium', 'highend', 'prestigious', 'lüks', 'luks', 'فاخر', 'فخم'] },
 ]
 
 // Simple singular/plural tolerance so "schools" still matches a concept
@@ -40,6 +57,40 @@ export const findConceptForWord = (word) => {
   return LIFESTYLE_CONCEPTS.find(
     (concept) => concept.keywords.includes(word) || concept.keywords.includes(singular)
   )
+}
+
+// The İ (U+0130, Turkish dotted capital I) fold must happen BEFORE
+// .toLowerCase() — JS's default locale-unaware lowercasing expands "İ" into
+// "i" + a stray combining-dot-above character instead of plain "i" (see the
+// same fix in locales/chatParsingVocabulary.js's normalizeForMatching).
+const normalizeWord = (word = '') => word.replace(/İ/g, 'i').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+
+// Canonical concept ids literally present in a piece of text — word-by-word,
+// exact-keyword-list match (via findConceptForWord/toSingular above). This
+// is the STRICT verification primitive: shared by chatPropertySearch.js
+// (search evidence: which requested soft criteria did the returned
+// properties actually confirm) and chatReplyBuilder.js (per-card match
+// labels), so both layers agree on what counts as "verified." It is
+// deliberately stricter than chatPropertySearch.js's own candidate-selection
+// relevance check (propertyMatchesSignificantTerm), which stays lenient
+// (substring-based, pooled across all requested terms) on purpose — broad
+// recall for what gets RETURNED is fine; this function is only used for
+// what gets CLAIMED as verified, and those are different jobs with
+// different correct strictness levels.
+export const extractConceptIdsFromText = (text = '') => {
+  const ids = new Set()
+
+  text
+    .replace(/İ/g, 'i')
+    .toLowerCase()
+    .split(/\s+/)
+    .map(normalizeWord)
+    .forEach((word) => {
+      const concept = findConceptForWord(word)
+      if (concept) ids.add(concept.id)
+    })
+
+  return Array.from(ids)
 }
 
 // ─── Canonical concept ID validation (Phase B) ─────────────────────────────

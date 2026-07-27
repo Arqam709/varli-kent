@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { C } from '../contexts/ThemeContext'
 import { useChat } from '../contexts/ChatContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useLanguage } from '../contexts/LanguageContext'
 
 const HistoryIcon = () => (
   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -10,8 +11,18 @@ const HistoryIcon = () => (
   </svg>
 )
 
-const BackIcon = () => (
-  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+// Directional: visually points "back" in LTR. Flipped horizontally when the
+// active language is RTL (Arabic) so it still reads as "back" rather than
+// "forward" — the one icon in this file that needs this; History/Plus/Close
+// are neutral glyphs and are deliberately left unflipped.
+const BackIcon = ({ flip = false }) => (
+  <svg
+    className="h-4 w-4"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+    style={flip ? { transform: 'scaleX(-1)' } : undefined}
+  >
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
   </svg>
 )
@@ -33,14 +44,28 @@ const EmptyHistoryIcon = () => (
   </svg>
 )
 
-// today: time ("7:15 PM") · yesterday: "Yesterday" · within 7 days: weekday
-// ("Monday") · older: compact date ("Jul 10"). Deterministic, local-time
-// based, no date library. Invalid/missing input returns ''.
-const formatConversationTime = (dateString) => {
+// Maps the app's selected language to a concrete Intl locale, so date/time
+// formatting follows the chosen website language rather than silently
+// deferring to the browser/OS locale (the previous `undefined`-locale
+// behavior).
+const LOCALE_MAP = { en: 'en-US', tr: 'tr-TR', ar: 'ar' }
+
+// Stable module-level fallback (never recreated per render) so `c` keeps a
+// stable identity across renders when translations.chatbot is ever missing —
+// avoids retriggering the pageConfig useMemo below on every render.
+const EMPTY_CHATBOT_TRANSLATIONS = {}
+
+// today: time ("7:15 PM") · yesterday: localized "Yesterday" · within 7 days:
+// weekday ("Monday") · older: compact date ("Jul 10"). Deterministic,
+// local-time based, no date library. Invalid/missing input returns ''.
+// `c` is the active chatbot translation object (t.chatbot || {}).
+const formatConversationTime = (dateString, language, c = {}) => {
   if (!dateString) return ''
 
   const date = new Date(dateString)
   if (Number.isNaN(date.getTime())) return ''
+
+  const locale = LOCALE_MAP[language] || LOCALE_MAP.en
 
   const now = new Date()
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -48,26 +73,41 @@ const formatConversationTime = (dateString) => {
   const dayDiff = Math.round((startOfToday - startOfDate) / (1000 * 60 * 60 * 24))
 
   if (dayDiff === 0) {
-    return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    return date.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
   }
   if (dayDiff === 1) {
-    return 'Yesterday'
+    return c.history?.yesterday || 'Yesterday'
   }
   if (dayDiff > 1 && dayDiff < 7) {
-    return date.toLocaleDateString(undefined, { weekday: 'long' })
+    return date.toLocaleDateString(locale, { weekday: 'long' })
   }
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
 }
 
-const formatMessageCount = (count) => {
+// Turkish drops the plural suffix after a numeral ("2 mesaj", not "2
+// mesajlar") and Arabic's history row stays a simple, professional-neutral
+// count rather than implementing full Arabic plural-category grammar (dual/
+// paucal/plural forms) — both are deliberate, not oversights: the catalogue
+// supplies messageSingular/messagePlural per language, and for tr/ar those
+// two values are intentionally identical.
+const formatMessageCount = (count, c = {}) => {
   const safeCount = Number.isFinite(count) ? count : 0
-  return `${safeCount} ${safeCount === 1 ? 'message' : 'messages'}`
+  const singular = c.history?.messageSingular || 'message'
+  const plural = c.history?.messagePlural || 'messages'
+  return `${safeCount} ${safeCount === 1 ? singular : plural}`
 }
 
 export default function AIChatbot() {
   const [input, setInput] = useState('')
   const location = useLocation()
   const { user, isLoggedIn } = useAuth()
+  const { language, t } = useLanguage()
+
+  // Frontend-owned chatbot strings only — backend reply text (msg.text,
+  // matchReason) is untouched in this phase and must keep rendering exactly
+  // as received.
+  const c = t.chatbot || EMPTY_CHATBOT_TRANSLATIONS
+  const isRTL = language === 'ar'
 
   const {
     open,
@@ -81,6 +121,7 @@ export default function AIChatbot() {
     openChat,
     closeChat,
     resetChat,
+    syncWelcomeLanguage,
     startNewConversation,
     getMessages,
     sendMessage,
@@ -106,67 +147,33 @@ export default function AIChatbot() {
       ? isLoggedIn()
       : Boolean(isLoggedIn || user)
 
+  // Property Details (/properties/:id) is deliberately NOT in this allow-list
+  // — the chatbot should not appear there (that page has its own contact
+  // form). pageKey itself still resolves to the literal path on that route
+  // (see the useMemo above) so the rest of the infrastructure (backend
+  // pageKey support, chatLeadFlow.js's resolvePropertyFromPage, the
+  // propertyDetail translation config) stays intact and this can be
+  // restored later by just re-adding the clause below.
   const chatbotAllowed =
     pageKey === 'properties' ||
     pageKey === 'sale' ||
-    pageKey === 'rent' ||
-    pageKey.startsWith('/properties/')
+    pageKey === 'rent'
 
   const pageConfig = useMemo(() => {
-    if (pageKey === 'sale') {
-      return {
-        welcome:
-          'Welcome to VarliKent. Tell me what kind of property you want to buy, including district, budget, bedrooms, and must-have features.',
-        quickQuestions: [
-          'Show me apartments for sale',
-          'I need a 3 bedroom apartment in Büyükçekmece',
-          'Show me villas for sale',
-          'I need a property under 8 million',
-        ],
-        placeholder: 'Ask about properties for sale...',
-      }
-    }
+    const pages = c.pages || {}
+    const fallback = { welcome: '', quickQuestions: [], placeholder: '' }
 
-    if (pageKey === 'rent') {
-      return {
-        welcome:
-          'Welcome to VarliKent. Tell me what kind of rental property you need, including district, bedrooms, budget, and must-have features.',
-        quickQuestions: [
-          'Show me apartments for rent',
-          'Show me rentals in Beylikdüzü',
-          'I need a furnished rental',
-          'I need a rental with parking',
-        ],
-        placeholder: 'Ask about rentals...',
-      }
-    }
+    if (pageKey === 'sale') return pages.sale || fallback
+    if (pageKey === 'rent') return pages.rent || fallback
+    if (pageKey.startsWith('/properties/')) return pages.propertyDetail || fallback
 
-    if (pageKey.startsWith('/properties/')) {
-      return {
-        welcome:
-          'Welcome to VarliKent. Ask me about this property, or tell me what similar property you are looking for.',
-        quickQuestions: [
-          'Show me similar properties',
-          'I am interested in this property',
-          'Show me properties in this district',
-          'Show me apartments for sale',
-        ],
-        placeholder: 'Ask about this property...',
-      }
-    }
-
-    return {
-      welcome:
-        'Welcome to VarliKent. Tell me your budget, district, and whether you want to buy or rent. I will help you find the right property.',
-      quickQuestions: [
-        'Show me properties for sale',
-        'Show me apartments in Büyükçekmece',
-        'Show me apartments for rent',
-        'I need a villa with pool',
-      ],
-      placeholder: 'Ask about properties...',
-    }
-  }, [pageKey])
+    return pages.default || fallback
+    // `c` changes identity whenever `language` changes (t = translations[language]),
+    // so depending on it here is what makes pageConfig re-derive in the new
+    // language — including a not-yet-started chat's welcome text (see the
+    // resetChat effect below), while an already-active conversation's past
+    // messages are untouched, since that effect only reseeds when empty.
+  }, [pageKey, c])
 
   const messages = getMessages(pageKey)
 
@@ -183,6 +190,17 @@ export default function AIChatbot() {
     pageConfig.welcome,
     messages.length,
   ])
+
+  // Keeps an untouched welcome message following the currently selected
+  // website language, for the ACTIVE page only — syncWelcomeLanguage itself
+  // is a no-op unless the page's bucket still contains exactly the single
+  // isWelcome message, so this never touches a real, already-started
+  // conversation, and never affects any other page's bucket.
+  useEffect(() => {
+    if (!userIsLoggedIn || !chatbotAllowed) return
+
+    syncWelcomeLanguage(pageKey, pageConfig.welcome)
+  }, [userIsLoggedIn, chatbotAllowed, pageKey, pageConfig.welcome])
 
   const handleSend = async (quickText) => {
     const text = quickText || input.trim()
@@ -238,6 +256,7 @@ export default function AIChatbot() {
       {!open && (
         <button
           onClick={openChat}
+          dir={isRTL ? 'rtl' : 'ltr'}
           className="fixed bottom-6 right-4 sm:right-6 z-[9998] flex items-center gap-3 rounded-full px-4 sm:px-5 py-3.5 text-xs font-semibold uppercase tracking-widest shadow-2xl transition-all duration-300 hover:-translate-y-1"
           style={{
             backgroundColor: C.green,
@@ -255,12 +274,13 @@ export default function AIChatbot() {
             ✦
           </span>
 
-          <span className="hidden sm:inline">Ask VarliKent</span>
+          <span className="hidden sm:inline">{c.toggleButton || 'Ask VarliKent'}</span>
         </button>
       )}
 
       {open && (
         <div
+          dir={isRTL ? 'rtl' : 'ltr'}
           className="fixed bottom-6 right-4 sm:right-6 z-[9998] flex h-[540px] w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl shadow-2xl"
           style={{
             backgroundColor: C.cardBg,
@@ -293,7 +313,7 @@ export default function AIChatbot() {
                       fontFamily: 'Cinzel, serif',
                     }}
                   >
-                    Conversations
+                    {c.header?.conversationsTitle || 'Conversations'}
                   </h3>
                 ) : (
                   <>
@@ -301,7 +321,7 @@ export default function AIChatbot() {
                       className="mb-1 text-[10px] font-semibold uppercase tracking-[0.35em]"
                       style={{ color: C.gold }}
                     >
-                      AI Advisor
+                      {c.header?.advisor || 'AI Advisor'}
                     </p>
 
                     <h3
@@ -311,11 +331,11 @@ export default function AIChatbot() {
                         fontFamily: 'Cinzel, serif',
                       }}
                     >
-                      VarliKent Assistant
+                      {c.header?.assistantName || 'VarliKent Assistant'}
                     </h3>
 
                     <p className="mt-1 text-xs" style={{ color: C.muted }}>
-                      Property Finder
+                      {c.header?.propertyFinder || 'Property Finder'}
                     </p>
                   </>
                 )}
@@ -332,7 +352,7 @@ export default function AIChatbot() {
                       border: `1px solid rgba(255,255,255,0.18)`,
                       outlineColor: C.gold,
                     }}
-                    aria-label="Conversation history"
+                    aria-label={c.aria?.openHistory || 'Conversation history'}
                   >
                     <HistoryIcon />
                   </button>
@@ -346,9 +366,9 @@ export default function AIChatbot() {
                       border: `1px solid rgba(255,255,255,0.18)`,
                       outlineColor: C.gold,
                     }}
-                    aria-label="Back to chat"
+                    aria-label={c.aria?.backToChat || 'Back to chat'}
                   >
-                    <BackIcon />
+                    <BackIcon flip={isRTL} />
                   </button>
                 )}
 
@@ -362,9 +382,9 @@ export default function AIChatbot() {
                       border: `1px solid rgba(255,255,255,0.18)`,
                       outlineColor: C.gold,
                     }}
-                    aria-label="Start a new conversation"
+                    aria-label={c.aria?.startNewConversation || 'Start a new conversation'}
                   >
-                    New
+                    {c.actions?.newChatShort || 'New'}
                   </button>
                 )}
 
@@ -377,7 +397,7 @@ export default function AIChatbot() {
                     border: `1px solid rgba(255,255,255,0.18)`,
                     outlineColor: C.gold,
                   }}
-                  aria-label="Close chat"
+                  aria-label={c.aria?.closeChat || 'Close chat'}
                 >
                   ✕
                 </button>
@@ -393,12 +413,12 @@ export default function AIChatbot() {
                 <button
                   type="button"
                   onClick={handleStartNewFromHistory}
-                  aria-label="Start a new conversation"
+                  aria-label={c.aria?.startNewConversation || 'Start a new conversation'}
                   className="flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-semibold uppercase tracking-widest outline-none transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
                   style={{ color: C.textLight, backgroundColor: C.deepGreen, outlineColor: C.gold }}
                 >
                   <PlusIcon />
-                  <span>New Chat</span>
+                  <span>{c.actions?.newChat || 'New Chat'}</span>
                 </button>
               </div>
 
@@ -406,23 +426,22 @@ export default function AIChatbot() {
               <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ backgroundColor: C.softWhite }}>
                 {conversationsLoading && (
                   <p className="px-4 py-8 text-center text-sm" style={{ color: C.muted }}>
-                    Loading conversations...
+                    {c.history?.loading || 'Loading conversations...'}
                   </p>
                 )}
 
                 {!conversationsLoading && conversationsError && (
                   <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
                     <p className="text-sm" style={{ color: C.muted }}>
-                      Couldn't load conversations.
+                      {c.history?.error || "Couldn't load conversations."}
                     </p>
                     <button
                       type="button"
                       onClick={loadConversations}
-                      aria-label="Retry loading conversations"
                       className="rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-widest outline-none transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2"
                       style={{ backgroundColor: C.deepGreen, color: C.textLight, outlineColor: C.gold }}
                     >
-                      Retry
+                      {c.actions?.retry || 'Retry'}
                     </button>
                   </div>
                 )}
@@ -433,10 +452,10 @@ export default function AIChatbot() {
                       <EmptyHistoryIcon />
                     </span>
                     <p className="text-sm font-semibold" style={{ color: C.textDark }}>
-                      No saved conversations yet
+                      {c.history?.empty || 'No saved conversations yet'}
                     </p>
                     <p className="text-xs" style={{ color: C.muted }}>
-                      Start chatting and your conversations will appear here.
+                      {c.history?.emptyDesc || 'Start chatting and your conversations will appear here.'}
                     </p>
                   </div>
                 )}
@@ -448,8 +467,8 @@ export default function AIChatbot() {
                       // TODO: once ChatConversation gains a real `title` field,
                       // prefer conversation.title here, falling back to
                       // lastMessage.text — do not fabricate one in the meantime.
-                      const mainText = conversation.lastMessage?.text?.trim() || 'Property conversation'
-                      const metaText = `${formatMessageCount(conversation.messageCount)} · ${formatConversationTime(conversation.lastActivityAt)}`
+                      const mainText = conversation.lastMessage?.text?.trim() || c.history?.fallbackTitle || 'Property conversation'
+                      const metaText = `${formatMessageCount(conversation.messageCount, c)} · ${formatConversationTime(conversation.lastActivityAt, language, c)}`
 
                       return (
                         <button
@@ -457,7 +476,7 @@ export default function AIChatbot() {
                           key={conversation._id}
                           onClick={() => handleSelectConversation(conversation)}
                           disabled={transcriptLoading}
-                          aria-label={`Open conversation: ${mainText}, ${metaText}${isActive ? ', current conversation' : ''}`}
+                          aria-label={`${c.aria?.openConversation || 'Open conversation'}: ${mainText}, ${metaText}${isActive ? (c.aria?.currentConversationSuffix || ', current conversation') : ''}`}
                           className="flex w-full items-start gap-2 px-4 py-3 text-left outline-none transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-[-2px] disabled:cursor-not-allowed disabled:opacity-50"
                           style={{
                             borderBottom: `1px solid ${C.border}`,
@@ -480,7 +499,7 @@ export default function AIChatbot() {
                                   className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
                                   style={{ backgroundColor: C.deepGreen, color: C.textLight }}
                                 >
-                                  Current
+                                  {c.history?.current || 'Current'}
                                 </span>
                               )}
                             </div>
@@ -497,13 +516,13 @@ export default function AIChatbot() {
 
                 {transcriptLoading && (
                   <p className="px-4 py-4 text-center text-sm" style={{ color: C.muted }}>
-                    Loading conversation...
+                    {c.transcript?.loading || 'Loading conversation...'}
                   </p>
                 )}
 
                 {transcriptError && (
                   <p className="px-4 py-4 text-center text-sm" style={{ color: '#b91c1c' }}>
-                    Couldn't load this conversation.
+                    {c.transcript?.error || "Couldn't load this conversation."}
                   </p>
                 )}
               </div>
@@ -531,7 +550,10 @@ export default function AIChatbot() {
                       border: isUser ? 'none' : `1px solid ${C.border}`,
                     }}
                   >
-                    <p className="whitespace-pre-line">{msg.text}</p>
+                    {/* dir="auto" only — content-based direction detection for
+                        mixed-language text. msg.text itself is untouched:
+                        backend replies stay exactly as received. */}
+                    <p className="whitespace-pre-line" dir="auto">{msg.text}</p>
 
                     {!isUser && msg.properties?.length > 0 && (
                       <div className="mt-3 space-y-3">
@@ -543,9 +565,9 @@ export default function AIChatbot() {
                           // both undefined and null while still allowing a
                           // genuine 0, e.g. a studio with 0 bedrooms).
                           const propertyDetailParts = [
-                            property.beds != null && `${property.beds} bedrooms`,
-                            property.baths != null && `${property.baths} bathrooms`,
-                            property.sqm != null && `${property.sqm} m²`,
+                            property.beds != null && `${property.beds} ${c.propertyCard?.bedrooms || 'bedrooms'}`,
+                            property.baths != null && `${property.baths} ${c.propertyCard?.bathrooms || 'bathrooms'}`,
+                            property.sqm != null && `${property.sqm} ${c.propertyCard?.sqm || 'm²'}`,
                           ].filter(Boolean)
 
                           return (
@@ -566,9 +588,15 @@ export default function AIChatbot() {
                             )}
 
                             <div className="p-3">
+                              {/* dir="auto" — property titles/descriptions are
+                                  not translated (database content, untouched
+                                  in this phase); this only lets the browser's
+                                  bidi algorithm read Latin/Turkish text
+                                  correctly when the surrounding panel is RTL. */}
                               <p
                                 className="text-xs font-semibold uppercase tracking-wide"
                                 style={{ color: C.textDark }}
+                                dir="auto"
                               >
                                 {property.title}
                               </p>
@@ -576,12 +604,13 @@ export default function AIChatbot() {
                               <p
                                 className="mt-1 text-[11px]"
                                 style={{ color: C.muted }}
+                                dir="auto"
                               >
-                                {property.district}, Istanbul ·{' '}
+                                {property.district}, {c.propertyCard?.istanbul || 'Istanbul'} ·{' '}
                                 {property.propertyType} ·{' '}
                                 {property.listingType === 'Rent'
-                                  ? 'For Rent'
-                                  : 'For Sale'}
+                                  ? c.propertyCard?.forRent || 'For Rent'
+                                  : c.propertyCard?.forSale || 'For Sale'}
                               </p>
 
                               {propertyDetailParts.length > 0 && (
@@ -604,6 +633,7 @@ export default function AIChatbot() {
                                 <p
                                   className="mt-2 text-[11px] italic leading-snug"
                                   style={{ color: C.muted }}
+                                  dir="auto"
                                 >
                                   {property.matchReason}
                                 </p>
@@ -618,7 +648,7 @@ export default function AIChatbot() {
                                   color: C.textLight,
                                 }}
                               >
-                                View Property
+                                {c.propertyCard?.viewProperty || 'View Property'}
                               </Link>
                             </div>
                           </div>
@@ -641,7 +671,7 @@ export default function AIChatbot() {
                     border: `1px solid ${C.border}`,
                   }}
                 >
-                  Thinking...
+                  {c.thinking || 'Thinking...'}
                 </div>
               </div>
             )}
@@ -655,7 +685,7 @@ export default function AIChatbot() {
               borderTop: `1px solid ${C.border}`,
             }}
           >
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex gap-2 overflow-x-auto pb-1" dir={isRTL ? 'rtl' : 'ltr'}>
               {pageConfig.quickQuestions.map((question) => (
                 <button
                   key={question}
@@ -676,7 +706,7 @@ export default function AIChatbot() {
 
           {/* Input */}
           <div
-            className="flex gap-2 p-4"
+            className={`flex gap-2 p-4 ${isRTL ? 'flex-row-reverse' : ''}`}
             style={{
               backgroundColor: C.cardBg,
               borderTop: `1px solid ${C.border}`,
@@ -690,6 +720,7 @@ export default function AIChatbot() {
               }}
               placeholder={pageConfig.placeholder}
               disabled={loading}
+              dir={isRTL ? 'rtl' : 'ltr'}
               className="min-w-0 flex-1 rounded-full px-4 py-3 text-sm outline-none disabled:opacity-60"
               style={{
                 backgroundColor: C.softWhite,
@@ -707,7 +738,7 @@ export default function AIChatbot() {
                 color: C.textLight,
               }}
             >
-              Send
+              {c.actions?.send || 'Send'}
             </button>
           </div>
             </>

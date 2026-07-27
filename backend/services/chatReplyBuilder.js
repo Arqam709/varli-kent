@@ -1,111 +1,234 @@
-import { findConceptForWord } from '../utils/lifestyleConcepts.js'
+// backend/services/chatReplyBuilder.js
+//
+// Phase 3 (backend deterministic reply localization): this file is now a
+// compatibility FACADE. Every export keeps its original name and signature
+// — routes/chat.js, chatDistrictScope.js, and every existing test import
+// this exact same set of names, unchanged. Each reply-producing export
+// gains one optional trailing `language = 'en'` parameter; every export
+// called with no `language` argument produces byte-identical English output
+// to before this phase (verified against the full existing
+// testChatReplyBuilder.js/testChatSearchEvidence.js suites).
+//
+// The actual decision logic (what counts as verified, which fallback level
+// applies, which slot to ask about) now lives in chatReplyPlan.js — pure,
+// language-independent. The actual per-language prose lives in
+// chatReplyRenderer.js and locales/chatMessages.js. This file's only job is
+// to keep the OLD call shape working while delegating to the new ones.
+//
+// shouldSkipGeminiAskQuestion, hasActiveSearchContext,
+// shouldContinuePropertyFlow, buildMissingInfoQuestion(WithSlots),
+// buildNextUsefulQuestion(WithSlots), pluralizePropertyType, and
+// describePropertyTypesPhrase carry no visitor-facing prose Phase 3 needs to
+// touch (the first three are routing booleans; the ask/next-question
+// question-text pair is superseded in production by chatPolicyEngine.js +
+// renderSlotQuestion, per the Phase 4 comment in routes/chat.js, but stays
+// exported/tested/English-only since nothing calls it for real replies
+// anymore) — left completely unchanged.
+
+import { findConceptForWord, extractConceptIdsFromText } from '../utils/lifestyleConcepts.js'
 import {
   hasSoftDescriptionSearch,
   hasKnownPropertyType,
   messageExpressesTypeUncertainty,
 } from './chatMessageParsing.js'
+import {
+  hasMultiplePropertyTypes,
+  evaluateSoftMatchForProperty,
+  buildSearchResultPlan,
+  buildMatchReasonPlan,
+  getRelaxedFeatureIds,
+} from './chatReplyPlan.js'
+import {
+  renderNonPropertyReply,
+  renderSlotQuestionText,
+  renderGenericSlotQuestion,
+  renderSlotFragment,
+  renderMultiSlotQuestion,
+  renderRefinementOfferText,
+  renderRefinementReofferText,
+  renderMixedListingNotice,
+  renderSearchResultPlan,
+  renderMatchReasonPlan,
+  featureLabel,
+  joinList,
+} from './chatReplyRenderer.js'
+import { CHAT_MESSAGES } from '../locales/chatMessages.js'
 
-export const shouldSkipGeminiAskQuestion = (parsed) => hasSoftDescriptionSearch(parsed)
+// Skip Gemini's own follow-up question when a soft description search should
+// run instead, or when the visitor just declined to narrow down — re-asking
+// for district/budget right after "no preference" is exactly the nagging this
+// prevents. Essential missing fields are still asked deterministically by
+// buildMissingInfoQuestion afterwards.
+export const shouldSkipGeminiAskQuestion = (parsed) =>
+  hasSoftDescriptionSearch(parsed) || parsed.noPreference === true
 
-export const buildNonPropertyReply = (parsed) => {
-  if (parsed.intentType === 'casual_chat' || parsed.replyType === 'casual_reply') {
-    return "I'm doing well, thank you. I'm here to help you find the right property. Are you looking to buy, rent, or just exploring?"
+const PROPERTY_FLOW_INTENTS = ['property_search', 'property_followup']
+
+// True when the merged conversation state already holds concrete search
+// criteria worth continuing with (structured fields or a pending
+// lifestyle/description search).
+export const hasActiveSearchContext = (parsed = {}) =>
+  Boolean(
+    parsed.listingType ||
+      parsed.propertyType ||
+      (Array.isArray(parsed.propertyTypes) && parsed.propertyTypes.length > 0) ||
+      parsed.district ||
+      (Array.isArray(parsed.districts) && parsed.districts.length > 0) ||
+      parsed.beds ||
+      parsed.baths ||
+      parsed.minPrice ||
+      parsed.maxPrice ||
+      parsed.minSqm ||
+      parsed.maxSqm ||
+      hasSoftDescriptionSearch(parsed)
+  )
+
+// Guard against Gemini's inconsistent "property intent + casual replyType"
+// combination (verified live: a mid-search "no i am just looking i didnt
+// decide anything yet" came back as intentType property_followup, replyType
+// casual_reply, noPreference true, with the full search context intact).
+// When Gemini itself says the visitor is still in a property flow AND either
+// flagged a no-preference answer or the merged state already has real
+// criteria, the turn must continue toward search — replyType alone must not
+// divert it into the context-blind canned casual reply. A genuine casual
+// message keeps intentType casual_chat and is unaffected.
+export const shouldContinuePropertyFlow = (parsed = {}) =>
+  PROPERTY_FLOW_INTENTS.includes(parsed.intentType) &&
+  (parsed.noPreference === true || hasActiveSearchContext(parsed))
+
+export const buildNonPropertyReply = (parsed, language = 'en') => {
+  if (
+    (parsed.intentType === 'casual_chat' || parsed.replyType === 'casual_reply') &&
+    !shouldContinuePropertyFlow(parsed)
+  ) {
+    return renderNonPropertyReply('casual', language)
   }
 
   if (parsed.intentType === 'emotional_message' || parsed.replyType === 'support_reply') {
-    return "I'm sorry to hear that. I hope your day gets better. I'm mainly here to help with property search, so whenever you're ready, tell me what kind of home you're looking for."
+    return renderNonPropertyReply('emotional', language)
   }
 
   if (parsed.intentType === 'contact_request' || parsed.replyType === 'contact_reply') {
-    return 'Sure. You can contact the VarliKent team through the contact form or WhatsApp details on the property page. If you tell me which property you are interested in, I can help you narrow it down.'
+    return renderNonPropertyReply('contact', language)
   }
 
   if (parsed.intentType === 'website_service_question' || parsed.replyType === 'service_reply') {
-    return 'VarliKent can help with real estate, architecture, construction, renovation, and interior design services. Which service would you like to know more about?'
+    return renderNonPropertyReply('service', language)
   }
 
   if (parsed.intentType === 'unknown' || parsed.replyType === 'unknown_reply') {
-    return 'I can help you search for properties by buy/rent, apartment/villa, district, budget, rooms, or lifestyle needs like sea view, family-friendly community, luxury, or investment. What are you looking for?'
+    return renderNonPropertyReply('unknown', language)
   }
 
   return null
 }
 
-export const buildMissingInfoQuestion = (parsed, message = '') => {
-  
+// Structured variant (Phase 3, pre-existing): the question-selection branch
+// itself declares which logical slot it is asking about, so pendingQuestion
+// creation never has to reverse-engineer slots from English text. Not
+// touched by Phase 3 (backend deterministic reply localization) — see file
+// header. Still English-only by design; nothing on the production reply
+// path calls it anymore.
+export const buildMissingInfoQuestionWithSlots = (parsed, message = '') => {
   if (hasSoftDescriptionSearch(parsed)) {
     return null
   }
 
   if (!parsed.listingType) {
-    return 'Are you looking to buy or rent?'
+    return { text: 'Are you looking to buy or rent?', slots: ['listingType'] }
   }
 
   if (!hasKnownPropertyType(parsed)) {
     if (messageExpressesTypeUncertainty(message)) {
-      return 'Would you prefer apartment, villa, office, or should I show residential properties?'
+      return {
+        text: 'Would you prefer apartment, villa, office, or should I show residential properties?',
+        slots: ['propertyType'],
+      }
     }
 
-    return 'What type of property are you looking for — apartment, villa, office, or something else?'
+    return {
+      text: 'What type of property are you looking for — apartment, villa, office, or something else?',
+      slots: ['propertyType'],
+    }
   }
 
   return null
 }
 
-// ─── Next useful question helper ──────────────────────────────────────────────
-// Exported (though chat.js never imports it — it's only used internally by
-// buildReply below) so it can be characterization-tested directly, in
-// isolation from buildReply's own surrounding wording.
-export const buildNextUsefulQuestion = (parsed = {}) => {
+export const buildMissingInfoQuestion = (parsed, message = '') =>
+  buildMissingInfoQuestionWithSlots(parsed, message)?.text ?? null
+
+// ─── Next useful question helper (pre-existing, English-only, see file
+// header — kept only so buildReply's back-compat "followUp omitted" path can
+// still ask WHICH SLOT to render, exactly as before) ────────────────────────
+export const buildNextUsefulQuestionWithSlots = (parsed = {}) => {
+  if (parsed.noPreference === true) {
+    return null
+  }
+
   if (!parsed.listingType) {
-    return 'Are you looking to buy or rent?'
+    return { text: 'Are you looking to buy or rent?', slots: ['listingType'] }
   }
 
   if (!hasKnownPropertyType(parsed)) {
-    return 'Do you prefer an apartment, villa, or another property type?'
+    return { text: 'Do you prefer an apartment, villa, or another property type?', slots: ['propertyType'] }
   }
 
   if (!parsed.district && (!parsed.districts || parsed.districts.length === 0)) {
-    return 'Do you have a preferred district?'
+    return { text: 'Do you have a preferred district?', slots: ['district'] }
   }
 
   if (!parsed.maxPrice && !parsed.minPrice) {
-    return 'Do you have a budget range in mind?'
+    return { text: 'Do you have a budget range in mind?', slots: ['budget'] }
   }
 
   return null
 }
 
-const SOFT_FEATURE_LABELS = [
-  ['furnished', 'furnished'],
-  ['balcony', 'a balcony'],
-  ['elevator', 'an elevator'],
-  ['pool', 'a pool'],
-  ['garden', 'a garden'],
-  ['parking', 'parking'],
-]
+export const buildNextUsefulQuestion = (parsed = {}) =>
+  buildNextUsefulQuestionWithSlots(parsed)?.text ?? null
 
-const joinWithAnd = (items) => {
-  if (items.length === 0) return ''
-  if (items.length === 1) return items[0]
-  if (items.length === 2) return `${items[0]} and ${items[1]}`
-  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`
+// ─── Phase 4 render helpers, now localized (Phase 3) ───────────────────────
+const GOVERNED_QUESTION_SLOTS = ['listingType', 'propertyType', 'district', 'budget']
+
+// Renders a blocking question for decideTurnAction's `{ type: 'ask', slots }`
+// result. Single known slot reuses the exact existing phrasing; multiple
+// slots compose a natural combined question via the per-language list-join
+// grammar in chatReplyRenderer.js.
+export const renderSlotQuestion = (slots = [], language = 'en') => {
+  const known = slots.filter((slot) => GOVERNED_QUESTION_SLOTS.includes(slot))
+
+  if (known.length === 0) return renderGenericSlotQuestion(language)
+  if (known.length === 1) return renderSlotQuestionText(known[0], language)
+
+  const fragments = known.map((slot) => renderSlotFragment(slot, language))
+  return renderMultiSlotQuestion(joinList(fragments, language, 'and'), language)
 }
 
-export const getRelaxedFeatureLabels = (parsed = {}, mustHaveFilter = {}) => {
-  return SOFT_FEATURE_LABELS.filter(
-    ([field]) => parsed[field] === true && !mustHaveFilter[field]
-  ).map(([, label]) => label)
+// Blocking-style phrasing for an EMPTY slot offered post-search vs. a
+// gentler phrasing for RE-offering a slot the visitor already deferred.
+export const renderRefinementOffer = (slot, { reOffer = false } = {}, language = 'en') => {
+  if (!slot) return null
+  return reOffer ? renderRefinementReofferText(slot, language) : renderRefinementOfferText(slot, language)
 }
+
+export const getRelaxedFeatureLabels = (parsed = {}, mustHaveFilter = {}, language = 'en') =>
+  getRelaxedFeatureIds(parsed, mustHaveFilter).map((id) => featureLabel(id, language))
 
 const PROPERTY_TYPE_PLURAL_OVERRIDES = { Duplex: 'Duplexes' }
 
+// English-only legacy helper — nothing on the production reply path calls
+// this anymore (the renderer has its own internal copy for byte-identical
+// English output), but it stays exported/unchanged since it is directly
+// tested and chatDistrictScope.js still imports it for its own (still
+// English-only pending Phase 3.5) internal use.
 export const pluralizePropertyType = (type) =>
   (PROPERTY_TYPE_PLURAL_OVERRIDES[type] || `${type}s`).toLowerCase()
 
-export const hasMultiplePropertyTypes = (parsed = {}) =>
-  Array.isArray(parsed.propertyTypes) && parsed.propertyTypes.length > 1
+export { hasMultiplePropertyTypes }
 
+// English-only legacy helper (see pluralizePropertyType note above) — kept
+// exported/unchanged for the same reason.
 export const describePropertyTypesPhrase = (parsed = {}) => {
   if (hasMultiplePropertyTypes(parsed)) {
     return parsed.propertyTypes.map(pluralizePropertyType).join(' and ')
@@ -114,297 +237,88 @@ export const describePropertyTypesPhrase = (parsed = {}) => {
   return parsed.propertyType ? parsed.propertyType.toLowerCase() : null
 }
 
-// ─── Build reply text ─────────────────────────────────────────────────────────
-export const buildReply = ({
-  properties,
-  fallbackLevel,
-  parsed,
-  matchedViaDescription = false,
-  matchedViaSemantic = false,
-  descriptionSearchAttempted = false,
-  relaxedFeatureLabels = [],
-}) => {
-  const count = properties.length
-  const nextQuestion = buildNextUsefulQuestion(parsed)
+// ─── buildReply ──────────────────────────────────────────────────────────────
+// Reverse map so the legacy call shape (`relaxedFeatureLabels: ['a pool', ...]`
+// — pre-existing English label strings, still used by
+// testChatReplyBuilder.js) keeps working: mapped back to feature ids, which
+// is what the language-independent plan actually carries. New production
+// callers (routes/chat.js) pass `relaxedFeatureIds` directly instead — see
+// getRelaxedFeatureIds, exported above.
+const EN_FEATURE_LABEL_TO_ID = Object.fromEntries(
+  Object.entries(CHAT_MESSAGES.en.featureLabel).map(([id, label]) => [label, id])
+)
 
-  if (count === 0) {
-    if (descriptionSearchAttempted) {
-      return nextQuestion
-        ? `I couldn't find a strong match from the property descriptions yet. ${nextQuestion}`
-        : "I couldn't find a strong match from the property descriptions yet. Try adding a district, budget, or property type."
-    }
+// Public entry point. `language` defaults to 'en' and, when omitted, every
+// existing caller/test gets byte-identical output to the pre-Phase-3
+// version of this function.
+//
+// Back-compat subtlety preserved exactly from before Phase 3: when the
+// caller does not pass a `followUp` key at all (every pre-Phase-4
+// test/caller), the next question is decided the OLD way — via
+// buildNextUsefulQuestionWithSlots(parsed) — not via the policy engine's
+// explicit decision. When `followUp` IS passed (routes/chat.js's real call
+// site), it is authoritative. This dual path predates Phase 3; only the
+// TEXT each path produces is now localized.
+export const buildReply = (args = {}) => {
+  const {
+    properties = [],
+    fallbackLevel = 0,
+    parsed = {},
+    matchedViaDescription = false,
+    matchedViaSemantic = false,
+    descriptionSearchAttempted = false,
+    relaxedFeatureLabels,
+    relaxedFeatureIds,
+    followUp,
+    mixedListingTypes,
+    language = 'en',
+  } = args
 
-    return "I couldn't find any available properties right now. Try adjusting your district, budget, or property type."
-  }
-  if (matchedViaDescription || matchedViaSemantic) {
-    const propertyText = count === 1 ? '1 property' : `${count} properties`
+  const followUpProvided = 'followUp' in args
 
-    let reply = matchedViaSemantic
-      ? `I found ${propertyText} that may match your request by meaning.`
-      : `I found ${propertyText} that may match your request based on the property descriptions.`
-
-    if (parsed.descriptionQuery) {
-      reply += ` I searched for details related to: ${parsed.descriptionQuery}.`
-    }
-
-    if (parsed.listingType) {
-      reply += ` I also filtered it for ${parsed.listingType.toLowerCase()} properties.`
-    }
-
-    const semanticPropertyTypesPhrase = describePropertyTypesPhrase(parsed)
-    if (semanticPropertyTypesPhrase) {
-      reply += hasMultiplePropertyTypes(parsed)
-        ? ` I also matched the property types: ${semanticPropertyTypesPhrase}.`
-        : ` I also matched the property type: ${semanticPropertyTypesPhrase}.`
-    }
-
-    if (nextQuestion) {
-      reply += ` ${nextQuestion}`
-    }
-
-    return reply
-  }
-
-
-  const propertyLabel = !hasMultiplePropertyTypes(parsed) && parsed.propertyType
-    ? parsed.propertyType.toLowerCase()
-    : 'property'
-
-  const n =
-    count === 1
-      ? `1 ${propertyLabel}`
-      : `${count} ${propertyLabel === 'property' ? 'properties' : `${propertyLabel}s`}`
-
-  const allDistricts = [
-    ...(parsed.district ? [parsed.district] : []),
-    ...(Array.isArray(parsed.districts) ? parsed.districts : []),
-  ]
-
-  const parts = []
-
-  const propertyTypesPhrase = describePropertyTypesPhrase(parsed)
-  if (propertyTypesPhrase) parts.push(propertyTypesPhrase)
-  if (parsed.listingType) parts.push(`for ${parsed.listingType.toLowerCase()}`)
-  if (parsed.maxPrice) parts.push(`up to ₺${Number(parsed.maxPrice).toLocaleString('tr-TR')}`)
-  if (allDistricts.length > 0) parts.push(`in ${allDistricts.join(' or ')}`)
-
-  const description = parts.length ? ` — ${parts.join(' ')}` : ''
-
-  const listingWord =
-    parsed.listingType === 'Rent' ? 'rentals' : parsed.listingType === 'Sale' ? 'properties for sale' : 'properties'
-
-  const descriptionMismatchNotice = descriptionSearchAttempted
-    ? `I couldn't find a strong match for ${
-        parsed.descriptionQuery ? `"${parsed.descriptionQuery}"` : 'that specific request'
-      }, so here ${count === 1 ? 'is' : 'are'} some general ${listingWord} instead.`
-    : ''
-
-
-  const relaxedFeaturesNotice =
-    fallbackLevel > 0 && relaxedFeatureLabels.length > 0
-      ? `I could not find ${listingWord} with ${joinWithAnd(relaxedFeatureLabels)}, so these are alternatives without all requested features.`
-      : ''
-
-  const leadNotice = descriptionMismatchNotice || relaxedFeaturesNotice
-
-  const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1)
-
-  const composeFallbackSentence = (base, defaultLead) => {
-    return leadNotice
-      ? `${leadNotice} ${capitalize(base)}`
-      : `${defaultLead}${base}`
-  }
-
-  if (fallbackLevel === 0) {
-    if (leadNotice) {
-      const sentence = composeFallbackSentence(`here ${count === 1 ? 'is' : 'are'} ${n}${description}`, '')
-      return nextQuestion ? `${sentence}. ${nextQuestion}` : `${sentence}.`
-    }
-
-    return nextQuestion
-      ? `I found ${n}${description}. ${nextQuestion}`
-      : `I found ${n}${description}.`
-  }
-
-  if (fallbackLevel === 1) {
-    const sentence = composeFallbackSentence(
-      `here ${count === 1 ? 'is' : 'are'} ${n} in the same area that may interest you`,
-      "I couldn't find an exact match with all details, but "
-    )
-
-    return nextQuestion ? `${sentence}. ${nextQuestion}` : `${sentence}.`
-  }
-
-  if (fallbackLevel === 2) {
-    const sentence = composeFallbackSentence(
-      `here ${count === 1 ? 'is' : 'are'} ${n} of that type from other areas`,
-      'Nothing matched in that district, but '
-    )
-
-    return nextQuestion ? `${sentence}. ${nextQuestion}` : `${sentence}.`
-  }
-
-  const sentence = composeFallbackSentence(
-    `here ${count === 1 ? 'is' : 'are'} ${n} to give you a starting point`,
-    "I couldn't find a close match, but "
-  )
-
-  return nextQuestion ? `${sentence}. ${nextQuestion}` : `${sentence}.`
-}
-
-const normalizeWord = (word = '') => word.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
-
-
-const getConceptSourcePhrases = (parsed = {}) => {
-  const taggedPhrases = [
-    ...(Array.isArray(parsed.lifestyle) ? parsed.lifestyle : []),
-    ...(Array.isArray(parsed.mustHave) ? parsed.mustHave : []),
-    ...(Array.isArray(parsed.niceToHave) ? parsed.niceToHave : []),
-    ...(Array.isArray(parsed.requirements) ? parsed.requirements : []),
-  ]
-
-  if (taggedPhrases.length > 0) return taggedPhrases
-
-  return parsed.descriptionQuery ? [parsed.descriptionQuery] : []
-}
-
-const extractConceptIds = (text = '') => {
-  const ids = new Set()
-
-  text
-    .toLowerCase()
-    .split(/\s+/)
-    .map(normalizeWord)
-    .forEach((word) => {
-      const concept = findConceptForWord(word)
-      if (concept) ids.add(concept.id)
-    })
-
-  return Array.from(ids)
-}
-
-const LIFESTYLE_CONCEPT_MATCH_LABELS = {
-  school: 'is near schools',
-  sea_view: 'has a sea view',
-  metro_transport: 'is close to metro and transport links',
-  family: 'is family-friendly',
-  peaceful_safe: 'is in a peaceful, safe area',
-  park_green: 'is near a park or green space',
-  investment: 'looks like a good investment opportunity',
-  luxury: 'has a luxury feel',
-}
-
-
-const getLifestyleMatchLabels = (property, parsed, matchedViaDescription, matchedViaSemantic) => {
-  if (!matchedViaDescription && !matchedViaSemantic) return []
-
-  const requestedConceptIds = extractConceptIds(getConceptSourcePhrases(parsed).join(' '))
-  if (requestedConceptIds.length === 0) return []
-
-  let confirmedConceptIds = requestedConceptIds
-
-  if (matchedViaDescription) {
-    const propertyText = [property.title, property.description, property.address, property.district]
-      .filter(Boolean)
-      .join(' ')
-    const presentConceptIds = extractConceptIds(propertyText)
-    confirmedConceptIds = requestedConceptIds.filter((id) => presentConceptIds.includes(id))
-  }
-
-  return confirmedConceptIds.map((id) => LIFESTYLE_CONCEPT_MATCH_LABELS[id]).filter(Boolean)
-}
-
-export const buildMatchReason = (property, parsed = {}, matchedViaDescription = false, matchedViaSemantic = false) => {
-  const requestedDistricts = [
-    ...(parsed.district ? [parsed.district] : []),
-    ...(Array.isArray(parsed.districts) ? parsed.districts : []),
-  ]
-
-  const propertyDistrict = String(property.district || '')
-  const districtMatches =
-    requestedDistricts.length > 0 &&
-    requestedDistricts.some((d) => propertyDistrict.toLowerCase().includes(String(d).toLowerCase()))
-
-  const listingTypeMatches = Boolean(parsed.listingType) && property.listingType === parsed.listingType
-  const propertyTypeMatches = Boolean(parsed.propertyType) && property.propertyType === parsed.propertyType
-  const propertyTypeInRequestedSet =
-    !propertyTypeMatches &&
-    Array.isArray(parsed.propertyTypes) &&
-    parsed.propertyTypes.length > 1 &&
-    parsed.propertyTypes.includes(property.propertyType)
-  const bedsMatches = Boolean(parsed.beds) && Number(property.beds) === Number(parsed.beds)
-  const bathsMatches = Boolean(parsed.baths) && Number(property.baths) === Number(parsed.baths)
-
-  const withinBudget =
-    (!parsed.minPrice || Number(property.price) >= Number(parsed.minPrice)) &&
-    (!parsed.maxPrice || Number(property.price) <= Number(parsed.maxPrice))
-  const budgetMatches = Boolean(parsed.minPrice || parsed.maxPrice) && withinBudget
-
-  const featureChecks = [
-    ['furnished', 'furnished'],
-    ['balcony', 'a balcony'],
-    ['elevator', 'an elevator'],
-    ['pool', 'a pool'],
-    ['garden', 'a garden'],
-  ]
-
-  const matchedFeatures = featureChecks
-    .filter(([field]) => parsed[field] === true && property[field])
-    .map(([, label]) => label)
-
-  if (
-    parsed.parking === true &&
-    property.parking &&
-    !['', 'no', 'none'].includes(String(property.parking).toLowerCase())
-  ) {
-    matchedFeatures.push('parking')
-  }
-
-  const article = /^[aeiou]/i.test(parsed.propertyType || '') ? 'an' : 'a'
-
-  const primaryParts = []
-  if (propertyTypeMatches) primaryParts.push(`${article} ${parsed.propertyType.toLowerCase()}`)
-  if (listingTypeMatches) primaryParts.push(`for ${parsed.listingType.toLowerCase()}`)
-  if (districtMatches) primaryParts.push(`in ${property.district}`)
-
-  const extraParts = []
-  if (propertyTypeInRequestedSet) extraParts.push('is one of the property types you mentioned')
-  if (bedsMatches) extraParts.push(`has your requested ${property.beds} bedrooms`)
-  if (bathsMatches) extraParts.push(`has your requested ${property.baths} bathrooms`)
-  if (budgetMatches) extraParts.push('fits your budget')
-  if (matchedFeatures.length > 0) extraParts.push(`has ${matchedFeatures.join(', ')}`)
-
-  const lifestyleLabels = getLifestyleMatchLabels(property, parsed, matchedViaDescription, matchedViaSemantic)
-
-  if (lifestyleLabels.length > 0) {
-    extraParts.push(...lifestyleLabels)
-  } else if (matchedViaSemantic) {
-    extraParts.push(
-      parsed.descriptionQuery
-        ? `matches the meaning of what you described ("${parsed.descriptionQuery}")`
-        : 'matches the lifestyle/meaning of what you described'
-    )
-  } else if (matchedViaDescription && parsed.descriptionQuery) {
-    extraParts.push(`matches what you described ("${parsed.descriptionQuery}")`)
-  }
-
-  const clauses = []
-  if (primaryParts.length > 0) clauses.push(`it is ${primaryParts.join(' ')}`)
-  clauses.push(...extraParts)
-
-  let reason
-  if (clauses.length === 0) {
-    reason = 'This is one of our available listings that may interest you.'
+  let nextQuestion
+  if (followUpProvided) {
+    const slot = followUp?.offerSlot ?? null
+    nextQuestion = renderRefinementOffer(slot, { reOffer: followUp?.reOffer }, language)
   } else {
-    const body = primaryParts.length > 0 ? clauses.join(', and ') : `it ${clauses.join(', and ')}`
-    reason = `This matches because ${body}.`
+    const slot = buildNextUsefulQuestionWithSlots(parsed)?.slots?.[0] ?? null
+    nextQuestion = slot ? renderRefinementOfferText(slot, language) : null
   }
 
-  if (requestedDistricts.length > 0 && !districtMatches) {
-    reason += ` It is from ${
-      property.district || 'another area'
-    } instead of ${requestedDistricts.join(' or ')}, since there was no exact match in your requested district.`
+  const effectiveRelaxedFeatureIds =
+    relaxedFeatureIds ||
+    (relaxedFeatureLabels || []).map((label) => EN_FEATURE_LABEL_TO_ID[label]).filter(Boolean)
+
+  const plan = buildSearchResultPlan({
+    properties,
+    fallbackLevel,
+    parsed,
+    matchedViaDescription,
+    matchedViaSemantic,
+    descriptionSearchAttempted,
+    relaxedFeatureIds: effectiveRelaxedFeatureIds,
+    followUp,
+    mixedListingTypes,
+  })
+
+  const text = renderSearchResultPlan(plan, nextQuestion, language)
+
+  if (properties.length > 0 && mixedListingTypes?.isMixed) {
+    return `${renderMixedListingNotice(language)} ${text}`
   }
 
-  return reason
+  return text
 }
+
+export { evaluateSoftMatchForProperty }
+
+export const buildMatchReason = (property, parsed = {}, matchedViaDescription = false, matchedViaSemantic = false, language = 'en') => {
+  const plan = buildMatchReasonPlan(property, parsed, matchedViaDescription, matchedViaSemantic)
+  return renderMatchReasonPlan(plan, language)
+}
+
+// Re-exported so any future caller wanting to inspect a concept id's presence
+// (unrelated to reply rendering) doesn't need a second import path — kept
+// for parity with the pre-Phase-3 module surface (both were already
+// available transitively via lifestyleConcepts.js imports elsewhere).
+export { findConceptForWord, extractConceptIdsFromText }

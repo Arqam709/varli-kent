@@ -16,8 +16,10 @@
 // know about Express/req/res.
 
 import Property from '../models/Property.js'
-import { findConceptForWord } from '../utils/lifestyleConcepts.js'
+import { extractConceptIdsFromText } from '../utils/lifestyleConcepts.js'
+import { buildEvidenceUnits, propertyVerifiesDescription, evaluateRequestEvidence } from './descriptionEvidence.js'
 import { hasSoftDescriptionSearch } from './chatMessageParsing.js'
+import { LISTING_TYPE_TERMS, PROPERTY_TYPE_TERMS } from '../locales/chatParsingVocabulary.js'
 import { buildHardFilterForDescriptionSearch } from './chatFilters.js'
 import {
   searchPropertiesByMeaning,
@@ -99,6 +101,20 @@ export const searchWithFallback = async (filter, mustHaveFilter = {}) => {
 // $text query only causes false-positive matches — e.g. every apartment
 // listing's title contains "Apartment", so a "near school" search would
 // otherwise match every apartment in the database, not just ones about schools.
+// Phase 5 (multilingual deterministic fallback parsing): rawQuery here can
+// fall back to the raw visitor message (see getDescriptionSearchQuery below)
+// when no descriptionQuery/lifestyle/mustHave/etc. tags were filled in —
+// which can be Turkish/Arabic text. Single-word vocabulary terms from the
+// same centralized listing/property-type maps keywordFallbackParser uses are
+// added here for the same reason: they're already enforced as hard field
+// filters elsewhere, so leaving them in free text only causes false-positive
+// $text matches. Multi-word terms (e.g. "for rent") are skipped — this set
+// is matched one whitespace-split token at a time.
+const MULTILINGUAL_STRUCTURED_WORDS = [
+  ...Object.values(LISTING_TYPE_TERMS).flat(),
+  ...Object.values(PROPERTY_TYPE_TERMS).flat(),
+].filter((term) => !term.includes(' '))
+
 const STRUCTURED_TERMS_TO_STRIP = new Set([
   'apartment', 'apartments', 'villa', 'villas', 'penthouse', 'penthouses',
   'duplex', 'duplexes', 'studio', 'studios', 'office', 'offices',
@@ -107,18 +123,7 @@ const STRUCTURED_TERMS_TO_STRIP = new Set([
   'house', 'houses', 'property', 'properties',
   'rent', 'rental', 'rentals', 'sale', 'sell', 'selling', 'buy', 'buying',
   'buys', 'purchase', 'kiralık', 'satılık',
-])
-
-// Common connector/filler words that are too generic to prove a listing is
-// actually relevant to what the visitor described, even though they aren't
-// structured field terms (e.g. "near" appears in both "near school" and
-// "near metro" listings — it doesn't tell them apart).
-const CONNECTOR_WORDS_TO_IGNORE = new Set([
-  'near', 'nearby', 'close', 'closer', 'to', 'for', 'with', 'and', 'or',
-  'a', 'an', 'the', 'of', 'is', 'are', 'that', 'this', 'some', 'good',
-  'any', 'have', 'has', 'does', 'do', 'want', 'need', 'looking', 'like',
-  'area', 'place', 'around', 'from', 'into', 'your', 'you', 'me', 'my',
-  'we', 'our', 'there', 'here', 'also', 'still', 'same', 'general',
+  ...MULTILINGUAL_STRUCTURED_WORDS,
 ])
 
 // normalizeWord/getConceptSourcePhrases also exist, byte-identical, in
@@ -131,7 +136,7 @@ const CONNECTOR_WORDS_TO_IGNORE = new Set([
 // the same established pattern) — these are small enough that an
 // independent copy here is preferable to inventing a new shared module a
 // stage early.
-const normalizeWord = (word = '') => word.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+const normalizeWord = (word = '') => word.replace(/İ/g, 'i').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
 
 // Exported for test-isolation, same reasoning as searchWithFallback above.
 export const stripStructuredTerms = (text = '') => {
@@ -144,10 +149,6 @@ export const stripStructuredTerms = (text = '') => {
 
   return cleaned
 }
-
-// Simple singular/plural tolerance so "schools" (from Gemini) still matches
-// a property whose description only says "school", and vice versa.
-const toSingular = (word) => (word.length > 4 && word.endsWith('s') ? word.slice(0, -1) : word)
 
 // Prefer Gemini's short, tagged lifestyle/requirement phrases — they stay
 // close to what the visitor actually said. Only fall back to the broader
@@ -166,45 +167,45 @@ const getConceptSourcePhrases = (parsed = {}) => {
   return parsed.descriptionQuery ? [parsed.descriptionQuery] : []
 }
 
-// Builds the pool of words a property's content must contain at least one of
-// to count as a genuine lifestyle match. Words that map to a known concept
-// expand to that concept's full synonym set (so "school" also matches
-// "educational"/"campus"/etc); words that don't map to any known concept
-// fall back to being checked literally, still excluding structured/connector
-// noise — so the system stays general for concepts not yet in the dictionary.
-export const getRelevanceCheckTerms = (parsed = {}) => {
-  const words = getConceptSourcePhrases(parsed)
-    .join(' ')
-    .split(/\s+/)
-    .map(normalizeWord)
-    .filter((word) => word.length >= 3 && !STRUCTURED_TERMS_TO_STRIP.has(word) && !CONNECTOR_WORDS_TO_IGNORE.has(word))
+// ─── Search-evidence contract ──────────────────────────────────────────────
+// Global, search-method-level facts about a completed search — what was
+// requested, what was actually confirmed across the RETURNED set, and
+// whether anything was relaxed. This concept-id aggregate (built on the
+// strict extractConceptIdsFromText primitive, shared with
+// chatReplyBuilder.js's per-card labels) reports, at the DICTIONARY-concept
+// level, which requested soft criteria the returned set confirms — a
+// complement to the per-property evidence-unit verification in
+// services/descriptionEvidence.js that now gates candidate selection above.
+export const evaluateSoftCriteriaEvidence = (properties = [], parsed = {}) => {
+  const requestedConceptIds = extractConceptIdsFromText(getConceptSourcePhrases(parsed).join(' '))
 
-  const terms = new Set()
+  if (requestedConceptIds.length === 0) {
+    return { requestedConceptIds: [], matchedSoftCriteria: [], unmatchedSoftCriteria: [], descriptionQueryVerified: true }
+  }
 
-  words.forEach((word) => {
-    const concept = findConceptForWord(word)
+  const presentAcrossResults = new Set()
 
-    if (concept) {
-      concept.keywords.forEach((keyword) => terms.add(keyword))
-    } else {
-      terms.add(word)
-    }
+  properties.forEach((property) => {
+    const propertyText = [property.title, property.description, property.address, property.district]
+      .filter(Boolean)
+      .join(' ')
+
+    extractConceptIdsFromText(propertyText).forEach((id) => presentAcrossResults.add(id))
   })
 
-  return Array.from(terms)
-}
+  const matchedSoftCriteria = requestedConceptIds.filter((id) => presentAcrossResults.has(id))
+  const unmatchedSoftCriteria = requestedConceptIds.filter((id) => !presentAcrossResults.has(id))
 
-export const propertyMatchesSignificantTerm = (property, terms = []) => {
-  // No meaningful vocabulary to check against (e.g. everything was a
-  // structured/connector word) — don't reject results we have no way to verify.
-  if (terms.length === 0) return true
-
-  const haystack = [property.title, property.description, property.address, property.district]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-
-  return terms.some((term) => haystack.includes(toSingular(term)))
+  return {
+    requestedConceptIds,
+    matchedSoftCriteria,
+    unmatchedSoftCriteria,
+    // "Verified" at the aggregate level means at least one requested soft
+    // criterion was confirmed present in at least one returned property —
+    // NOT that every property matches every criterion. Per-property/
+    // per-concept nuance for card wording lives in chatReplyBuilder.js.
+    descriptionQueryVerified: matchedSoftCriteria.length > 0,
+  }
 }
 
 export const getDescriptionSearchQuery = (parsed = {}, message = '') => {
@@ -258,14 +259,16 @@ export const searchByDescription = async ({ parsed, filter, message }) => {
       })
       .limit(10)
 
-    // $text can match purely on a generic word (e.g. "apartment" in the
-    // title), and Gemini's expanded descriptionQuery can pad in loosely
-    // related synonyms (e.g. "family friendly" for a plain "near school"
-    // request). Verify relevance using the concept(s) actually tagged by the
-    // visitor's request, not every word in the expanded search string.
-    const relevanceTerms = getRelevanceCheckTerms(parsed)
+    // $text retrieves candidates on OR-semantics (any query term), so a match
+    // can rest on a single generic word. Verify each candidate with the
+    // evidence-unit COVERAGE layer (services/descriptionEvidence.js): the
+    // requirement is decomposed into units and a candidate only counts as a
+    // verified description match when it covers a strict majority of them (or
+    // a unit-adjacency/phrase appears) — never on one overlapping token. Units
+    // are built once and reused across all candidates.
+    const evidenceUnits = buildEvidenceUnits(parsed)
     const strongMatches = rawMatches.filter((property) =>
-      propertyMatchesSignificantTerm(property, relevanceTerms)
+      propertyVerifiesDescription(property, evidenceUnits)
     )
 
     return {
@@ -370,6 +373,59 @@ export const runPropertySearch = async ({ parsed, filter, mustHaveFilter, messag
     fallbackLevel = fallbackResult.fallbackLevel
   }
 
+  // mode: which search method actually produced these results.
+  //   'exact'       — no soft criteria requested at all (plain structured search)
+  //   'semantic'    — meaning-based embedding search matched
+  //   'description' — $text/keyword search matched (and was relevance-verified)
+  //   'fallback'    — soft criteria were requested but neither semantic nor
+  //                   description search could verify anything; results are
+  //                   hard-criteria-only (this is the villa/school case —
+  //                   candidates returned, nothing soft confirmed)
+  const mode = !descriptionSearchAttempted
+    ? 'exact'
+    : matchedViaSemantic
+    ? 'semantic'
+    : matchedViaDescription
+    ? 'description'
+    : 'fallback'
+
+  // Soft-criteria evidence — normalized to { requestedSoftCriteria,
+  // matchedSoftCriteria, unmatchedSoftCriteria, descriptionQueryVerified }.
+  //
+  //   'description'/'fallback' — concept-id evidence (unchanged). These
+  //       candidates already passed evidence-unit coverage at RETRIEVAL, so
+  //       the concept-level "at least one confirmed" reporting stays valid.
+  //   'semantic'   — Change B: cosine retrieval gives NO coverage guarantee,
+  //       so compute honest phrase-level evidence from the returned text via
+  //       evaluateRequestEvidence. descriptionQueryVerified here means "every
+  //       requested criterion is confirmed" — embedding score is NOT treated
+  //       as confirmation. The candidates are NOT dropped for failing this;
+  //       they remain semantic results (see `properties` above, untouched).
+  //   'exact'      — no soft criteria requested; nothing to verify.
+  let softEvidence
+  if (mode === 'semantic') {
+    softEvidence = evaluateRequestEvidence(parsed, properties)
+  } else if (mode === 'description' || mode === 'fallback') {
+    const conceptEvidence = evaluateSoftCriteriaEvidence(properties, parsed)
+    softEvidence = {
+      requestedSoftCriteria: conceptEvidence.requestedConceptIds,
+      matchedSoftCriteria: conceptEvidence.matchedSoftCriteria,
+      unmatchedSoftCriteria: conceptEvidence.unmatchedSoftCriteria,
+      descriptionQueryVerified: conceptEvidence.descriptionQueryVerified,
+    }
+  } else {
+    softEvidence = { requestedSoftCriteria: [], matchedSoftCriteria: [], unmatchedSoftCriteria: [], descriptionQueryVerified: true }
+  }
+
+  // relaxed: true whenever the visitor's full request was not fully honored
+  // — a structured fallback level kicked in, OR soft criteria were
+  // requested but never verified. Semantic matches are never "relaxed" by
+  // this definition (each one individually cleared the similarity
+  // threshold); a description match is only relaxed if the aggregate check
+  // above found nothing (mode would be 'fallback' in that case anyway, but
+  // this stays explicit for callers that only inspect `relaxed`).
+  const relaxed = fallbackLevel > 0 || mode === 'fallback' || (mode === 'description' && !softEvidence.descriptionQueryVerified)
+
   return {
     properties,
     filter,
@@ -380,5 +436,14 @@ export const runPropertySearch = async ({ parsed, filter, mustHaveFilter, messag
     descriptionSearchUsed,
     descriptionSearchQuery,
     descriptionSearchError,
+    searchEvidence: {
+      mode,
+      relaxed,
+      softSearchAttempted: descriptionSearchAttempted,
+      requestedSoftCriteria: softEvidence.requestedSoftCriteria,
+      matchedSoftCriteria: softEvidence.matchedSoftCriteria,
+      unmatchedSoftCriteria: softEvidence.unmatchedSoftCriteria,
+      descriptionQueryVerified: softEvidence.descriptionQueryVerified,
+    },
   }
 }

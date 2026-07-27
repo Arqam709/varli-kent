@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useRef } from 'react'
 import api from '../lib/api'
+import { useLanguage } from './LanguageContext'
 
 const ChatContext = createContext(null)
 
@@ -90,6 +91,8 @@ const mapSavedMessage = (message) => {
 }
 
 export const ChatProvider = ({ children }) => {
+  const { language } = useLanguage()
+
   const [open, setOpen] = useState(false)
   const [chats, setChats] = useState({})
   const [filtersByPage, setFiltersByPage] = useState({})
@@ -128,6 +131,7 @@ export const ChatProvider = ({ children }) => {
         {
           role: 'assistant',
           text: welcomeMessage,
+          isWelcome: true,
         },
       ],
     }))
@@ -136,6 +140,39 @@ export const ChatProvider = ({ children }) => {
       ...prev,
       [key]: {},
     }))
+  }
+
+  // Keeps the welcome message following the currently selected website
+  // language. Deliberately narrow: only replaces the text of an untouched
+  // welcome message, and only for the one page bucket it's called with.
+  // Never touches filtersByPage, selectedConversationId, or
+  // conversationGenerationRef — a real conversation (anything beyond the
+  // single isWelcome message) is left completely alone.
+  const syncWelcomeLanguage = (pageKey, welcomeMessage) => {
+    const key = normalizePageKey(pageKey)
+
+    setChats((prev) => {
+      const current = prev[key] || []
+
+      if (current.length !== 1 || current[0]?.isWelcome !== true) {
+        return prev
+      }
+
+      if (current[0].text === welcomeMessage) {
+        return prev
+      }
+
+      return {
+        ...prev,
+        [key]: [
+          {
+            role: 'assistant',
+            text: welcomeMessage,
+            isWelcome: true,
+          },
+        ],
+      }
+    })
   }
 
   // Deliberate "New Chat" action — clears the local session and detaches it
@@ -262,6 +299,7 @@ export const ChatProvider = ({ children }) => {
         shownPropertyIds,
         lastShownProperties,
         conversationId: requestConversationId,
+        language,
       })
 
       const res = await api.post('/chat', {
@@ -272,6 +310,7 @@ export const ChatProvider = ({ children }) => {
         shownPropertyIds,
         lastShownProperties,
         conversationId: requestConversationId,
+        language,
       })
 
       if (conversationGenerationRef.current !== requestGeneration) {
@@ -347,6 +386,7 @@ export const ChatProvider = ({ children }) => {
         toggleChat,
         getMessages,
         resetChat,
+        syncWelcomeLanguage,
         startNewConversation,
         sendMessage,
         loadConversations,

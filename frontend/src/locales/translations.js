@@ -529,6 +529,100 @@ const translations = {
         password: 'Password', role: 'Role', creating: 'Creating...',
       },
     },
+    chatbot: {
+      toggleButton: 'Ask VarliKent',
+      header: {
+        advisor: 'AI Advisor',
+        assistantName: 'VarliKent Assistant',
+        propertyFinder: 'Property Finder',
+        conversationsTitle: 'Conversations',
+      },
+      aria: {
+        openHistory: 'Conversation history',
+        backToChat: 'Back to chat',
+        startNewConversation: 'Start a new conversation',
+        closeChat: 'Close chat',
+        currentConversationSuffix: ', current conversation',
+        openConversation: 'Open conversation',
+      },
+      actions: {
+        newChatShort: 'New',
+        newChat: 'New Chat',
+        send: 'Send',
+        retry: 'Retry',
+      },
+      history: {
+        loading: 'Loading conversations...',
+        error: "Couldn't load conversations.",
+        empty: 'No saved conversations yet',
+        emptyDesc: 'Start chatting and your conversations will appear here.',
+        fallbackTitle: 'Property conversation',
+        current: 'Current',
+        messageSingular: 'message',
+        messagePlural: 'messages',
+        yesterday: 'Yesterday',
+      },
+      transcript: {
+        loading: 'Loading conversation...',
+        error: "Couldn't load this conversation.",
+      },
+      thinking: 'Thinking...',
+      propertyCard: {
+        bedrooms: 'bedrooms',
+        bathrooms: 'bathrooms',
+        sqm: 'm²',
+        forRent: 'For Rent',
+        forSale: 'For Sale',
+        viewProperty: 'View Property',
+        istanbul: 'Istanbul',
+      },
+      pages: {
+        default: {
+          welcome:
+            'Welcome to VarliKent. Tell me your budget, district, and whether you want to buy or rent. I will help you find the right property.',
+          placeholder: 'Ask about properties...',
+          quickQuestions: [
+            'Find a family home near schools',
+            'Show apartments with a sea view',
+            'Find properties for rent',
+            'Show villas with a pool',
+          ],
+        },
+        sale: {
+          welcome:
+            'Welcome to VarliKent. Tell me what kind of property you want to buy, including district, budget, bedrooms, and must-have features.',
+          placeholder: 'Ask about properties for sale...',
+          quickQuestions: [
+            'Show me apartments for sale',
+            'I need a 3 bedroom apartment in Büyükçekmece',
+            'Show me villas for sale',
+            'I need a property under 8 million',
+          ],
+        },
+        rent: {
+          welcome:
+            'Welcome to VarliKent. Tell me what kind of rental property you need, including district, bedrooms, budget, and must-have features.',
+          placeholder: 'Ask about rentals...',
+          quickQuestions: [
+            'Show me apartments for rent',
+            'Show me rentals in Beylikdüzü',
+            'I need a furnished rental',
+            'I need a rental with parking',
+          ],
+        },
+        propertyDetail: {
+          welcome:
+            'Welcome to VarliKent. Ask me about this property, or tell me what similar property you are looking for.',
+          placeholder: 'Ask about this property...',
+          quickQuestions: [
+            'Show me similar properties',
+            'I am interested in this property',
+            'Show me properties in this district',
+            'Show me apartments for sale',
+          ],
+        },
+      },
+    },
   },
 
   tr: {
@@ -1080,6 +1174,100 @@ forgotPasswordPage: {
         active: 'Aktif', inactive: 'Pasif', deactivate: 'Devre Dışı Bırak', reactivate: 'Yeniden Etkinleştir',
         you: '(siz)', joined: 'Katıldı', fullName: 'Ad Soyad', email: 'E-posta',
         password: 'Şifre', role: 'Rol', creating: 'Oluşturuluyor...',
+      },
+    },
+    chatbot: {
+      toggleButton: "VarliKent'e Sor",
+      header: {
+        advisor: 'Yapay Zeka Danışmanı',
+        assistantName: 'VarliKent Asistanı',
+        propertyFinder: 'Mülk Bulucu',
+        conversationsTitle: 'Konuşmalar',
+      },
+      aria: {
+        openHistory: 'Konuşma geçmişi',
+        backToChat: 'Sohbete dön',
+        startNewConversation: 'Yeni bir konuşma başlat',
+        closeChat: 'Sohbeti kapat',
+        currentConversationSuffix: ', güncel konuşma',
+        openConversation: 'Konuşmayı aç',
+      },
+      actions: {
+        newChatShort: 'Yeni',
+        newChat: 'Yeni Sohbet',
+        send: 'Gönder',
+        retry: 'Tekrar Dene',
+      },
+      history: {
+        loading: 'Konuşmalar yükleniyor...',
+        error: 'Konuşmalar yüklenemedi.',
+        empty: 'Henüz kayıtlı konuşma yok',
+        emptyDesc: 'Sohbete başlayın, konuşmalarınız burada görünecek.',
+        fallbackTitle: 'Mülk görüşmesi',
+        current: 'Güncel',
+        messageSingular: 'mesaj',
+        messagePlural: 'mesaj',
+        yesterday: 'Dün',
+      },
+      transcript: {
+        loading: 'Konuşma yükleniyor...',
+        error: 'Bu konuşma yüklenemedi.',
+      },
+      thinking: 'Düşünüyor...',
+      propertyCard: {
+        bedrooms: 'yatak odası',
+        bathrooms: 'banyo',
+        sqm: 'm²',
+        forRent: 'Kiralık',
+        forSale: 'Satılık',
+        viewProperty: 'Mülkü Görüntüle',
+        istanbul: 'İstanbul',
+      },
+      pages: {
+        default: {
+          welcome:
+            "VarliKent'e hoş geldiniz. Bütçenizi, bölgenizi ve satın almak mı yoksa kiralamak mı istediğinizi söyleyin — size doğru mülkü bulmakta yardımcı olayım.",
+          placeholder: 'Mülkler hakkında soru sorun...',
+          quickQuestions: [
+            'Okullara yakın aile evi bul',
+            'Deniz manzaralı daireleri göster',
+            'Kiralık mülkleri bul',
+            'Havuzlu villaları göster',
+          ],
+        },
+        sale: {
+          welcome:
+            "VarliKent'e hoş geldiniz. Satın almak istediğiniz mülkün türünü, bölgeyi, bütçenizi, yatak odası sayısını ve olmazsa olmaz özellikleri belirtin.",
+          placeholder: 'Satılık mülkler hakkında soru sorun...',
+          quickQuestions: [
+            'Satılık daireleri göster',
+            "Büyükçekmece'de 3 odalı daire istiyorum",
+            'Satılık villaları göster',
+            '8 milyonun altında bir mülk istiyorum',
+          ],
+        },
+        rent: {
+          welcome:
+            "VarliKent'e hoş geldiniz. İhtiyacınız olan kiralık mülkün türünü, bölgeyi, yatak odası sayısını, bütçenizi ve olmazsa olmaz özellikleri belirtin.",
+          placeholder: 'Kiralık mülkler hakkında soru sorun...',
+          quickQuestions: [
+            'Kiralık daireleri göster',
+            "Beylikdüzü'nde kiralık mülkleri göster",
+            'Eşyalı bir kiralık istiyorum',
+            'Otoparklı bir kiralık istiyorum',
+          ],
+        },
+        propertyDetail: {
+          welcome:
+            "VarliKent'e hoş geldiniz. Bu mülk hakkında soru sorabilir ya da aradığınız benzer mülkü anlatabilirsiniz.",
+          placeholder: 'Bu mülk hakkında soru sorun...',
+          quickQuestions: [
+            'Benzer mülkleri göster',
+            'Bu mülkle ilgileniyorum',
+            'Bu bölgedeki mülkleri göster',
+            'Satılık daireleri göster',
+          ],
+        },
       },
     },
   },
@@ -1634,6 +1822,100 @@ forgotPasswordPage: {
         active: 'نشط', inactive: 'غير نشط', deactivate: 'تعطيل', reactivate: 'إعادة التفعيل',
         you: '(أنت)', joined: 'انضم', fullName: 'الاسم الكامل', email: 'البريد الإلكتروني',
         password: 'كلمة المرور', role: 'الدور', creating: 'جارٍ الإنشاء...',
+      },
+    },
+    chatbot: {
+      toggleButton: 'اسأل فارلي كنت',
+      header: {
+        advisor: 'مستشار الذكاء الاصطناعي',
+        assistantName: 'مساعد فارلي كنت',
+        propertyFinder: 'الباحث العقاري',
+        conversationsTitle: 'المحادثات',
+      },
+      aria: {
+        openHistory: 'سجل المحادثات',
+        backToChat: 'العودة إلى المحادثة',
+        startNewConversation: 'بدء محادثة جديدة',
+        closeChat: 'إغلاق المحادثة',
+        currentConversationSuffix: '، المحادثة الحالية',
+        openConversation: 'فتح المحادثة',
+      },
+      actions: {
+        newChatShort: 'جديد',
+        newChat: 'محادثة جديدة',
+        send: 'إرسال',
+        retry: 'إعادة المحاولة',
+      },
+      history: {
+        loading: 'جارٍ تحميل المحادثات...',
+        error: 'تعذّر تحميل المحادثات.',
+        empty: 'لا توجد محادثات محفوظة بعد',
+        emptyDesc: 'ابدأ الدردشة وستظهر محادثاتك هنا.',
+        fallbackTitle: 'محادثة عقارية',
+        current: 'الحالية',
+        messageSingular: 'رسالة',
+        messagePlural: 'رسالة',
+        yesterday: 'أمس',
+      },
+      transcript: {
+        loading: 'جارٍ تحميل المحادثة...',
+        error: 'تعذّر تحميل هذه المحادثة.',
+      },
+      thinking: 'جارٍ التفكير...',
+      propertyCard: {
+        bedrooms: 'غرف نوم',
+        bathrooms: 'حمامات',
+        sqm: 'م²',
+        forRent: 'للإيجار',
+        forSale: 'للبيع',
+        viewProperty: 'عرض العقار',
+        istanbul: 'إسطنبول',
+      },
+      pages: {
+        default: {
+          welcome:
+            'مرحباً بك في فارلي كنت. أخبرني بميزانيتك والمنطقة التي تفضلها، وما إذا كنت ترغب في الشراء أو الإيجار، وسأساعدك في إيجاد العقار المناسب.',
+          placeholder: 'اسأل عن العقارات...',
+          quickQuestions: [
+            'ابحث عن منزل عائلي قريب من المدارس',
+            'أرني شققاً بإطلالة بحرية',
+            'ابحث عن عقارات للإيجار',
+            'أرني فللاً بمسبح',
+          ],
+        },
+        sale: {
+          welcome:
+            'مرحباً بك في فارلي كنت. أخبرني بنوع العقار الذي ترغب في شرائه، بما في ذلك المنطقة والميزانية وعدد غرف النوم والمزايا الأساسية.',
+          placeholder: 'اسأل عن العقارات المعروضة للبيع...',
+          quickQuestions: [
+            'أرني شققاً للبيع',
+            'أريد شقة من 3 غرف نوم في بيوك تشكمجة',
+            'أرني فللاً للبيع',
+            'أريد عقاراً بأقل من 8 ملايين',
+          ],
+        },
+        rent: {
+          welcome:
+            'مرحباً بك في فارلي كنت. أخبرني بنوع العقار الذي تحتاجه للإيجار، بما في ذلك المنطقة وعدد غرف النوم والميزانية والمزايا الأساسية.',
+          placeholder: 'اسأل عن العقارات المعروضة للإيجار...',
+          quickQuestions: [
+            'أرني شققاً للإيجار',
+            'أرني عقارات للإيجار في بيليكدوزو',
+            'أريد إيجاراً مفروشاً',
+            'أريد إيجاراً بموقف سيارات',
+          ],
+        },
+        propertyDetail: {
+          welcome:
+            'مرحباً بك في فارلي كنت. اسألني عن هذا العقار، أو أخبرني عن عقار مشابه تبحث عنه.',
+          placeholder: 'اسأل عن هذا العقار...',
+          quickQuestions: [
+            'أرني عقارات مشابهة',
+            'أنا مهتم بهذا العقار',
+            'أرني عقارات في هذه المنطقة',
+            'أرني شققاً للبيع',
+          ],
+        },
       },
     },
   },
