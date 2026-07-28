@@ -2,6 +2,7 @@ import express from 'express'
 import Property from '../models/Property.js'
 import { protect } from '../middleware/auth.js'
 import { requireRole, requirePermission } from '../middleware/checkPermission.js'
+import { generatePropertyEmbedding, embeddingSourceFieldsChanged } from '../services/propertyEmbeddingService.js'
 
 const router = express.Router()
 
@@ -106,7 +107,18 @@ router.post(
   requirePermission('add_listing'),
   async (req, res, next) => {
     try {
-      const property = await Property.create(req.body)
+      let propertyData = req.body
+
+      try {
+        const embeddingResult = await generatePropertyEmbedding(req.body)
+        if (embeddingResult) {
+          propertyData = { ...req.body, ...embeddingResult }
+        }
+      } catch (embeddingErr) {
+        console.log('Property embedding generation failed (create):', embeddingErr.message)
+      }
+
+      const property = await Property.create(propertyData)
       res.status(201).json({ success: true, property })
     } catch (err) {
       next(err)
@@ -122,7 +134,32 @@ router.put(
   requirePermission('edit_listing'),
   async (req, res, next) => {
     try {
-      const property = await Property.findByIdAndUpdate(req.params.id, req.body, {
+      const existingProperty = await Property.findById(req.params.id)
+      if (!existingProperty) {
+        return res.status(404).json({ success: false, message: 'Property not found' })
+      }
+
+      let updateData = req.body
+
+      if (embeddingSourceFieldsChanged(existingProperty, req.body)) {
+        try {
+          const mergedForEmbedding = {
+            title: req.body.title ?? existingProperty.title,
+            description: req.body.description ?? existingProperty.description,
+            district: req.body.district ?? existingProperty.district,
+            address: req.body.address ?? existingProperty.address,
+          }
+
+          const embeddingResult = await generatePropertyEmbedding(mergedForEmbedding)
+          if (embeddingResult) {
+            updateData = { ...req.body, ...embeddingResult }
+          }
+        } catch (embeddingErr) {
+          console.log('Property embedding generation failed (update):', embeddingErr.message)
+        }
+      }
+
+      const property = await Property.findByIdAndUpdate(req.params.id, updateData, {
         new: true,
         runValidators: true,
       })

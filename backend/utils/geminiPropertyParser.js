@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai'
+import { sanitizeConcepts, CANONICAL_CONCEPT_IDS } from './lifestyleConcepts.js'
 
 const cleanJson = (text = '') => {
   return text
@@ -19,22 +20,25 @@ const formatHistory = (history = []) => {
     .join('\n')
 }
 
-export const parsePropertyMessageWithGemini = async (message, history = []) => {
-  const apiKey = process.env.GEMINI_API_KEY
+// Phase 4 (multilingual Gemini parsing): the visitor's selected website
+// language, used only as a weak interpretive hint (e.g. for a very short or
+// ambiguous message) — never as a constraint on what input language Gemini
+// must accept, and never as something that changes canonical output.
+const LANGUAGE_NAMES = { en: 'English', tr: 'Turkish', ar: 'Arabic' }
 
-  if (!apiKey) {
-    console.log('Gemini API key missing. Check backend .env file.')
-    return null
-  }
-
-  const ai = new GoogleGenAI({ apiKey })
-
+// Exported so it can be tested offline (structure, sections, examples,
+// schema completeness) without ever calling the live Gemini API — see
+// scripts/testGeminiMultilingualPrompt.js. Pure string-building, no network,
+// no side effects.
+export const buildPropertyParserPrompt = (message, history = [], language = 'en') => {
   const conversationBlock =
     history.length > 0
       ? `CONVERSATION SO FAR:\n${formatHistory(history)}\n\nLATEST VISITOR MESSAGE:\n"${message}"`
       : `VISITOR MESSAGE:\n"${message}"`
 
-  const prompt = `
+  const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.en
+
+  return `
 You are a smart real estate assistant parser for a luxury Istanbul real estate website called VarliKent.
 
 Your job:
@@ -44,6 +48,17 @@ Read the full conversation and return ONE merged JSON object that tells the back
 3. Which property filters or lifestyle needs the visitor has mentioned.
 
 Return ONLY valid JSON. No markdown. No explanation.
+
+LANGUAGE SUPPORT:
+- The visitor may write in English, Turkish, or Arabic — in any single message, and may switch language between turns of the same conversation. Treat all three as fully normal, expected input, not a special case.
+- Understand common spelling variants (with or without Turkish diacritics, e.g. "Beylikduzu" and "Beylikdüzü"), informal/colloquial phrasing, and everyday real-estate wording in each language, not just textbook grammar.
+- A single message may mix languages (e.g. an English sentence with a Turkish district name, or a Turkish sentence with an English property word). Parse the MEANING regardless of which language(s) are used.
+- The visitor's website is currently set to ${languageName}. Use this only as a weak hint when a message is very short or genuinely ambiguous — you must still correctly parse a message written in a different language than this setting.
+- CANONICAL OUTPUT DISCIPLINE — this is critical: regardless of what language the visitor writes in, every enum-style field (intentType, replyType, searchMode, listingType, propertyType, propertyTypes, lifestyleConcepts) must ALWAYS be returned using the exact canonical English values listed later in this prompt. Never translate an enum value into Turkish or Arabic (e.g. never return listingType "Kiralık" or "إيجار" — always "Rent"). Language only affects how you INTERPRET the visitor's words, never what you WRITE as a field value.
+- Preserve district names in their canonical Latin/Turkish database-compatible spelling (e.g. "Beylikdüzü", "Kadıköy") even when the visitor typed an Arabic-script transliteration of the district name — see DISTRICT NAMES below.
+- Distinguish the LANGUAGE a message is written in from its MEANING — a message can express strong emotion, be brief, or be informal in any of the three languages and still carry a clear property-search meaning; do not classify a message as "unknown" merely because it is short, emotional, or informal.
+- Emotional content mentioned ALONGSIDE a property need (e.g. explaining why the visitor wants a safe area) is CONTEXT for that property need, not a separate emotional_message intent — only classify as emotional_message when the message is purely personal/emotional with no property-search meaning at all.
+- Continue using the full conversation history exactly as already instructed below, even when different turns are written in different languages — treat the whole conversation as one continuous request regardless of language switches between turns.
 
 IMPORTANT:
 The website has two sources of property information:
@@ -63,7 +78,7 @@ Available intentType:
 - "property_followup": visitor continues a previous property search, like "show me more", "what about Esenyurt", "same but cheaper".
 - "casual_chat": visitor says hello, asks how you are, thanks you, or makes small talk.
 - "emotional_message": visitor shares feelings or a personal emotional message, like "my day was bad".
-- "contact_request": visitor wants to speak to an agent, call, WhatsApp, schedule a visit, ask for contact, or book a viewing.
+- "contact_request": visitor wants to speak to an agent, be called or contacted, or make/arrange/book/schedule an appointment, viewing, visit, or tour — including phrased as a question like "can you make an appointment for me", "can I visit it", "can I see it", or "is this still available".
 - "website_service_question": visitor asks about VarliKent services like architecture, renovation, construction, interior design, or general website/service information.
 - "unknown": message is unclear or unrelated.
 
@@ -86,6 +101,7 @@ MESSAGE TYPE RULES:
 - If casual chat, do not invent property filters.
 - If emotional message, do not act like a doctor or therapist. Be kind and guide back gently.
 - If contact request, do not search properties unless property criteria are also clearly present.
+- Even if the visitor was just discussing property search, a message asking to make/arrange/book/schedule an appointment, viewing, visit, or tour, or asking to be called/contacted, is "contact_request" — NOT "property_followup" — regardless of the previous conversation topic.
 
 SEARCH MODE RULES:
 - Use searchMode: "field" when the visitor gives clear database fields such as buy, rent, villa, apartment, district, budget, bedrooms, bathrooms, pool, garden, parking.
@@ -113,13 +129,45 @@ Available propertyType: "Apartment", "Villa", "Penthouse", "Duplex", "Studio", "
 Available searchMode: "field", "description", "hybrid"
 Boolean features: furnished, balcony, elevator, pool, garden, parking
 
+VOCABULARY EQUIVALENTS (map these words to the canonical field/enum value on the left — the OUTPUT must always be the canonical value, never the Turkish/Arabic word itself):
+- listingType "Rent": kiralık, kiralik (Turkish) — للإيجار (Arabic)
+- listingType "Sale": satılık, satilik (Turkish) — للبيع (Arabic)
+- propertyType "Apartment": daire (Turkish) — شقة (Arabic)
+- propertyType "Villa": villa, müstakil ev (Turkish, when context supports a house rather than an apartment) — فيلا (Arabic)
+- propertyType "Office": ofis (Turkish) — مكتب (Arabic)
+- propertyType "Land": arsa (Turkish) — أرض (Arabic)
+- propertyType "Shop": dükkan, dukkan (Turkish) — محل (Arabic)
+- propertyType "Warehouse": depo (Turkish) — مستودع (Arabic)
+- furnished: eşyalı (Turkish) — مفروش (Arabic)
+- balcony: balkon (Turkish) — شرفة (Arabic)
+- elevator: asansör (Turkish) — مصعد (Arabic)
+- pool: havuz (Turkish) — مسبح (Arabic)
+- garden: bahçe (Turkish) — حديقة (Arabic)
+- parking: otopark (Turkish) — موقف سيارات (Arabic)
+These are common equivalents to recognize, not an exhaustive list — use your general understanding of Turkish and Arabic for anything not listed here.
+
+DISTRICT NAMES: always output the canonical Latin/Turkish database spelling of a district (e.g. "Beylikdüzü", "Kadıköy", "Beşiktaş", "Esenyurt", "Sarıyer"), even when the visitor typed an Arabic-script transliteration. Examples: بيليك دوزو => Beylikdüzü, كاديكوي => Kadıköy, بشكتاش => Beşiktaş, اسنيورت => Esenyurt, ساريير => Sarıyer. This is not an exhaustive district list — apply the same transliteration logic to other Istanbul districts using your own language understanding. Do not translate or transliterate a district name back into Turkish/Arabic script in your OUTPUT — the output value is always the canonical Latin spelling.
+
+Available lifestyleConcepts ids — this is a CLOSED vocabulary. Use ONLY these exact ids, never invent new ones, never use synonyms as ids: ${CANONICAL_CONCEPT_IDS.join(', ')}
+
+STRUCTURED MEANING FIELDS (in addition to lifestyle/descriptionQuery, not instead of them — always fill both when relevant):
+- lifestyleConcepts: array of canonical concept ids (from the closed vocabulary above) that the visitor is currently asking for. Map paraphrases to the closest matching id(s). Example: "near schools for my children" => ["school", "family"]. Leave [] if no lifestyle concept applies.
+- excludedConcepts: array of canonical concept ids the visitor explicitly no longer wants. Example: "sea view is not important anymore" => excludedConcepts: ["sea_view"]. Leave [] normally.
+- changedMind: true only when the visitor is explicitly replacing an earlier stated preference with a new one in the same message (e.g. "actually I don't care about X anymore, I want Y instead"). Otherwise false.
+- noPreference: true only when the visitor explicitly says they have no preference on some criteria (e.g. "no preference", "any area is fine", "show me what you have"). Otherwise false.
+- propertyTypes: array of ALL property types explicitly mentioned when the visitor names more than one (e.g. "apartment or villa" => ["Apartment", "Villa"]). Leave [] when only one or zero types are mentioned.
+- uncertainPropertyType: true only when the visitor explicitly expresses uncertainty between two or more property types (e.g. "not sure apartment or villa", "either is fine"). When true, also set propertyType to null and still fill propertyTypes with the mentioned options.
+
 Parsing rules:
 - buy / buying / purchase / satılık => listingType "Sale"
 - rent / rental / monthly / kiralık => listingType "Rent"
-- "under 8 million" / "max 8M" / "8 milyon" => maxPrice 8000000
+- "under 8 million" / "max 8M" / "8 milyon" / أقل من 8 مليون => maxPrice 8000000
 - A plain number like "15000" in a rental context => maxPrice 15000
-- A plain number like "5000000" or "5 million" => maxPrice 5000000
-- "3 bedroom" / "3+1" / "3 oda" => beds 3
+- A plain number like "5000000" or "5 million" / "5 milyon" / خمسة ملايين => maxPrice 5000000
+- Turkish "bin" and Arabic "ألف" both mean thousand: "20 bin" / "20 ألف" => 20000
+- Turkish decimal comma is a decimal point, not a thousands separator: "3,5 milyonun altında" => maxPrice 3500000 (i.e. under 3.5 million)
+- Arabic number words (واحد، اثنان، ثلاثة، أربعة، خمسة، ستة، سبعة، ثمانية، تسعة، عشرة) and Turkish number words (bir, iki, üç, dört, beş, altı, yedi, sekiz, dokuz, on) should be understood the same as digits when used for price/room counts
+- "3 bedroom" / "3+1" / "3 oda" / شقة بثلاث غرف نوم / غرفتين نوم => beds 3 (interpret "X+1" as X bedrooms; interpret an Arabic/Turkish room-count phrase as the stated number of bedrooms)
 - Multiple districts => put in "districts" array, set "district" to null
 - Single district => put in "district", leave "districts" as []
 - lifestyle phrases should go into "lifestyle"
@@ -140,6 +188,8 @@ Return JSON in this exact shape:
   "nextQuestion": null,
   "listingType": null,
   "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": null,
   "districts": [],
   "beds": null,
@@ -157,6 +207,10 @@ Return JSON in this exact shape:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -175,6 +229,8 @@ Correct JSON:
   "nextQuestion": "Are you looking to buy or rent?",
   "listingType": null,
   "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": null,
   "districts": [],
   "beds": null,
@@ -192,6 +248,10 @@ Correct JSON:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -210,6 +270,8 @@ Correct JSON:
   "nextQuestion": null,
   "listingType": null,
   "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": null,
   "districts": [],
   "beds": null,
@@ -227,6 +289,10 @@ Correct JSON:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": ["safe for children", "safe community", "family-friendly"],
+  "lifestyleConcepts": ["family", "peaceful_safe"],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -245,6 +311,8 @@ Correct JSON:
   "nextQuestion": null,
   "listingType": "Sale",
   "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": null,
   "districts": [],
   "beds": null,
@@ -262,6 +330,10 @@ Correct JSON:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": ["safe for children", "rich community", "family-friendly"],
+  "lifestyleConcepts": ["family", "peaceful_safe"],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -280,6 +352,8 @@ Correct JSON:
   "nextQuestion": null,
   "listingType": null,
   "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": null,
   "districts": [],
   "beds": null,
@@ -297,6 +371,10 @@ Correct JSON:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -315,6 +393,8 @@ Correct JSON:
   "nextQuestion": null,
   "listingType": null,
   "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": null,
   "districts": [],
   "beds": null,
@@ -332,6 +412,10 @@ Correct JSON:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -357,6 +441,8 @@ Correct JSON:
   "nextQuestion": null,
   "listingType": "Rent",
   "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
   "district": "Esenyurt",
   "districts": [],
   "beds": null,
@@ -374,6 +460,479 @@ Correct JSON:
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Memory example (contact/appointment request after a property search):
+Conversation:
+Visitor: Show me properties for sale
+Assistant: What type of property are you interested in?
+Visitor: apartment
+Assistant: Do you have a preferred district or budget?
+Visitor: beylikdüzü
+Assistant: I found 1 apartment for sale in Beylikdüzü.
+Visitor: can you make an appointment for me
+
+Correct JSON:
+{
+  "intent": "contact_request",
+  "intentType": "contact_request",
+  "replyType": "contact_reply",
+  "searchMode": "field",
+  "descriptionQuery": null,
+  "nextQuestion": null,
+  "listingType": "Sale",
+  "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": "Beylikdüzü",
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 6 (lifestyle concept extraction):
+Visitor: near schools for my children
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_search",
+  "replyType": "search",
+  "searchMode": "description",
+  "descriptionQuery": "family friendly home near schools for children",
+  "nextQuestion": null,
+  "listingType": null,
+  "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": null,
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": ["near schools", "family-friendly"],
+  "lifestyleConcepts": ["school", "family"],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 7 (concept exclusion + changed mind):
+Visitor: sea view is not important anymore, schools are more important
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_followup",
+  "replyType": "search",
+  "searchMode": "description",
+  "descriptionQuery": "home near schools",
+  "nextQuestion": null,
+  "listingType": null,
+  "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": null,
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": ["near schools"],
+  "lifestyleConcepts": ["school"],
+  "excludedConcepts": ["sea_view"],
+  "changedMind": true,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 8 (no preference):
+Conversation:
+Visitor: I need an apartment
+Assistant: Are you looking to buy or rent?
+Visitor: rent and my budget is 15000
+Assistant: Do you have a preferred district?
+Visitor: no preference, show me what you have
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_followup",
+  "replyType": "search",
+  "searchMode": "field",
+  "descriptionQuery": null,
+  "nextQuestion": null,
+  "listingType": "Rent",
+  "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": null,
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": 15000,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": true,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 9 (uncertain property type):
+Visitor: buy but I am not sure apartment or villa
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_search",
+  "replyType": "ask_question",
+  "searchMode": "field",
+  "descriptionQuery": null,
+  "nextQuestion": "Do you have a preferred district or budget?",
+  "listingType": "Sale",
+  "propertyType": null,
+  "propertyTypes": ["Apartment", "Villa"],
+  "uncertainPropertyType": true,
+  "district": null,
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 10 (Turkish structured search):
+Visitor: Kadıköy'de kiralık daire göster.
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_search",
+  "replyType": "search",
+  "searchMode": "field",
+  "descriptionQuery": null,
+  "nextQuestion": null,
+  "listingType": "Rent",
+  "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": "Kadıköy",
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 11 (Arabic structured search with budget and district transliteration):
+Visitor: أبحث عن فيلا للبيع في بيليك دوزو بميزانية خمسة ملايين ليرة.
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_search",
+  "replyType": "search",
+  "searchMode": "field",
+  "descriptionQuery": null,
+  "nextQuestion": null,
+  "listingType": "Sale",
+  "propertyType": "Villa",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": "Beylikdüzü",
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": 5000000,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 12 (Turkish lifestyle/description search — not blocked by missing buy/rent):
+Visitor: Çocuklarım için okullara yakın güvenli bir ev istiyorum.
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_search",
+  "replyType": "search",
+  "searchMode": "description",
+  "descriptionQuery": "safe family home near schools for children peaceful residential area",
+  "nextQuestion": null,
+  "listingType": null,
+  "propertyType": null,
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": null,
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": ["near schools", "family-friendly", "safe area"],
+  "lifestyleConcepts": ["school", "family", "peaceful_safe"],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 13 (Arabic emotional context WITHIN an existing property search — context, not emotional_message):
+Conversation:
+Visitor: أبحث عن شقة للإيجار في اسنيورت.
+Assistant: هل لديك ميزانية معينة؟
+Visitor: زوجتي تعرضت للسرقة، أريد منطقة آمنة.
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_followup",
+  "replyType": "search",
+  "searchMode": "hybrid",
+  "descriptionQuery": "safe peaceful secure residential area",
+  "nextQuestion": null,
+  "listingType": "Rent",
+  "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": "Esenyurt",
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": ["safe area"],
+  "lifestyleConcepts": ["peaceful_safe"],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Example 14 (mixed-language message in one sentence — same canonical output regardless of the mix):
+Visitor: Beylikdüzü'nde apartment for rent.
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_search",
+  "replyType": "search",
+  "searchMode": "field",
+  "descriptionQuery": null,
+  "nextQuestion": null,
+  "listingType": "Rent",
+  "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": "Beylikdüzü",
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
+  "requirements": [],
+  "needsClarification": false,
+  "clarifyingQuestion": null
+}
+
+Memory example (cross-language follow-up — conversation started in English, visitor continues in Turkish):
+Conversation:
+Visitor: Show apartments for rent.
+Assistant: Do you have a preferred district or budget?
+Visitor: Kadıköy olsun.
+
+Correct JSON:
+{
+  "intent": "property_search",
+  "intentType": "property_followup",
+  "replyType": "search",
+  "searchMode": "field",
+  "descriptionQuery": null,
+  "nextQuestion": null,
+  "listingType": "Rent",
+  "propertyType": "Apartment",
+  "propertyTypes": [],
+  "uncertainPropertyType": false,
+  "district": "Kadıköy",
+  "districts": [],
+  "beds": null,
+  "baths": null,
+  "minPrice": null,
+  "maxPrice": null,
+  "minSqm": null,
+  "maxSqm": null,
+  "furnished": null,
+  "balcony": null,
+  "elevator": null,
+  "pool": null,
+  "garden": null,
+  "parking": null,
+  "mustHave": [],
+  "niceToHave": [],
+  "lifestyle": [],
+  "lifestyleConcepts": [],
+  "excludedConcepts": [],
+  "changedMind": false,
+  "noPreference": false,
   "requirements": [],
   "needsClarification": false,
   "clarifyingQuestion": null
@@ -381,16 +940,47 @@ Correct JSON:
 
 ${conversationBlock}
 `
+}
+
+// `language` defaults to 'en' — existing callers/tests that omit it are
+// unaffected (the prompt's language-hint line just reads "English", the
+// same effective behavior as before this parameter existed). Phase 4 only
+// threads `language` into the PROMPT TEXT (a weak interpretive hint) — it is
+// never used to change canonical output, never passed into memory/policy/
+// search, and the Gemini API call itself is otherwise unchanged from before.
+export const parsePropertyMessageWithGemini = async (message, history = [], language = 'en') => {
+  const apiKey = process.env.GEMINI_API_KEY
+
+  if (!apiKey) {
+    console.log('Gemini API key missing. Check backend .env file.')
+    return null
+  }
+
+  const ai = new GoogleGenAI({ apiKey })
+  const prompt = buildPropertyParserPrompt(message, history, language)
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
     })
 
     const text = cleanJson(response.text)
     console.log('Gemini raw text:', text)
-    return JSON.parse(text)
+    const parsed = JSON.parse(text)
+
+    // Defensive coercion for the new structured-meaning fields only (Phase C
+    // — observation/test-only, nothing downstream reads these yet). Existing
+    // fields are returned exactly as Gemini produced them, unchanged.
+    return {
+      ...parsed,
+      propertyTypes: Array.isArray(parsed.propertyTypes) ? parsed.propertyTypes : [],
+      uncertainPropertyType: Boolean(parsed.uncertainPropertyType),
+      lifestyleConcepts: sanitizeConcepts(parsed.lifestyleConcepts),
+      excludedConcepts: sanitizeConcepts(parsed.excludedConcepts),
+      changedMind: Boolean(parsed.changedMind),
+      noPreference: Boolean(parsed.noPreference),
+    }
   } catch (err) {
     console.log('Gemini parser failed:', err.message)
     return null

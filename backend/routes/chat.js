@@ -1,683 +1,44 @@
 //chat.js
 import express from 'express'
-import Property from '../models/Property.js'
 import { parsePropertyMessageWithGemini } from '../utils/geminiPropertyParser.js'
+import { handleLeadFlow } from '../services/chatLeadFlow.js'
+import { recordChatExchange } from '../services/chatPersistence.js'
+import { optionalAuth } from '../middleware/auth.js'
+import ChatConversation from '../models/ChatConversation.js'
 import mongoose from 'mongoose'
+import {
+  buildMustHaveFeatureFilter,
+  buildMongoFilter,
+} from '../services/chatFilters.js'
+import {
+  normalizeParsed,
+  keywordFallbackParser,
+  applyRawTextPropertyTypeSignals,
+} from '../services/chatMessageParsing.js'
+import {
+  buildNonPropertyReply,
+  renderSlotQuestion,
+  buildReply,
+  buildMatchReason,
+} from '../services/chatReplyBuilder.js'
+import { getRelaxedFeatureIds } from '../services/chatReplyPlan.js'
+import { createOrRetryPendingQuestion } from '../services/chatPendingQuestion.js'
+import { decideTurnAction, decideFollowUp, detectMixedListingTypes } from '../services/chatPolicyEngine.js'
+import { normalizeChatLanguage } from '../utils/chatLanguage.js'
+import { renderNonPropertyPageReply } from '../services/chatReplyRenderer.js'
+
+import { runPropertySearch } from '../services/chatPropertySearch.js'
+import {
+  isShowMoreRequest,
+  messageHasNewCriteria,
+  resolveConversationState,
+} from '../services/chatConversationMemory.js'
+import { handleDistrictScopeClarification } from '../services/chatDistrictScope.js'
 
 const router = express.Router()
 
-const PROPERTY_SELECT =
-  'title listingType price priceLabel district description address propertyType beds baths sqm mainImage images featured status pool garden furnished balcony elevator parking floor createdAt'
-
-const defaultParsed = {
-  intent: 'property_search',
-  intentType: 'property_search',
-replyType: 'search',
-nextQuestion: null,
-  searchMode: 'field',
-  descriptionQuery: null,
-  listingType: null,
-  propertyType: null,
-  district: null,
-  districts: [],
-  beds: null,
-  baths: null,
-  minPrice: null,
-  maxPrice: null,
-  minSqm: null,
-  maxSqm: null,
-  furnished: null,
-  balcony: null,
-  elevator: null,
-  pool: null,
-  garden: null,
-  parking: null,
-  mustHave: [],
-  niceToHave: [],
-  lifestyle: [],
-  requirements: [],
-  needsClarification: false,
-  clarifyingQuestion: null,
-}
-
-// ─── Helpers for chat memory ──────────────────────────────────────────────────
-const hasValue = (value) => {
-  if (value === null || value === undefined) return false
-  if (typeof value === 'string' && value.trim() === '') return false
-  if (Array.isArray(value) && value.length === 0) return false
-  return true
-}
-
-const extractBudgetFromText = (message, parsed) => {
-  const text = message.toLowerCase()
-
-  // Examples:
-  // "my budget is 15000"
-  // "budget 15000"
-  // "under 15000"
-  // "max 15000"
-  // "up to 15000"
-  // "₺15000"
-  // "15000 rent"
-  const budgetMatch =
-    text.match(/(?:budget|under|max|maximum|up to|around)\s*(?:is)?\s*₺?\s*(\d[\d,.]*)/) ||
-    text.match(/₺\s*(\d[\d,.]*)/) ||
-    text.match(/\b(\d{4,9})\b/)
-
-  if (!budgetMatch) return parsed
-
-  const number = Number(String(budgetMatch[1]).replace(/[,.]/g, ''))
-
-  if (!Number.isNaN(number)) {
-    // In normal real estate chat, "budget" usually means maximum price/rent.
-    parsed.maxPrice = number
-  }
-
-  return parsed
-}
-
-const normalizeParsed = (parsed, message) => {
-  const safe = {
-    ...defaultParsed,
-    ...(parsed || {}),
-  }
-  const allowedIntentTypes = [
-  'property_search',
-  'property_followup',
-  'casual_chat',
-  'emotional_message',
-  'contact_request',
-  'website_service_question',
-  'unknown',
-]
-
-const allowedReplyTypes = [
-  'search',
-  'ask_question',
-  'casual_reply',
-  'support_reply',
-  'contact_reply',
-  'service_reply',
-  'unknown_reply',
-]
-
-safe.intentType = allowedIntentTypes.includes(safe.intentType)
-  ? safe.intentType
-  : 'property_search'
-
-safe.replyType = allowedReplyTypes.includes(safe.replyType)
-  ? safe.replyType
-  : 'search'
-
-safe.nextQuestion =
-  typeof safe.nextQuestion === 'string' && safe.nextQuestion.trim()
-    ? safe.nextQuestion.trim()
-    : null
-
-
-  safe.searchMode = ['field', 'description', 'hybrid'].includes(safe.searchMode)
-  ? safe.searchMode
-  : 'field'
-
-safe.descriptionQuery =
-  typeof safe.descriptionQuery === 'string' && safe.descriptionQuery.trim()
-    ? safe.descriptionQuery.trim()
-    : null
-
-  safe.districts = Array.isArray(safe.districts) ? safe.districts : []
-  safe.mustHave = Array.isArray(safe.mustHave) ? safe.mustHave : []
-  safe.niceToHave = Array.isArray(safe.niceToHave) ? safe.niceToHave : []
-  safe.lifestyle = Array.isArray(safe.lifestyle) ? safe.lifestyle : []
-  safe.requirements = Array.isArray(safe.requirements) ? safe.requirements : []
-
-  return extractBudgetFromText(message, safe)
-}
-
-const mergeParsedWithContext = (currentFilters = {}, newParsed = {}) => {
-  const merged = {
-    ...defaultParsed,
-    ...currentFilters,
-  }
-
-  const fieldsToMerge = [
-    'intent',
-    'intentType',
-'replyType',
-'nextQuestion',
-    'searchMode',
-  'descriptionQuery',
-    'listingType',
-    'propertyType',
-    'district',
-    'beds',
-    'baths',
-    'minPrice',
-    'maxPrice',
-    'minSqm',
-    'maxSqm',
-    'furnished',
-    'balcony',
-    'elevator',
-    'pool',
-    'garden',
-    'parking',
-  ]
-
-  for (const field of fieldsToMerge) {
-    if (hasValue(newParsed[field])) {
-      merged[field] = newParsed[field]
-    }
-  }
-
-  // If user gives multiple districts, use districts[] and clear single district
-  if (Array.isArray(newParsed.districts) && newParsed.districts.length > 0) {
-    merged.districts = newParsed.districts
-    merged.district = null
-  }
-
-  // Keep previous arrays unless Gemini gives new meaningful arrays
-  merged.mustHave =
-    Array.isArray(newParsed.mustHave) && newParsed.mustHave.length > 0
-      ? newParsed.mustHave
-      : merged.mustHave || []
-
-  merged.niceToHave =
-    Array.isArray(newParsed.niceToHave) && newParsed.niceToHave.length > 0
-      ? newParsed.niceToHave
-      : merged.niceToHave || []
-
-  merged.lifestyle =
-    Array.isArray(newParsed.lifestyle) && newParsed.lifestyle.length > 0
-      ? newParsed.lifestyle
-      : merged.lifestyle || []
-
-  merged.requirements =
-    Array.isArray(newParsed.requirements) && newParsed.requirements.length > 0
-      ? newParsed.requirements
-      : merged.requirements || []
-
-  // Do not blindly trust Gemini clarification after we already have memory.
-  // We will decide missing info ourselves.
-  merged.needsClarification = false
-  merged.clarifyingQuestion = null
-
-  return merged
-}
-
-const hasSoftDescriptionSearch = (parsed = {}) => {
-  return Boolean(
-    parsed.descriptionQuery ||
-      parsed.searchMode === 'description' ||
-      parsed.searchMode === 'hybrid' ||
-      parsed.lifestyle?.length ||
-      parsed.mustHave?.length ||
-      parsed.niceToHave?.length ||
-      parsed.requirements?.length
-  )
-}
-
-const buildNonPropertyReply = (parsed) => {
-  if (parsed.intentType === 'casual_chat' || parsed.replyType === 'casual_reply') {
-    return "I'm doing well, thank you. I'm here to help you find the right property. Are you looking to buy, rent, or just exploring?"
-  }
-
-  if (parsed.intentType === 'emotional_message' || parsed.replyType === 'support_reply') {
-    return "I'm sorry to hear that. I hope your day gets better. I'm mainly here to help with property search, so whenever you're ready, tell me what kind of home you're looking for."
-  }
-
-  if (parsed.intentType === 'contact_request' || parsed.replyType === 'contact_reply') {
-    return 'Sure. You can contact the VarliKent team through the contact form or WhatsApp details on the property page. If you tell me which property you are interested in, I can help you narrow it down.'
-  }
-
-  if (parsed.intentType === 'website_service_question' || parsed.replyType === 'service_reply') {
-    return 'VarliKent can help with real estate, architecture, construction, renovation, and interior design services. Which service would you like to know more about?'
-  }
-
-  if (parsed.intentType === 'unknown' || parsed.replyType === 'unknown_reply') {
-    return 'I can help you search for properties by buy/rent, apartment/villa, district, budget, rooms, or lifestyle needs like sea view, family-friendly community, luxury, or investment. What are you looking for?'
-  }
-
-  return null
-}
-
-const buildMissingInfoQuestion = (parsed) => {
-  // If user gave a lifestyle/description request, search descriptions first.
-  // Example: "I want a safe home for my children"
-  if (hasSoftDescriptionSearch(parsed)) {
-    return null
-  }
-
-  if (!parsed.listingType) {
-    return 'Are you looking to buy or rent?'
-  }
-
-  if (!parsed.propertyType) {
-    return 'What type of property are you looking for — apartment, villa, office, or something else?'
-  }
-
-  return null
-}
-
-// ─── Keyword fallback parser ──────────────────────────────────────────────────
-const keywordFallbackParser = (message) => {
-  const text = message.toLowerCase()
-  const parsed = { ...defaultParsed }
-
-  if (text.includes('rent') || text.includes('rental') || text.includes('kiralık')) {
-    parsed.listingType = 'Rent'
-  }
-
-  if (
-    text.includes('sale') ||
-    text.includes('buy') ||
-    text.includes('buying') ||
-    text.includes('purchase') ||
-    text.includes('satılık')
-  ) {
-    parsed.listingType = 'Sale'
-  }
-
-  const typeMap = {
-    villa: 'Villa',
-    apartment: 'Apartment',
-    flat: 'Apartment',
-    penthouse: 'Penthouse',
-    duplex: 'Duplex',
-    studio: 'Studio',
-    office: 'Office',
-    land: 'Land',
-    shop: 'Shop',
-  }
-
-  for (const [keyword, type] of Object.entries(typeMap)) {
-    if (text.includes(keyword)) {
-      parsed.propertyType = type
-      break
-    }
-  }
-
-  const districts = [
-    'Esenyurt',
-    'Büyükçekmece',
-    'Buyukcekmece',
-    'Beylikdüzü',
-    'Beylikduzu',
-    'Başakşehir',
-    'Basaksehir',
-    'Kadıköy',
-    'Kadikoy',
-    'Beşiktaş',
-    'Besiktas',
-    'Şişli',
-    'Sisli',
-    'Üsküdar',
-    'Uskudar',
-    'Sarıyer',
-    'Sariyer',
-    'Bakırköy',
-    'Bakirkoy',
-    'Kağıthane',
-    'Kagithane',
-    'Fatih',
-    'Zeytinburnu',
-    'Avcılar',
-    'Avcilar',
-    'Bahçelievler',
-    'Bahcelievler',
-  ]
-
-  const matched = districts.filter((d) => text.includes(d.toLowerCase()))
-
-  if (matched.length === 1) parsed.district = matched[0]
-  if (matched.length > 1) parsed.districts = matched
-
-  const bedroomMatch = text.match(/(\d+)\s*(bed|beds|bedroom|bedrooms|room|rooms|oda)/)
-  const plusOneMatch = text.match(/(\d+)\+1/)
-
-  if (bedroomMatch) parsed.beds = Number(bedroomMatch[1])
-  else if (plusOneMatch) parsed.beds = Number(plusOneMatch[1])
-
-  const bathroomMatch = text.match(/(\d+)\s*(bath|baths|bathroom|bathrooms)/)
-  if (bathroomMatch) parsed.baths = Number(bathroomMatch[1])
-
-  const underM = text.match(/under\s+(\d+)\s*m(illion)?/)
-  const aboveM = text.match(/above\s+(\d+)\s*m(illion)?/)
-  const maxM = text.match(/max\s+(\d+)\s*m(illion)?/)
-
-  if (underM || maxM) parsed.maxPrice = Number((underM || maxM)[1]) * 1000000
-  if (aboveM) parsed.minPrice = Number(aboveM[1]) * 1000000
-
-  if (text.includes('pool')) parsed.pool = true
-  if (text.includes('garden')) parsed.garden = true
-  if (text.includes('furnished')) parsed.furnished = true
-  if (text.includes('balcony')) parsed.balcony = true
-  if (text.includes('elevator') || text.includes('lift')) parsed.elevator = true
-  if (text.includes('parking') || text.includes('garage')) parsed.parking = true
-
-  return parsed
-}
-
-// ─── Build MongoDB filter ─────────────────────────────────────────────────────
-const buildMongoFilter = (parsed) => {
-  const filter = { status: 'Available' }
-
-  if (parsed.listingType) filter.listingType = parsed.listingType
-  if (parsed.propertyType) filter.propertyType = parsed.propertyType
-
-  const districtList = [
-    ...(parsed.district ? [parsed.district] : []),
-    ...(Array.isArray(parsed.districts) ? parsed.districts : []),
-  ]
-
-  if (districtList.length === 1) {
-    filter.district = { $regex: districtList[0], $options: 'i' }
-  } else if (districtList.length > 1) {
-    filter.$or = districtList.map((d) => ({
-      district: { $regex: d, $options: 'i' },
-    }))
-  }
-
-  if (parsed.beds) filter.beds = Number(parsed.beds)
-  if (parsed.baths) filter.baths = Number(parsed.baths)
-
-  if (parsed.furnished === true) filter.furnished = true
-  if (parsed.balcony === true) filter.balcony = true
-  if (parsed.elevator === true) filter.elevator = true
-  if (parsed.pool === true) filter.pool = true
-  if (parsed.garden === true) filter.garden = true
-
-  if (parsed.parking === true) {
-    filter.parking = {
-      $exists: true,
-      $nin: ['', null, 'No', 'no', 'None', 'none'],
-    }
-  }
-
-  if (parsed.minPrice || parsed.maxPrice) {
-    filter.price = {}
-
-    if (parsed.minPrice) filter.price.$gte = Number(parsed.minPrice)
-    if (parsed.maxPrice) filter.price.$lte = Number(parsed.maxPrice)
-  }
-
-  if (parsed.minSqm || parsed.maxSqm) {
-    filter.sqm = {}
-
-    if (parsed.minSqm) filter.sqm.$gte = Number(parsed.minSqm)
-    if (parsed.maxSqm) filter.sqm.$lte = Number(parsed.maxSqm)
-  }
-
-  return filter
-}
-
-// ─── Progressive fallback search ──────────────────────────────────────────────
-const searchWithFallback = async (filter) => {
-  // Step 1: exact search
-  let properties = await Property.find(filter)
-    .select(PROPERTY_SELECT)
-    .sort({ featured: -1, createdAt: -1 })
-    .limit(5)
-
-  if (properties.length > 0) {
-    return { properties, fallbackLevel: 0 }
-  }
-
-  // Step 2: keep listingType + propertyType + district, drop price/beds/features
-  const step2 = { status: 'Available' }
-
-  if (filter.listingType) step2.listingType = filter.listingType
-  if (filter.propertyType) step2.propertyType = filter.propertyType
-  if (filter.district) step2.district = filter.district
-  if (filter.$or) step2.$or = filter.$or
-
-  properties = await Property.find(step2)
-    .select(PROPERTY_SELECT)
-    .sort({ featured: -1, createdAt: -1 })
-    .limit(5)
-
-  if (properties.length > 0) {
-    return { properties, fallbackLevel: 1 }
-  }
-
-  // Step 3: drop district, keep listingType + propertyType
-  const step3 = { status: 'Available' }
-
-  if (filter.listingType) step3.listingType = filter.listingType
-  if (filter.propertyType) step3.propertyType = filter.propertyType
-
-  properties = await Property.find(step3)
-    .select(PROPERTY_SELECT)
-    .sort({ featured: -1, createdAt: -1 })
-    .limit(5)
-
-  if (properties.length > 0) {
-    return { properties, fallbackLevel: 2 }
-  }
-
-  // Step 4: just listingType
-  const step4 = { status: 'Available' }
-
-  if (filter.listingType) step4.listingType = filter.listingType
-
-  properties = await Property.find(step4)
-    .select(PROPERTY_SELECT)
-    .sort({ featured: -1, createdAt: -1 })
-    .limit(5)
-
-  return { properties, fallbackLevel: 3 }
-}
-
-// ─── Description search helpers ───────────────────────────────────────────────
-const buildHardFilterForDescriptionSearch = (filter = {}) => {
-  const hardFilter = { status: 'Available' }
-
-  if (filter.listingType) hardFilter.listingType = filter.listingType
-  if (filter.propertyType) hardFilter.propertyType = filter.propertyType
-  if (filter.district) hardFilter.district = filter.district
-  if (filter.$or) hardFilter.$or = filter.$or
-
-  if (filter.beds) hardFilter.beds = filter.beds
-  if (filter.baths) hardFilter.baths = filter.baths
-  if (filter.price) hardFilter.price = filter.price
-  if (filter.sqm) hardFilter.sqm = filter.sqm
-
-  if (filter.furnished) hardFilter.furnished = filter.furnished
-  if (filter.balcony) hardFilter.balcony = filter.balcony
-  if (filter.elevator) hardFilter.elevator = filter.elevator
-  if (filter.pool) hardFilter.pool = filter.pool
-  if (filter.garden) hardFilter.garden = filter.garden
-  if (filter.parking) hardFilter.parking = filter.parking
-  if (filter._id) hardFilter._id = filter._id
-
-  return hardFilter
-}
-
-const getDescriptionSearchQuery = (parsed = {}, message = '') => {
-  const parts = [
-    parsed.descriptionQuery,
-    ...(Array.isArray(parsed.lifestyle) ? parsed.lifestyle : []),
-    ...(Array.isArray(parsed.mustHave) ? parsed.mustHave : []),
-    ...(Array.isArray(parsed.niceToHave) ? parsed.niceToHave : []),
-    ...(Array.isArray(parsed.requirements) ? parsed.requirements : []),
-  ].filter(Boolean)
-
-  if (parts.length > 0) {
-    return parts.join(' ')
-  }
-
-  return message
-}
-
-const searchByDescription = async ({ parsed, filter, message }) => {
-  const descriptionSearchQuery = getDescriptionSearchQuery(parsed, message)
-
-  if (!descriptionSearchQuery || !descriptionSearchQuery.trim()) {
-    return {
-      properties: [],
-      descriptionSearchUsed: false,
-      descriptionSearchQuery: null,
-      descriptionSearchError: null,
-    }
-  }
-
-  try {
-    const hardFilter = buildHardFilterForDescriptionSearch(filter)
-
-    const searchFilter = {
-      ...hardFilter,
-      $text: {
-        $search: descriptionSearchQuery,
-      },
-    }
-
-    const properties = await Property.find(searchFilter, {
-      score: { $meta: 'textScore' },
-    })
-      .select(PROPERTY_SELECT)
-      .sort({
-        score: { $meta: 'textScore' },
-        featured: -1,
-        createdAt: -1,
-      })
-      .limit(10)
-
-    return {
-      properties,
-      descriptionSearchUsed: true,
-      descriptionSearchQuery,
-      descriptionSearchError: null,
-    }
-  } catch (err) {
-    console.log('Description search failed:', err.message)
-
-    return {
-      properties: [],
-      descriptionSearchUsed: false,
-      descriptionSearchQuery,
-      descriptionSearchError: err.message,
-    }
-  }
-}
-
-// ─── Next useful question helper ──────────────────────────────────────────────
-const buildNextUsefulQuestion = (parsed = {}) => {
-  if (!parsed.listingType) {
-    return 'Are you looking to buy or rent?'
-  }
-
-  if (!parsed.propertyType) {
-    return 'Do you prefer an apartment, villa, or another property type?'
-  }
-
-  if (!parsed.district && (!parsed.districts || parsed.districts.length === 0)) {
-    return 'Do you have a preferred district?'
-  }
-
-  if (!parsed.maxPrice && !parsed.minPrice) {
-    return 'Do you have a budget range in mind?'
-  }
-
-  return null
-}
-
-// ─── Build reply text ─────────────────────────────────────────────────────────
-const buildReply = ({
-  properties,
-  fallbackLevel,
-  parsed,
-  descriptionSearchUsed = false,
-  descriptionSearchQuery = null,
-}) => {
-  const count = properties.length
-  const nextQuestion = buildNextUsefulQuestion(parsed)
-
-  const isDescriptionSearch =
-    descriptionSearchUsed ||
-    parsed.searchMode === 'description' ||
-    parsed.searchMode === 'hybrid'
-
-  if (count === 0) {
-    if (isDescriptionSearch) {
-      return nextQuestion
-        ? `I couldn't find a strong match from the property descriptions yet. ${nextQuestion}`
-        : "I couldn't find a strong match from the property descriptions yet. Try adding a district, budget, or property type."
-    }
-
-    return "I couldn't find any available properties right now. Try adjusting your district, budget, or property type."
-  }
-
-  if (isDescriptionSearch) {
-    const propertyText = count === 1 ? '1 property' : `${count} properties`
-
-    let reply = `I found ${propertyText} that may match your request based on the property descriptions.`
-
-    if (parsed.descriptionQuery) {
-      reply += ` I searched for details related to: ${parsed.descriptionQuery}.`
-    }
-
-    if (parsed.listingType) {
-      reply += ` I also filtered it for ${parsed.listingType.toLowerCase()} properties.`
-    }
-
-    if (parsed.propertyType) {
-      reply += ` I also matched the property type: ${parsed.propertyType.toLowerCase()}.`
-    }
-
-    if (nextQuestion) {
-      reply += ` ${nextQuestion}`
-    }
-
-    return reply
-  }
-
-  const propertyLabel = parsed.propertyType
-    ? parsed.propertyType.toLowerCase()
-    : 'property'
-
-  const n =
-    count === 1
-      ? `1 ${propertyLabel}`
-      : `${count} ${propertyLabel === 'property' ? 'properties' : `${propertyLabel}s`}`
-
-  const allDistricts = [
-    ...(parsed.district ? [parsed.district] : []),
-    ...(Array.isArray(parsed.districts) ? parsed.districts : []),
-  ]
-
-  const parts = []
-
-  if (parsed.propertyType) parts.push(parsed.propertyType.toLowerCase())
-  if (parsed.listingType) parts.push(`for ${parsed.listingType.toLowerCase()}`)
-  if (parsed.maxPrice) parts.push(`up to ₺${Number(parsed.maxPrice).toLocaleString('tr-TR')}`)
-  if (allDistricts.length > 0) parts.push(`in ${allDistricts.join(' or ')}`)
-
-  const description = parts.length ? ` — ${parts.join(' ')}` : ''
-
-  if (fallbackLevel === 0) {
-    return nextQuestion
-      ? `I found ${n}${description}. ${nextQuestion}`
-      : `I found ${n}${description}.`
-  }
-
-  if (fallbackLevel === 1) {
-    return nextQuestion
-      ? `I couldn't find an exact match with all details, but here ${count === 1 ? 'is' : 'are'} ${n} in the same area that may interest you. ${nextQuestion}`
-      : `I couldn't find an exact match with all details, but here ${count === 1 ? 'is' : 'are'} ${n} in the same area that may interest you.`
-  }
-
-  if (fallbackLevel === 2) {
-    return nextQuestion
-      ? `Nothing matched in that district, but here ${count === 1 ? 'is' : 'are'} ${n} of that type from other areas. ${nextQuestion}`
-      : `Nothing matched in that district, but here ${count === 1 ? 'is' : 'are'} ${n} of that type from other areas.`
-  }
-
-  return nextQuestion
-    ? `I couldn't find a close match, but here ${count === 1 ? 'is' : 'are'} ${n} to give you a starting point. ${nextQuestion}`
-    : `I couldn't find a close match, but here ${count === 1 ? 'is' : 'are'} ${n} to give you a starting point.`
-}
-
 // ─── Main route ───────────────────────────────────────────────────────────────
-router.post('/', async (req, res, next) => {
+router.post('/', optionalAuth, async (req, res, next) => {
   try {
     const {
       message,
@@ -685,13 +46,37 @@ router.post('/', async (req, res, next) => {
       history = [],
       currentFilters = {},
       shownPropertyIds = [],
+      lastShownProperties = [],
+      conversationId = null,
     } = req.body
+
+    // Phase 1 (language plumbing only): validate and normalize, never trust
+    // the raw client value. Nothing downstream reads this yet — no reply
+    // text, Gemini prompt, or persistence changes in this phase.
+    const language = normalizeChatLanguage(req.body.language)
 
     if (!message || !message.trim()) {
       return res.status(400).json({
         success: false,
         message: 'Message is required',
       })
+    }
+
+    // Fast ownership check, before any Gemini/search work runs. Anonymous
+    // requests never reach here with persistence in play (every call site
+    // below is already gated on req.user), so a client-supplied
+    // conversationId is only ever validated — never trusted or used — when
+    // req.user exists.
+    if (req.user && conversationId) {
+      if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+        return res.status(400).json({ success: false, message: 'Invalid conversation id' })
+      }
+
+      const ownsConversation = await ChatConversation.exists({ _id: conversationId, user: req.user._id })
+
+      if (!ownsConversation) {
+        return res.status(404).json({ success: false, message: 'Conversation not found' })
+      }
     }
 
     const isPropertyPage =
@@ -702,11 +87,32 @@ router.post('/', async (req, res, next) => {
       pageKey.startsWith('/properties/')
 
     if (!isPropertyPage) {
+      const nonPropertyPageReply = renderNonPropertyPageReply(language)
+      let responseConversationId = null
+
+      if (req.user) {
+        const persistenceResult = await recordChatExchange({
+          userId: req.user._id,
+          conversationId,
+          pageKey,
+          userMessageText: message,
+          assistantReplyText: nonPropertyPageReply,
+          propertyIds: [],
+          event: null,
+          history,
+          parsed: null,
+          lead: null,
+        })
+        responseConversationId = persistenceResult.conversationId || conversationId || null
+      }
+
       return res.json({
         success: true,
-        reply: 'For now, I can help with property searches. Service pages will be supported soon.',
+        reply: nonPropertyPageReply,
         properties: [],
         parsed: currentFilters,
+        conversationId: responseConversationId,
+        language,
       })
     }
 
@@ -716,10 +122,13 @@ router.post('/', async (req, res, next) => {
       ? history.slice(0, -1)
       : []
 
-    // 1. Parse only the latest user message
+    // 1. Parse only the latest user message. `language` is passed only as a
+    // weak interpretive hint inside the prompt (Phase 4) — it never changes
+    // canonical output and is not used by anything downstream of parsing.
     let parsedFromMessage = await parsePropertyMessageWithGemini(
       message,
-      historyWithoutCurrentMessage
+      historyWithoutCurrentMessage,
+      language
     )
 
     const aiUsed = Boolean(parsedFromMessage)
@@ -732,43 +141,162 @@ router.post('/', async (req, res, next) => {
     // 3. Normalize and extract simple budget numbers
     parsedFromMessage = normalizeParsed(parsedFromMessage, message)
 
-    // 4. Merge previous search memory with the latest message
-    let parsed = mergeParsedWithContext(currentFilters, parsedFromMessage)
-    // If Gemini clearly says this is a fresh description search,
-// do not allow old frontend filters like "Villa" to accidentally narrow it.
-if (
-  parsedFromMessage.searchMode === 'description' &&
-  parsedFromMessage.descriptionQuery &&
-  !parsedFromMessage.listingType &&
-  !parsedFromMessage.propertyType &&
-  !parsedFromMessage.district &&
-  (!Array.isArray(parsedFromMessage.districts) || parsedFromMessage.districts.length === 0)
-) {
-  parsed.listingType = null
-  parsed.propertyType = null
-  parsed.district = null
-  parsed.districts = []
-  parsed.beds = null
-  parsed.baths = null
-  parsed.minPrice = null
-  parsed.maxPrice = null
-  parsed.minSqm = null
-  parsed.maxSqm = null
-  parsed.furnished = null
-  parsed.balcony = null
-  parsed.elevator = null
-  parsed.pool = null
-  parsed.garden = null
-  parsed.parking = null
+    // 3b. Override with deterministically-detected multiple/uncertain
+    // property types or a "show residential properties" request — neither
+    // Gemini nor keywordFallbackParser can express these in a single
+    // propertyType field, so this always wins over whatever they guessed.
+    applyRawTextPropertyTypeSignals(parsedFromMessage, message)
+
+    // 4. Merge previous search memory with the latest message, resolve
+    // fresh-search/continuation/concept-switch state — all conversation-
+    // memory decisions now live in chatConversationMemory.js.
+    let { parsed, newLifestyleConceptsInMessage } = resolveConversationState({
+      message,
+      currentFilters,
+      parsedFromMessage,
+    })
+
+// ─── District scope clarification (Phase D, slice 1) ──────────────────
+// Resolve a pending clarification from a prior turn, or ask a new one if
+// this message just introduced a lifestyle concept while an old,
+// unconfirmed district is still active. Decision logic now lives in
+// services/chatDistrictScope.js — chat.js only reacts to the result.
+const districtScopeResult = handleDistrictScopeClarification({
+  message,
+  currentFilters,
+  parsedFromMessage,
+  parsed,
+  newLifestyleConceptsInMessage,
+  language,
+})
+
+parsed = districtScopeResult.parsed
+
+if (districtScopeResult.handled) {
+  let responseConversationId = null
+
+  if (req.user) {
+    const persistenceResult = await recordChatExchange({
+      userId: req.user._id,
+      conversationId,
+      pageKey,
+      userMessageText: message,
+      assistantReplyText: districtScopeResult.reply,
+      propertyIds: [],
+      event: districtScopeResult.event,
+      history,
+      parsed,
+      lead: null,
+    })
+    responseConversationId = persistenceResult.conversationId || conversationId || null
+  }
+
+  return res.json({
+    success: true,
+    reply: districtScopeResult.reply,
+    properties: [],
+    parsed: {
+      ...parsed,
+      pendingClarification: districtScopeResult.pendingClarification,
+    },
+    filterUsed: null,
+    exactMatch: null,
+    aiUsed,
+    conversationId: responseConversationId,
+    language,
+  })
 }
 
     // 5. Page context wins
     if (pageKey === 'sale') parsed.listingType = 'Sale'
     if (pageKey === 'rent') parsed.listingType = 'Rent'
 
-    const nonPropertyReply = buildNonPropertyReply(parsed)
+    // 5b. Lead capture — fully delegated to services/chatLeadFlow.js so this
+    // route doesn't keep growing with lead-flow logic. It owns its own
+    // state machine (collecting/confirming/submitted), confirmation,
+    // corrections, and the actual save — chat.js just reacts to the result.
+    const leadResult = await handleLeadFlow({
+      message,
+      parsed,
+      parsedFromMessage,
+      currentFilters,
+      pageKey,
+      lastShownProperties,
+      language,
+    })
+
+    if (leadResult.handled) {
+      const hadPendingLeadBefore = ['collecting', 'confirming', 'clarifying_property'].includes(
+        currentFilters?.pendingLead?.status
+      )
+      const leadJustCaptured = leadResult.pendingLead?.status === 'submitted'
+      const leadFlowEvent = leadJustCaptured
+        ? 'lead_captured'
+        : !hadPendingLeadBefore && leadResult.pendingLead
+        ? 'lead_flow_started'
+        : null
+
+      let responseConversationId = null
+
+      if (req.user) {
+        const persistenceResult = await recordChatExchange({
+          userId: req.user._id,
+          conversationId,
+          pageKey,
+          userMessageText: message,
+          assistantReplyText: leadResult.reply,
+          propertyIds: [],
+          event: leadFlowEvent,
+          history,
+          parsed,
+          // ContactSubmission id isn't returned by chatLeadFlow.js yet, so the
+          // lead reference can't be linked here even on 'lead_captured' — a
+          // known follow-up, not something to fix as part of this wiring.
+          lead: null,
+        })
+        responseConversationId = persistenceResult.conversationId || conversationId || null
+      }
+
+      return res.json({
+        success: true,
+        reply: leadResult.reply,
+        properties: [],
+        parsed: { ...parsed, pendingLead: leadResult.pendingLead ?? null },
+        filterUsed: null,
+        exactMatch: null,
+        aiUsed,
+        conversationId: responseConversationId,
+        language,
+      })
+    }
+
+    if ('pendingLead' in leadResult) {
+      // An in-progress lead was just abandoned (fresh search detected) —
+      // clear it explicitly so it can't silently resurface on a later turn.
+      parsed.pendingLead = leadResult.pendingLead
+    }
+
+    const nonPropertyReply = buildNonPropertyReply(parsed, language)
 
 if (nonPropertyReply) {
+  let responseConversationId = null
+
+  if (req.user) {
+    const persistenceResult = await recordChatExchange({
+      userId: req.user._id,
+      conversationId,
+      pageKey,
+      userMessageText: message,
+      assistantReplyText: nonPropertyReply,
+      propertyIds: [],
+      event: null,
+      history,
+      parsed,
+      lead: null,
+    })
+    responseConversationId = persistenceResult.conversationId || conversationId || null
+  }
+
   return res.json({
     success: true,
     reply: nonPropertyReply,
@@ -777,18 +305,8 @@ if (nonPropertyReply) {
     filterUsed: null,
     exactMatch: null,
     aiUsed,
-  })
-}
-
-if (parsed.replyType === 'ask_question' && parsed.nextQuestion) {
-  return res.json({
-    success: true,
-    reply: parsed.nextQuestion,
-    properties: [],
-    parsed,
-    filterUsed: null,
-    exactMatch: null,
-    aiUsed,
+    conversationId: responseConversationId,
+    language,
   })
 }
 
@@ -797,25 +315,78 @@ if (parsed.replyType === 'ask_question' && parsed.nextQuestion) {
     console.log('Old filters from frontend:', currentFilters)
     console.log('Final merged parsed:', parsed)
 
-    // 6. Ask only if important info is still missing after merging memory
-    const missingQuestion = buildMissingInfoQuestion(parsed)
+    // 6. Single authoritative ask-vs-search decision (Phase 4). Replaces the
+    // old independent Gemini ask_question branch and buildMissingInfoQuestion
+    // branch — those decided routing in isolation; chatPolicyEngine.js is now
+    // the only place that decides. Gemini's own replyType/nextQuestion are no
+    // longer read for routing here — they are suggestions the engine may
+    // disregard (see decideTurnAction's doc comment).
+    const isShowMore = isShowMoreRequest(message)
 
-    if (missingQuestion) {
+    const turnAction = decideTurnAction({ parsed, pageKey, isShowMore })
+    console.log('Policy decision (pre-search):', turnAction.reason)
+
+    if (turnAction.type === 'ask') {
+      const questionText = renderSlotQuestion(turnAction.slots, language)
+
+      parsed.pendingQuestion = createOrRetryPendingQuestion(parsed.pendingQuestion, turnAction.slots, parsed.turn)
+
+      let responseConversationId = null
+
+      if (req.user) {
+        const persistenceResult = await recordChatExchange({
+          userId: req.user._id,
+          conversationId,
+          pageKey,
+          userMessageText: message,
+          assistantReplyText: questionText,
+          propertyIds: [],
+          event: 'clarification_requested',
+          history,
+          parsed,
+          lead: null,
+        })
+        responseConversationId = persistenceResult.conversationId || conversationId || null
+      }
+
       return res.json({
         success: true,
-        reply: missingQuestion,
+        reply: questionText,
         properties: [],
         parsed,
+        conversationId: responseConversationId,
         filterUsed: null,
         exactMatch: null,
         aiUsed,
+        language,
       })
     }
 
-    // 7. Build MongoDB filter and search
+    // 7. Build MongoDB filter and search. turnAction.scope is a presentation
+    // hint only — the filter naturally omits listingType/propertyType/
+    // district/budget whenever their value is null (deferred/declined
+    // transitions already clear the value), so no filter logic changes here.
     const filter = buildMongoFilter(parsed)
 
-    const validShownPropertyIds = Array.isArray(shownPropertyIds)
+    // mustHave is strict: enforce it as a real hard filter now, and carry it
+    // through every fallback relaxation step below (niceToHave stays soft —
+    // it is only used as a text-search signal, not a hard requirement, for now).
+    const mustHaveFilter = buildMustHaveFeatureFilter(parsed.mustHave)
+    Object.assign(filter, mustHaveFilter)
+
+    // Feature toggles requested directly (not via mustHave) that fallback is
+    // allowed to drop — used only to tell the visitor honestly if that
+    // happens. Ids, not labels: language-independent, resolved to a
+    // localized word only at render time inside buildReply.
+    const relaxedFeatureIds = getRelaxedFeatureIds(parsed, mustHaveFilter)
+
+    // Only exclude previously shown properties on a plain "show me more"
+    // continuation. If this message itself introduces new/changed criteria,
+    // treat it as a fresh search and let previously shown properties reappear.
+    // (isShowMore was already computed above, for the policy engine.)
+    const isFreshSearch = !isShowMore && messageHasNewCriteria(parsedFromMessage)
+
+    const validShownPropertyIds = isShowMore && Array.isArray(shownPropertyIds)
   ? shownPropertyIds.filter((id) => mongoose.Types.ObjectId.isValid(id))
   : []
 
@@ -825,43 +396,105 @@ if (validShownPropertyIds.length > 0) {
 
     console.log('Filter:', JSON.stringify(filter, null, 2))
 
-let properties = []
-let fallbackLevel = 0
-let descriptionSearchUsed = false
-let descriptionSearchQuery = null
-let descriptionSearchError = null
+let {
+  properties,
+  fallbackLevel,
+  matchedViaDescription,
+  matchedViaSemantic,
+  descriptionSearchAttempted,
+  descriptionSearchUsed,
+  descriptionSearchQuery,
+  descriptionSearchError,
+  searchEvidence,
+} = await runPropertySearch({ parsed, filter, mustHaveFilter, message })
 
-if (hasSoftDescriptionSearch(parsed)) {
-  const descriptionResult = await searchByDescription({
-    parsed,
-    filter,
-    message,
-  })
+console.log('Search evidence:', searchEvidence)
 
-  properties = descriptionResult.properties
-  descriptionSearchUsed = descriptionResult.descriptionSearchUsed
-  descriptionSearchQuery = descriptionResult.descriptionSearchQuery
-  descriptionSearchError = descriptionResult.descriptionSearchError
+// Attach a short, deterministic "why this matches you" reason to each
+// property — computed from real property fields + the parsed filters that
+// were actually used, never from Gemini.
+properties = properties.map((property) => {
+  const plain = typeof property.toObject === 'function' ? property.toObject() : property
 
-  // If description search finds nothing, fall back to normal field search.
-  if (properties.length === 0) {
-    const fallbackResult = await searchWithFallback(filter)
-    properties = fallbackResult.properties
-    fallbackLevel = fallbackResult.fallbackLevel
+  return {
+    ...plain,
+    matchReason: buildMatchReason(plain, parsed, matchedViaDescription, matchedViaSemantic, language),
   }
-} else {
-  const fallbackResult = await searchWithFallback(filter)
-  properties = fallbackResult.properties
-  fallbackLevel = fallbackResult.fallbackLevel
+})
+
+// Phase 4: post-search follow-up decision — the second and only other call
+// into the policy engine. suppressFollowUp carries forward from the
+// pre-search decision (e.g. a noPreference turn) rather than being
+// re-derived, so there is exactly one suppression source, not two.
+const mixedListingTypes = detectMixedListingTypes(properties)
+
+const followUpDecision = decideFollowUp(
+  { parsed, suppressFollowUp: turnAction.suppressFollowUp === true },
+  {
+    count: properties.length,
+    // searchEvidence.mode is chatPropertySearch.js's machine-readable verdict;
+    // 'fallback' = a soft/open-ended requirement was requested but nothing was
+    // verified. The policy uses only this abstract outcome, never the message.
+    mode: searchEvidence.mode,
+    fallbackLevel,
+    matchedViaSemantic,
+    matchedViaDescription,
+    descriptionSearchAttempted,
+    mixedListingTypes,
+  }
+)
+console.log('Policy decision (post-search):', followUpDecision.reason)
+
+// When the policy resolved this turn as an unverified soft-requirement
+// outcome, it deliberately does NOT continue the hard-slot sequence. Any
+// pending slot question left over from an earlier turn is now irrelevant and
+// must not survive to trigger a stale retry later. Tied strictly to the
+// current search result (softOutcome), never to message vocabulary. Narrow
+// and safe: only fallback outcomes set softOutcome, and they always carry
+// offerSlot null, so this never clobbers a legitimate in-progress question.
+if (followUpDecision.softOutcome) {
+  parsed.pendingQuestion = null
 }
 
 const reply = buildReply({
   properties,
   fallbackLevel,
   parsed,
-  descriptionSearchUsed,
-  descriptionSearchQuery,
+  matchedViaDescription,
+  matchedViaSemantic,
+  descriptionSearchAttempted,
+  relaxedFeatureIds,
+  followUp: followUpDecision,
+  mixedListingTypes,
+  language,
 })
+
+if (followUpDecision.offerSlot) {
+  parsed.pendingQuestion = createOrRetryPendingQuestion(
+    parsed.pendingQuestion,
+    [followUpDecision.offerSlot],
+    parsed.turn
+  )
+}
+
+let responseConversationId = null
+
+if (req.user) {
+  const persistenceResult = await recordChatExchange({
+    userId: req.user._id,
+    conversationId,
+    pageKey,
+    userMessageText: message,
+    assistantReplyText: reply,
+    propertyIds: properties.map((property) => property._id),
+    event: properties.length > 0 ? 'properties_shown' : 'no_results',
+    history,
+    parsed,
+    lead: null,
+  })
+  responseConversationId = persistenceResult.conversationId || conversationId || null
+}
+
     return res.json({
   success: true,
   reply,
@@ -873,6 +506,8 @@ const reply = buildReply({
   descriptionSearchError,
   exactMatch: fallbackLevel === 0,
   aiUsed,
+  conversationId: responseConversationId,
+  language,
 })
   } catch (err) {
     next(err)

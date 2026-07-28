@@ -3,21 +3,133 @@ import { Link, useLocation } from 'react-router-dom'
 import { C } from '../contexts/ThemeContext'
 import { useChat } from '../contexts/ChatContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useLanguage } from '../contexts/LanguageContext'
+
+const HistoryIcon = () => (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+)
+
+// Directional: visually points "back" in LTR. Flipped horizontally when the
+// active language is RTL (Arabic) so it still reads as "back" rather than
+// "forward" — the one icon in this file that needs this; History/Plus/Close
+// are neutral glyphs and are deliberately left unflipped.
+const BackIcon = ({ flip = false }) => (
+  <svg
+    className="h-4 w-4"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+    style={flip ? { transform: 'scaleX(-1)' } : undefined}
+  >
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+  </svg>
+)
+
+const PlusIcon = () => (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+  </svg>
+)
+
+const EmptyHistoryIcon = () => (
+  <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={1}
+      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+    />
+  </svg>
+)
+
+// Maps the app's selected language to a concrete Intl locale, so date/time
+// formatting follows the chosen website language rather than silently
+// deferring to the browser/OS locale (the previous `undefined`-locale
+// behavior).
+const LOCALE_MAP = { en: 'en-US', tr: 'tr-TR', ar: 'ar' }
+
+// Stable module-level fallback (never recreated per render) so `c` keeps a
+// stable identity across renders when translations.chatbot is ever missing —
+// avoids retriggering the pageConfig useMemo below on every render.
+const EMPTY_CHATBOT_TRANSLATIONS = {}
+
+// today: time ("7:15 PM") · yesterday: localized "Yesterday" · within 7 days:
+// weekday ("Monday") · older: compact date ("Jul 10"). Deterministic,
+// local-time based, no date library. Invalid/missing input returns ''.
+// `c` is the active chatbot translation object (t.chatbot || {}).
+const formatConversationTime = (dateString, language, c = {}) => {
+  if (!dateString) return ''
+
+  const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) return ''
+
+  const locale = LOCALE_MAP[language] || LOCALE_MAP.en
+
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const dayDiff = Math.round((startOfToday - startOfDate) / (1000 * 60 * 60 * 24))
+
+  if (dayDiff === 0) {
+    return date.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
+  }
+  if (dayDiff === 1) {
+    return c.history?.yesterday || 'Yesterday'
+  }
+  if (dayDiff > 1 && dayDiff < 7) {
+    return date.toLocaleDateString(locale, { weekday: 'long' })
+  }
+  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
+}
+
+// Turkish drops the plural suffix after a numeral ("2 mesaj", not "2
+// mesajlar") and Arabic's history row stays a simple, professional-neutral
+// count rather than implementing full Arabic plural-category grammar (dual/
+// paucal/plural forms) — both are deliberate, not oversights: the catalogue
+// supplies messageSingular/messagePlural per language, and for tr/ar those
+// two values are intentionally identical.
+const formatMessageCount = (count, c = {}) => {
+  const safeCount = Number.isFinite(count) ? count : 0
+  const singular = c.history?.messageSingular || 'message'
+  const plural = c.history?.messagePlural || 'messages'
+  return `${safeCount} ${safeCount === 1 ? singular : plural}`
+}
 
 export default function AIChatbot() {
   const [input, setInput] = useState('')
   const location = useLocation()
   const { user, isLoggedIn } = useAuth()
+  const { language, t } = useLanguage()
+
+  // Frontend-owned chatbot strings only — backend reply text (msg.text,
+  // matchReason) is untouched in this phase and must keep rendering exactly
+  // as received.
+  const c = t.chatbot || EMPTY_CHATBOT_TRANSLATIONS
+  const isRTL = language === 'ar'
 
   const {
     open,
     loading,
+    selectedConversationId,
+    conversations,
+    conversationsLoading,
+    conversationsError,
+    transcriptLoading,
+    transcriptError,
     openChat,
     closeChat,
     resetChat,
+    syncWelcomeLanguage,
+    startNewConversation,
     getMessages,
     sendMessage,
+    loadConversations,
+    loadConversation,
   } = useChat()
+
+  const [activeScreen, setActiveScreen] = useState('chat')
 
   const pageKey = useMemo(() => {
     const path = location.pathname
@@ -35,67 +147,33 @@ export default function AIChatbot() {
       ? isLoggedIn()
       : Boolean(isLoggedIn || user)
 
+  // Property Details (/properties/:id) is deliberately NOT in this allow-list
+  // — the chatbot should not appear there (that page has its own contact
+  // form). pageKey itself still resolves to the literal path on that route
+  // (see the useMemo above) so the rest of the infrastructure (backend
+  // pageKey support, chatLeadFlow.js's resolvePropertyFromPage, the
+  // propertyDetail translation config) stays intact and this can be
+  // restored later by just re-adding the clause below.
   const chatbotAllowed =
     pageKey === 'properties' ||
     pageKey === 'sale' ||
-    pageKey === 'rent' ||
-    pageKey.startsWith('/properties/')
+    pageKey === 'rent'
 
   const pageConfig = useMemo(() => {
-    if (pageKey === 'sale') {
-      return {
-        welcome:
-          'Welcome to VarliKent. Tell me what kind of property you want to buy, including district, budget, bedrooms, and must-have features.',
-        quickQuestions: [
-          'Show me apartments for sale',
-          'I need a 3 bedroom apartment in Büyükçekmece',
-          'Show me villas for sale',
-          'I need a property under 8 million',
-        ],
-        placeholder: 'Ask about properties for sale...',
-      }
-    }
+    const pages = c.pages || {}
+    const fallback = { welcome: '', quickQuestions: [], placeholder: '' }
 
-    if (pageKey === 'rent') {
-      return {
-        welcome:
-          'Welcome to VarliKent. Tell me what kind of rental property you need, including district, bedrooms, budget, and must-have features.',
-        quickQuestions: [
-          'Show me apartments for rent',
-          'Show me rentals in Beylikdüzü',
-          'I need a furnished rental',
-          'I need a rental with parking',
-        ],
-        placeholder: 'Ask about rentals...',
-      }
-    }
+    if (pageKey === 'sale') return pages.sale || fallback
+    if (pageKey === 'rent') return pages.rent || fallback
+    if (pageKey.startsWith('/properties/')) return pages.propertyDetail || fallback
 
-    if (pageKey.startsWith('/properties/')) {
-      return {
-        welcome:
-          'Welcome to VarliKent. Ask me about this property, or tell me what similar property you are looking for.',
-        quickQuestions: [
-          'Show me similar properties',
-          'I am interested in this property',
-          'Show me properties in this district',
-          'Show me apartments for sale',
-        ],
-        placeholder: 'Ask about this property...',
-      }
-    }
-
-    return {
-      welcome:
-        'Welcome to VarliKent. Tell me your budget, district, and whether you want to buy or rent. I will help you find the right property.',
-      quickQuestions: [
-        'Show me properties for sale',
-        'Show me apartments in Büyükçekmece',
-        'Show me apartments for rent',
-        'I need a villa with pool',
-      ],
-      placeholder: 'Ask about properties...',
-    }
-  }, [pageKey])
+    return pages.default || fallback
+    // `c` changes identity whenever `language` changes (t = translations[language]),
+    // so depending on it here is what makes pageConfig re-derive in the new
+    // language — including a not-yet-started chat's welcome text (see the
+    // resetChat effect below), while an already-active conversation's past
+    // messages are untouched, since that effect only reseeds when empty.
+  }, [pageKey, c])
 
   const messages = getMessages(pageKey)
 
@@ -113,6 +191,17 @@ export default function AIChatbot() {
     messages.length,
   ])
 
+  // Keeps an untouched welcome message following the currently selected
+  // website language, for the ACTIVE page only — syncWelcomeLanguage itself
+  // is a no-op unless the page's bucket still contains exactly the single
+  // isWelcome message, so this never touches a real, already-started
+  // conversation, and never affects any other page's bucket.
+  useEffect(() => {
+    if (!userIsLoggedIn || !chatbotAllowed) return
+
+    syncWelcomeLanguage(pageKey, pageConfig.welcome)
+  }, [userIsLoggedIn, chatbotAllowed, pageKey, pageConfig.welcome])
+
   const handleSend = async (quickText) => {
     const text = quickText || input.trim()
 
@@ -120,6 +209,39 @@ export default function AIChatbot() {
 
     await sendMessage(pageKey, text)
     setInput('')
+  }
+
+  const handleOpenHistory = () => {
+    setActiveScreen('history')
+    loadConversations()
+  }
+
+  const handleBackToChat = () => {
+    setActiveScreen('chat')
+  }
+
+  // The close button, not closeChat() itself (unchanged, still owned by
+  // ChatContext) — this is the "AIChatbot-side" place to make closing
+  // preserve the least-surprising behavior: reopening always lands back on
+  // the Chat screen, without touching messages or selectedConversationId.
+  const handleClose = () => {
+    setActiveScreen('chat')
+    closeChat()
+  }
+
+  const handleStartNewFromHistory = () => {
+    startNewConversation(pageKey, pageConfig.welcome)
+    setActiveScreen('chat')
+  }
+
+  const handleSelectConversation = async (conversation) => {
+    if (transcriptLoading) return
+
+    const result = await loadConversation(pageKey, conversation._id)
+
+    if (result.success) {
+      setActiveScreen('chat')
+    }
   }
 
   // IMPORTANT:
@@ -134,6 +256,7 @@ export default function AIChatbot() {
       {!open && (
         <button
           onClick={openChat}
+          dir={isRTL ? 'rtl' : 'ltr'}
           className="fixed bottom-6 right-4 sm:right-6 z-[9998] flex items-center gap-3 rounded-full px-4 sm:px-5 py-3.5 text-xs font-semibold uppercase tracking-widest shadow-2xl transition-all duration-300 hover:-translate-y-1"
           style={{
             backgroundColor: C.green,
@@ -151,12 +274,13 @@ export default function AIChatbot() {
             ✦
           </span>
 
-          <span className="hidden sm:inline">Ask VarliKent</span>
+          <span className="hidden sm:inline">{c.toggleButton || 'Ask VarliKent'}</span>
         </button>
       )}
 
       {open && (
         <div
+          dir={isRTL ? 'rtl' : 'ltr'}
           className="fixed bottom-6 right-4 sm:right-6 z-[9998] flex h-[540px] w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl shadow-2xl"
           style={{
             backgroundColor: C.cardBg,
@@ -181,47 +305,99 @@ export default function AIChatbot() {
 
             <div className="relative flex items-start justify-between gap-4">
               <div>
-                <p
-                  className="mb-1 text-[10px] font-semibold uppercase tracking-[0.35em]"
-                  style={{ color: C.gold }}
-                >
-                  AI Advisor
-                </p>
+                {activeScreen === 'history' ? (
+                  <h3
+                    className="text-sm font-semibold tracking-[0.2em]"
+                    style={{
+                      color: C.textLight,
+                      fontFamily: 'Cinzel, serif',
+                    }}
+                  >
+                    {c.header?.conversationsTitle || 'Conversations'}
+                  </h3>
+                ) : (
+                  <>
+                    <p
+                      className="mb-1 text-[10px] font-semibold uppercase tracking-[0.35em]"
+                      style={{ color: C.gold }}
+                    >
+                      {c.header?.advisor || 'AI Advisor'}
+                    </p>
 
-                <h3
-                  className="text-sm font-semibold tracking-[0.2em]"
-                  style={{
-                    color: C.textLight,
-                    fontFamily: 'Cinzel, serif',
-                  }}
-                >
-                  VarliKent Assistant
-                </h3>
+                    <h3
+                      className="text-sm font-semibold tracking-[0.2em]"
+                      style={{
+                        color: C.textLight,
+                        fontFamily: 'Cinzel, serif',
+                      }}
+                    >
+                      {c.header?.assistantName || 'VarliKent Assistant'}
+                    </h3>
 
-                <p className="mt-1 text-xs" style={{ color: C.muted }}>
-                  Property Finder
-                </p>
+                    <p className="mt-1 text-xs" style={{ color: C.muted }}>
+                      {c.header?.propertyFinder || 'Property Finder'}
+                    </p>
+                  </>
+                )}
               </div>
 
               <div className="flex gap-2">
-                <button
-                  onClick={() => resetChat(pageKey, pageConfig.welcome)}
-                  className="hidden sm:flex h-8 items-center justify-center rounded-full px-3 text-[10px] uppercase tracking-widest transition hover:opacity-80"
-                  style={{
-                    color: C.textLight,
-                    border: `1px solid rgba(255,255,255,0.18)`,
-                  }}
-                >
-                  New
-                </button>
+                {activeScreen === 'chat' ? (
+                  <button
+                    type="button"
+                    onClick={handleOpenHistory}
+                    className="flex h-8 w-8 items-center justify-center rounded-full outline-none transition hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2"
+                    style={{
+                      color: C.textLight,
+                      border: `1px solid rgba(255,255,255,0.18)`,
+                      outlineColor: C.gold,
+                    }}
+                    aria-label={c.aria?.openHistory || 'Conversation history'}
+                  >
+                    <HistoryIcon />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleBackToChat}
+                    className="flex h-8 w-8 items-center justify-center rounded-full outline-none transition hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2"
+                    style={{
+                      color: C.textLight,
+                      border: `1px solid rgba(255,255,255,0.18)`,
+                      outlineColor: C.gold,
+                    }}
+                    aria-label={c.aria?.backToChat || 'Back to chat'}
+                  >
+                    <BackIcon flip={isRTL} />
+                  </button>
+                )}
+
+                {activeScreen === 'chat' && (
+                  <button
+                    type="button"
+                    onClick={() => startNewConversation(pageKey, pageConfig.welcome)}
+                    className="hidden sm:flex h-8 items-center justify-center rounded-full px-3 text-[10px] uppercase tracking-widest outline-none transition hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2"
+                    style={{
+                      color: C.textLight,
+                      border: `1px solid rgba(255,255,255,0.18)`,
+                      outlineColor: C.gold,
+                    }}
+                    aria-label={c.aria?.startNewConversation || 'Start a new conversation'}
+                  >
+                    {c.actions?.newChatShort || 'New'}
+                  </button>
+                )}
 
                 <button
-                  onClick={closeChat}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-sm transition hover:opacity-80"
+                  type="button"
+                  onClick={handleClose}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-sm outline-none transition hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2"
                   style={{
                     color: C.textLight,
                     border: `1px solid rgba(255,255,255,0.18)`,
+                    outlineColor: C.gold,
                   }}
+                  aria-label={c.aria?.closeChat || 'Close chat'}
                 >
                   ✕
                 </button>
@@ -229,6 +405,130 @@ export default function AIChatbot() {
             </div>
           </div>
 
+          {activeScreen === 'history' ? (
+            <div className="flex flex-1 flex-col overflow-hidden">
+              {/* Pinned New Chat action — a sibling of the scroll container
+                  below, not inside it, so it never scrolls away. */}
+              <div style={{ backgroundColor: C.cardBg, borderBottom: `1px solid ${C.border}` }}>
+                <button
+                  type="button"
+                  onClick={handleStartNewFromHistory}
+                  aria-label={c.aria?.startNewConversation || 'Start a new conversation'}
+                  className="flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-semibold uppercase tracking-widest outline-none transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
+                  style={{ color: C.textLight, backgroundColor: C.deepGreen, outlineColor: C.gold }}
+                >
+                  <PlusIcon />
+                  <span>{c.actions?.newChat || 'New Chat'}</span>
+                </button>
+              </div>
+
+              {/* Scrollable rows only */}
+              <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ backgroundColor: C.softWhite }}>
+                {conversationsLoading && (
+                  <p className="px-4 py-8 text-center text-sm" style={{ color: C.muted }}>
+                    {c.history?.loading || 'Loading conversations...'}
+                  </p>
+                )}
+
+                {!conversationsLoading && conversationsError && (
+                  <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
+                    <p className="text-sm" style={{ color: C.muted }}>
+                      {c.history?.error || "Couldn't load conversations."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={loadConversations}
+                      className="rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-widest outline-none transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2"
+                      style={{ backgroundColor: C.deepGreen, color: C.textLight, outlineColor: C.gold }}
+                    >
+                      {c.actions?.retry || 'Retry'}
+                    </button>
+                  </div>
+                )}
+
+                {!conversationsLoading && !conversationsError && conversations.length === 0 && (
+                  <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
+                    <span style={{ color: C.border }}>
+                      <EmptyHistoryIcon />
+                    </span>
+                    <p className="text-sm font-semibold" style={{ color: C.textDark }}>
+                      {c.history?.empty || 'No saved conversations yet'}
+                    </p>
+                    <p className="text-xs" style={{ color: C.muted }}>
+                      {c.history?.emptyDesc || 'Start chatting and your conversations will appear here.'}
+                    </p>
+                  </div>
+                )}
+
+                {!conversationsLoading && !conversationsError && conversations.length > 0 && (
+                  <div>
+                    {conversations.map((conversation) => {
+                      const isActive = conversation._id === selectedConversationId
+                      // TODO: once ChatConversation gains a real `title` field,
+                      // prefer conversation.title here, falling back to
+                      // lastMessage.text — do not fabricate one in the meantime.
+                      const mainText = conversation.lastMessage?.text?.trim() || c.history?.fallbackTitle || 'Property conversation'
+                      const metaText = `${formatMessageCount(conversation.messageCount, c)} · ${formatConversationTime(conversation.lastActivityAt, language, c)}`
+
+                      return (
+                        <button
+                          type="button"
+                          key={conversation._id}
+                          onClick={() => handleSelectConversation(conversation)}
+                          disabled={transcriptLoading}
+                          aria-label={`${c.aria?.openConversation || 'Open conversation'}: ${mainText}, ${metaText}${isActive ? (c.aria?.currentConversationSuffix || ', current conversation') : ''}`}
+                          className="flex w-full items-start gap-2 px-4 py-3 text-left outline-none transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-[-2px] disabled:cursor-not-allowed disabled:opacity-50"
+                          style={{
+                            borderBottom: `1px solid ${C.border}`,
+                            borderLeft: isActive ? `3px solid ${C.deepGreen}` : '3px solid transparent',
+                            backgroundColor: isActive ? 'rgba(var(--vk-green-rgb), 0.10)' : 'transparent',
+                            outlineColor: C.gold,
+                          }}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p
+                                className="min-w-0 flex-1 line-clamp-2 break-words text-sm leading-snug"
+                                style={{ color: C.textDark, fontWeight: isActive ? 600 : 500 }}
+                              >
+                                {mainText}
+                              </p>
+
+                              {isActive && (
+                                <span
+                                  className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
+                                  style={{ backgroundColor: C.deepGreen, color: C.textLight }}
+                                >
+                                  {c.history?.current || 'Current'}
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="mt-1 truncate text-[11px]" style={{ color: C.muted }}>
+                              {metaText}
+                            </p>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {transcriptLoading && (
+                  <p className="px-4 py-4 text-center text-sm" style={{ color: C.muted }}>
+                    {c.transcript?.loading || 'Loading conversation...'}
+                  </p>
+                )}
+
+                {transcriptError && (
+                  <p className="px-4 py-4 text-center text-sm" style={{ color: '#b91c1c' }}>
+                    {c.transcript?.error || "Couldn't load this conversation."}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Messages */}
           <div
             className="flex-1 space-y-4 overflow-y-auto px-4 py-5"
@@ -250,11 +550,27 @@ export default function AIChatbot() {
                       border: isUser ? 'none' : `1px solid ${C.border}`,
                     }}
                   >
-                    <p className="whitespace-pre-line">{msg.text}</p>
+                    {/* dir="auto" only — content-based direction detection for
+                        mixed-language text. msg.text itself is untouched:
+                        backend replies stay exactly as received. */}
+                    <p className="whitespace-pre-line" dir="auto">{msg.text}</p>
 
                     {!isUser && msg.properties?.length > 0 && (
                       <div className="mt-3 space-y-3">
-                        {msg.properties.map((property) => (
+                        {msg.properties.map((property) => {
+                          // Restored (saved) properties only ever carry the
+                          // lightweight populate fields — beds/baths/sqm are
+                          // simply absent, not zero. Render each part only
+                          // when it's actually present (`!= null` covers
+                          // both undefined and null while still allowing a
+                          // genuine 0, e.g. a studio with 0 bedrooms).
+                          const propertyDetailParts = [
+                            property.beds != null && `${property.beds} ${c.propertyCard?.bedrooms || 'bedrooms'}`,
+                            property.baths != null && `${property.baths} ${c.propertyCard?.bathrooms || 'bathrooms'}`,
+                            property.sqm != null && `${property.sqm} ${c.propertyCard?.sqm || 'm²'}`,
+                          ].filter(Boolean)
+
+                          return (
                           <div
                             key={property._id}
                             className="overflow-hidden rounded-xl"
@@ -272,9 +588,15 @@ export default function AIChatbot() {
                             )}
 
                             <div className="p-3">
+                              {/* dir="auto" — property titles/descriptions are
+                                  not translated (database content, untouched
+                                  in this phase); this only lets the browser's
+                                  bidi algorithm read Latin/Turkish text
+                                  correctly when the surrounding panel is RTL. */}
                               <p
                                 className="text-xs font-semibold uppercase tracking-wide"
                                 style={{ color: C.textDark }}
+                                dir="auto"
                               >
                                 {property.title}
                               </p>
@@ -282,21 +604,23 @@ export default function AIChatbot() {
                               <p
                                 className="mt-1 text-[11px]"
                                 style={{ color: C.muted }}
+                                dir="auto"
                               >
-                                {property.district}, Istanbul ·{' '}
+                                {property.district}, {c.propertyCard?.istanbul || 'Istanbul'} ·{' '}
                                 {property.propertyType} ·{' '}
                                 {property.listingType === 'Rent'
-                                  ? 'For Rent'
-                                  : 'For Sale'}
+                                  ? c.propertyCard?.forRent || 'For Rent'
+                                  : c.propertyCard?.forSale || 'For Sale'}
                               </p>
 
-                              <p
-                                className="mt-1 text-[11px]"
-                                style={{ color: C.muted }}
-                              >
-                                {property.beds} bedrooms · {property.baths}{' '}
-                                bathrooms · {property.sqm} m²
-                              </p>
+                              {propertyDetailParts.length > 0 && (
+                                <p
+                                  className="mt-1 text-[11px]"
+                                  style={{ color: C.muted }}
+                                >
+                                  {propertyDetailParts.join(' · ')}
+                                </p>
+                              )}
 
                               <p
                                 className="mt-2 text-xs font-semibold"
@@ -304,6 +628,16 @@ export default function AIChatbot() {
                               >
                                 {property.priceLabel || property.price}
                               </p>
+
+                              {property.matchReason && (
+                                <p
+                                  className="mt-2 text-[11px] italic leading-snug"
+                                  style={{ color: C.muted }}
+                                  dir="auto"
+                                >
+                                  {property.matchReason}
+                                </p>
+                              )}
 
                               <Link
                                 to={`/properties/${property._id}`}
@@ -314,11 +648,12 @@ export default function AIChatbot() {
                                   color: C.textLight,
                                 }}
                               >
-                                View Property
+                                {c.propertyCard?.viewProperty || 'View Property'}
                               </Link>
                             </div>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </div>
@@ -336,7 +671,7 @@ export default function AIChatbot() {
                     border: `1px solid ${C.border}`,
                   }}
                 >
-                  Searching properties...
+                  {c.thinking || 'Thinking...'}
                 </div>
               </div>
             )}
@@ -350,7 +685,7 @@ export default function AIChatbot() {
               borderTop: `1px solid ${C.border}`,
             }}
           >
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex gap-2 overflow-x-auto pb-1" dir={isRTL ? 'rtl' : 'ltr'}>
               {pageConfig.quickQuestions.map((question) => (
                 <button
                   key={question}
@@ -371,7 +706,7 @@ export default function AIChatbot() {
 
           {/* Input */}
           <div
-            className="flex gap-2 p-4"
+            className={`flex gap-2 p-4 ${isRTL ? 'flex-row-reverse' : ''}`}
             style={{
               backgroundColor: C.cardBg,
               borderTop: `1px solid ${C.border}`,
@@ -385,6 +720,7 @@ export default function AIChatbot() {
               }}
               placeholder={pageConfig.placeholder}
               disabled={loading}
+              dir={isRTL ? 'rtl' : 'ltr'}
               className="min-w-0 flex-1 rounded-full px-4 py-3 text-sm outline-none disabled:opacity-60"
               style={{
                 backgroundColor: C.softWhite,
@@ -402,9 +738,11 @@ export default function AIChatbot() {
                 color: C.textLight,
               }}
             >
-              Send
+              {c.actions?.send || 'Send'}
             </button>
           </div>
+            </>
+          )}
         </div>
       )}
     </>

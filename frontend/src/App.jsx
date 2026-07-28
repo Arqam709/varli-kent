@@ -19,6 +19,7 @@ import FavouritesPage from './pages/FavouritesPage'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminProperties from './pages/AdminProperties'
 import AdminMessages from './pages/AdminMessages'
+import AdminUserChats from './pages/AdminUserChats'
 import AdminUsers from './pages/AdminUsers'
 import AdminReviews from './pages/AdminReviews'
 import AdminAbout from './pages/AdminAbout'
@@ -68,6 +69,7 @@ const App = () => (
           <Route path="/admin/dashboard" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/properties" element={<ProtectedRoute requiredRole="admin"><AdminProperties /></ProtectedRoute>} />
           <Route path="/admin/messages" element={<ProtectedRoute requiredRole="admin"><AdminMessages /></ProtectedRoute>} />
+          <Route path="/admin/user-chats" element={<ProtectedRoute requiredRole="admin"><AdminUserChats /></ProtectedRoute>} />
           <Route path="/admin/users" element={<ProtectedRoute requiredRole="owner"><AdminUsers /></ProtectedRoute>} />
           <Route path="/admin/lead-routing" element={<ProtectedRoute requiredRole="owner"><AdminLeadRouting /></ProtectedRoute>} />
           <Route path="/admin/reviews" element={<ProtectedRoute requiredRole="admin"><AdminReviews /></ProtectedRoute>} />

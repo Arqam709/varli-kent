@@ -115,7 +115,7 @@ const AdminUsers = () => {
 
   const openPermissions = (u) => {
     setPermModal(u)
-    setTempPerms([...u.permissions])
+    setTempPerms([...u.permissions]) //save the permissions in a temp state so we can cancel changes if needed
   }
 
   const savePermissions = async () => {
