@@ -1,10 +1,10 @@
 import { findConceptForWord } from '../utils/lifestyleConcepts.js'
 import { detectMentionedDistricts } from './chatMessageParsing.js'
+import { normalizeForMatching } from '../locales/chatParsingVocabulary.js'
 import { hasMultiplePropertyTypes, pluralizePropertyType } from './chatReplyBuilder.js'
 import {
   isShowMoreRequest,
   countNewStructuredCriteria,
-  hasExplicitContinuityPhrase,
   normalizeWord,
 } from './chatConversationMemory.js'
 import {
@@ -27,16 +27,62 @@ const DISTRICT_BROADEN_PATTERNS = [
   /\beverywhere\b/,
 ]
 
-const DISTRICT_KEEP_PATTERNS = [/\bkeep\b/, /\bstay\b/, /^\s*yes\b/]
+// Narrowed keep phrases: only forms that unambiguously mean "continue in the
+// current district." Bare /\bkeep\b/, /\bstay\b/ and a bare /\bthere\b/
+// continuity match were REMOVED because they fire on unrelated answers —
+// "keep the budget under 5M", "stay close to the metro", "there should be a
+// school nearby" — which must resolve to 'unclear', not 'keep'. The retained
+// forms ("keep it/this/in", "stay here/there/in", "same district", "still in")
+// are the genuine district-continuity phrases the existing tests rely on.
+// Natural-language / negated cases ("don't keep it there") are deliberately NOT
+// solved here — districtScopeAction handles those (see the handler's tiering).
+const DISTRICT_KEEP_PATTERNS = [
+  /\bsame (district|area|place|location|neighbou?rhood)\b/,
+  /\bkeep (it|this|that|here|there|searching|going|us|the search|the same)\b/,
+  /\bkeep (it |the search )?in\b/,
+  /\bstay (here|there|put|in|within|with)\b/,
+  /\bstill (in|there|here)\b/,
+  /^\s*yes\b/,
+]
 
 
-export const resolveDistrictScopeAnswer = (message = '') => {
+// Verifies a Gemini-parsed district against the CURRENT raw message. The parser
+// returns a merged, carry-forward object, so parsedFromMessage.district /
+// .districts can hold a district INHERITED from an earlier turn (see
+// geminiPropertyParser.js Example 13) — its mere presence is NOT evidence that
+// this turn named a new district. It only counts as a 'replace' signal when the
+// district string actually appears in this message's text. normalizeForMatching
+// (reused, no new normalizer) folds case / Turkish İ / Arabic diacritics, and
+// simple suffix forms still match by substring ("şile'de" contains "şile").
+const parsedDistrictAppearsInMessage = (message = '', parsedFromMessage = {}) => {
+  const districts = [
+    ...(parsedFromMessage?.district ? [parsedFromMessage.district] : []),
+    ...(Array.isArray(parsedFromMessage?.districts) ? parsedFromMessage.districts : []),
+  ].filter(Boolean)
+
+  if (districts.length === 0) return false
+
+  const normalizedMessage = normalizeForMatching(message)
+
+  return districts.some((district) => {
+    const normalizedDistrict = normalizeForMatching(district)
+    return Boolean(normalizedDistrict) && normalizedMessage.includes(normalizedDistrict)
+  })
+}
+
+export const resolveDistrictScopeAnswer = (message = '', parsedFromMessage = {}) => {
   if (detectMentionedDistricts(message).length > 0) return 'replace'
 
   const text = message.trim().toLowerCase()
 
   if (DISTRICT_BROADEN_PATTERNS.some((pattern) => pattern.test(text))) return 'broaden'
-  if (hasExplicitContinuityPhrase(message) || DISTRICT_KEEP_PATTERNS.some((pattern) => pattern.test(text))) {
+
+  // Parsed-district evidence, verified against THIS message only. Placed AFTER
+  // the broaden check so an inherited/echoed district can never override an
+  // explicit "anywhere / other districts" answer.
+  if (parsedDistrictAppearsInMessage(message, parsedFromMessage)) return 'replace'
+
+  if (DISTRICT_KEEP_PATTERNS.some((pattern) => pattern.test(text))) {
     return 'keep'
   }
 
@@ -176,7 +222,31 @@ export const handleDistrictScopeClarification = ({
       // multi-field search, or the lead flow).
       parsed.pendingClarification = null
     } else {
-      const districtAnswer = resolveDistrictScopeAnswer(message)
+      // Confidence-tiered resolution (only here, inside the pending
+      // district-scope branch — never touches an ordinary search):
+      //   T1  a clear deterministic BROADEN phrase ("anywhere", "other
+      //       districts") is essentially never negated or ambiguous, so it
+      //       wins outright — even over a weak or malformed Gemini action.
+      //   T2  otherwise a valid, context-aware districtScopeAction decides.
+      //       This is what lets Gemini CORRECT an unsafe deterministic keep or
+      //       replace under negation ("don't keep it there", "kalmasın",
+      //       "لا تبقَ في نفس المنطقة") — cases the deterministic layer cannot
+      //       detect and must not be allowed to win.
+      //   T3  only when Gemini gives nothing (unclear / outage) do we fall back
+      //       to the remaining deterministic result — the narrowed keep set or
+      //       an explicit district -> replace — else 'unclear' triggers retry.
+      // parsedFromMessage is this turn's already-coerced parse, so no
+      // stale/echoed action value can leak in.
+      const deterministicAnswer = resolveDistrictScopeAnswer(message, parsedFromMessage)
+      const scopeAction = ['keep', 'broaden', 'replace'].includes(parsedFromMessage?.districtScopeAction)
+        ? parsedFromMessage.districtScopeAction
+        : 'unclear'
+      const districtAnswer =
+        deterministicAnswer === 'broaden'
+          ? 'broaden'
+          : scopeAction !== 'unclear'
+          ? scopeAction
+          : deterministicAnswer
 
       if (districtAnswer === 'broaden') {
         parsed.district = null
@@ -210,7 +280,7 @@ export const handleDistrictScopeClarification = ({
     const hasOldDistrict = Boolean(parsed.district) || (Array.isArray(parsed.districts) && parsed.districts.length > 0)
 
     if (hasOldDistrict) {
-      const districtAnswer = resolveDistrictScopeAnswer(message)
+      const districtAnswer = resolveDistrictScopeAnswer(message, parsedFromMessage)
 
       if (districtAnswer === 'broaden') {
         parsed.district = null

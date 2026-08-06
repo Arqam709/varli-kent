@@ -48,7 +48,16 @@ nextQuestion: null,
   noPreference: false,
   needsClarification: false,
   clarifyingQuestion: null,
+  // Per-turn dialogue field: the visitor's answer to a pending district-scope
+  // clarification ("keep the current district or broaden?"). Meaningful only
+  // when such a clarification is pending; 'unclear' otherwise. See
+  // PER_TURN_DIALOGUE_FIELDS below and the DISTRICT SCOPE ANSWER prompt rule.
+  districtScopeAction: 'unclear',
 }
+
+// The closed enum for districtScopeAction — one source of truth, reused by the
+// normalizeParsed guard, the merge, and the district-scope resolver.
+export const DISTRICT_SCOPE_ACTIONS = ['keep', 'broaden', 'replace', 'unclear']
 
 // ─── Per-turn dialogue fields (Phase 1 boundary) ──────────────────────────────
 // These fields describe only the CURRENT message (what the visitor just did,
@@ -70,6 +79,7 @@ export const PER_TURN_DIALOGUE_FIELDS = [
   'changedMind',
   'uncertainPropertyType',
   'excludedConcepts',
+  'districtScopeAction',
 ]
 
 // Returns a copy of old round-tripped state with every per-turn dialogue
@@ -214,6 +224,13 @@ safe.descriptionQuery =
     : null
 
   safe.noPreference = safe.noPreference === true
+
+  // districtScopeAction is a per-turn enum — any invalid, missing, null, or
+  // non-string value (including an inherited/echoed one that slipped through)
+  // collapses to the safe 'unclear', never an actionable keep/broaden/replace.
+  safe.districtScopeAction = DISTRICT_SCOPE_ACTIONS.includes(safe.districtScopeAction)
+    ? safe.districtScopeAction
+    : 'unclear'
 
   // Canonicalize (or null out) listingType/propertyType — see the guard
   // defined above. A value already canonical passes through unchanged; a

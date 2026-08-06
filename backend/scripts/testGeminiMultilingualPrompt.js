@@ -150,9 +150,23 @@ const EXPECTED_SCHEMA_FIELDS = [
   'furnished', 'balcony', 'elevator', 'pool', 'garden', 'parking',
   'mustHave', 'niceToHave', 'lifestyle', 'lifestyleConcepts', 'excludedConcepts',
   'changedMind', 'noPreference', 'requirements', 'needsClarification', 'clarifyingQuestion',
+  'districtScopeAction',
 ]
 
 EXPECTED_SCHEMA_FIELDS.forEach((field) => assertTrue(`schema field "${field}" present`, promptEn.includes(`"${field}"`)))
+
+line()
+console.log('13. districtScopeAction rule and examples are present (all languages)')
+line()
+
+assertTrue('schema includes districtScopeAction', promptEn.includes('"districtScopeAction"'))
+assertTrue('has a DISTRICT SCOPE ANSWER rule section', promptEn.includes('DISTRICT SCOPE ANSWER'))
+assertTrue('rule lists all four actions as quoted values', ['keep', 'broaden', 'replace', 'unclear'].every((a) => promptEn.includes(`"${a}"`)))
+assertTrue('rule instructs understanding negation', /negation/i.test(promptEn))
+assertTrue('has a Turkish broaden-with-negation example', promptEn.includes('Beylikdüzü ile sınırlı kalmana gerek yok'))
+assertTrue('has a not-a-district-answer example (stay close to the metro)', /Stay close to the metro/i.test(promptEn))
+assertTrue('has an Arabic broaden example', promptEn.includes('لا أريد البقاء في نفس المنطقة'))
+assertTrue('has an ordinary-search example that must stay unclear', promptEn.includes('Show me apartments in Kadıköy'))
 
 line()
 console.log('12. No "Correct JSON:" example ever uses a non-canonical (translated) enum value')

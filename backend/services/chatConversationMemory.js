@@ -239,6 +239,14 @@ const mergeParsedWithContext = (currentFilters = {}, newParsed = {}) => {
   merged.uncertainPropertyType = newParsed.uncertainPropertyType === true
   merged.excludedConcepts = Array.isArray(newParsed.excludedConcepts) ? newParsed.excludedConcepts : []
 
+  // districtScopeAction is a per-turn dialogue act: take it from THIS turn's
+  // parse only (already stripped from the seed above), and only ever the
+  // valid enum — a stale/echoed value round-tripped from the client can never
+  // survive, it collapses to 'unclear'.
+  merged.districtScopeAction = ['keep', 'broaden', 'replace'].includes(newParsed.districtScopeAction)
+    ? newParsed.districtScopeAction
+    : 'unclear'
+
   // Clarification flags stay backend-owned: do not blindly trust Gemini
   // clarification after we already have memory — we decide missing info
   // ourselves.

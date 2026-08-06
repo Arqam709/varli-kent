@@ -213,8 +213,18 @@ Return JSON in this exact shape:
   "noPreference": false,
   "requirements": [],
   "needsClarification": false,
-  "clarifyingQuestion": null
+  "clarifyingQuestion": null,
+  "districtScopeAction": "unclear"
 }
+
+DISTRICT SCOPE ANSWER (districtScopeAction):
+- This field classifies the visitor's answer to ONE specific pending question: when the most recent Assistant turn asked whether to KEEP searching in the currently active district, or to BROADEN the search to other districts (e.g. "Should I keep searching in Beylikdüzü, or include other districts?").
+- ONLY set an actionable value ("keep", "broaden", or "replace") when the conversation history shows that exact pending district-scope question was just asked and the latest visitor message is answering it. In every other situation — an ordinary property search, a lifestyle request, small talk, or any message that is not answering that specific question — set "unclear".
+- "keep": the visitor wants to continue in the current district (e.g. "keep the same district", "let's stay with Beylikdüzü", "aynı bölgede devam edelim", "ابق في نفس المنطقة").
+- "broaden": the visitor allows or asks to search outside the current district, INCLUDING negated forms (e.g. "search other districts too", "the location is not important", "you don't have to limit it to Beylikdüzü", "don't keep it in the same district", "Beylikdüzü ile sınırlı kalmana gerek yok", "aynı ilçede kalmak istemiyorum", "لا أريد البقاء في نفس المنطقة").
+- "replace": the visitor names a specific new district instead (e.g. "search in Şile instead", "Kadıköy olsun"). Still fill the real district/districts fields as usual — districtScopeAction only describes the action.
+- "unclear": the message does not clearly answer that question — including sentences that merely CONTAIN words like keep/stay/kal/نفس المنطقة but mean something else ("stay close to the metro", "keep the budget below five million") or introduce unrelated new criteria ("show me villas instead").
+- Understand the FULL meaning and any negation — never classify from a single keyword. This field is a dialogue act about THIS turn only; never carry a previous turn's value forward.
 
 Example 1:
 Visitor: I want an apartment
@@ -938,6 +948,32 @@ Correct JSON:
   "clarifyingQuestion": null
 }
 
+DISTRICT SCOPE ANSWER EXAMPLES (focus on districtScopeAction — the rest of the JSON keeps its normal shape and rules):
+
+Example S1 (natural broaden with negation, Turkish):
+Assistant: Should I keep searching in Beylikdüzü, or include other districts?
+Visitor: Beylikdüzü ile sınırlı kalmana gerek yok.
+=> districtScopeAction: "broaden"
+
+Example S2 (natural keep, Turkish):
+Assistant: Should I keep searching in Beylikdüzü, or include other districts?
+Visitor: Aynı bölgede devam edelim.
+=> districtScopeAction: "keep"
+
+Example S3 (NOT a district answer — contains "stay" but means proximity, English):
+Assistant: Should I keep searching in Beylikdüzü, or include other districts?
+Visitor: Stay close to the metro.
+=> districtScopeAction: "unclear"
+
+Example S4 (natural broaden with negation, Arabic):
+Assistant: Should I keep searching in Beylikdüzü, or include other districts?
+Visitor: لا أريد البقاء في نفس المنطقة
+=> districtScopeAction: "broaden"
+
+Example S5 (ordinary search — NO pending district question — must stay "unclear"):
+Visitor: Show me apartments in Kadıköy.
+=> district: "Kadıköy", districtScopeAction: "unclear"
+
 ${conversationBlock}
 `
 }
@@ -980,6 +1016,12 @@ export const parsePropertyMessageWithGemini = async (message, history = [], lang
       excludedConcepts: sanitizeConcepts(parsed.excludedConcepts),
       changedMind: Boolean(parsed.changedMind),
       noPreference: Boolean(parsed.noPreference),
+      // Per-turn district-scope answer classification. Coerced to the closed
+      // enum here (normalizeParsed re-validates it too); anything else -> the
+      // safe 'unclear', so a missing/garbage value never becomes actionable.
+      districtScopeAction: ['keep', 'broaden', 'replace', 'unclear'].includes(parsed.districtScopeAction)
+        ? parsed.districtScopeAction
+        : 'unclear',
     }
   } catch (err) {
     console.log('Gemini parser failed:', err.message)

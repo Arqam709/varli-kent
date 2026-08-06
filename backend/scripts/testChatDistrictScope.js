@@ -119,6 +119,83 @@ assertEqual('"maybe"', resolveDistrictScopeAnswer('maybe'), 'unclear')
 assertEqual('"show me something nice"', resolveDistrictScopeAnswer('show me something nice'), 'unclear')
 assertEqual('"I don\'t know"', resolveDistrictScopeAnswer("I don't know"), 'unclear')
 
+// Narrowed keep patterns: the previously-unsafe bare keep/stay/there no longer
+// misfire on unrelated criteria (these must be 'unclear', not 'keep').
+assertEqual('"Stay close to the metro." -> unclear (not keep)', resolveDistrictScopeAnswer('Stay close to the metro.'), 'unclear')
+assertEqual('"Keep the budget under five million." -> unclear (not keep)', resolveDistrictScopeAnswer('Keep the budget under five million.'), 'unclear')
+assertEqual('"There should be a school nearby." -> unclear (not keep)', resolveDistrictScopeAnswer('There should be a school nearby.'), 'unclear')
+
+// Genuine district-continuity phrasings still resolve to keep.
+assertEqual('"keep searching here" -> keep', resolveDistrictScopeAnswer('keep searching here'), 'keep')
+assertEqual('"stay here" -> keep', resolveDistrictScopeAnswer('stay here'), 'keep')
+assertEqual('"keep the same" -> keep', resolveDistrictScopeAnswer('keep the same'), 'keep')
+
+// ═══════════════════════════════════════════════════════════════════════
+// C2. resolveDistrictScopeAnswer — parsed-district evidence
+//     (second arg: parsedFromMessage, verified against THIS message only)
+// ═══════════════════════════════════════════════════════════════════════
+line()
+console.log('C2. resolveDistrictScopeAnswer — parsed-district evidence')
+line()
+
+// Parsed district outside KNOWN_DISTRICTS but genuinely written this turn.
+assertEqual(
+  'parsed district genuinely in message ("Şile") -> replace',
+  resolveDistrictScopeAnswer('Show me sea-view homes in Şile.', { district: 'Şile', districts: [] }),
+  'replace'
+)
+
+// Parsed district INHERITED from history (not present in this message) must
+// NOT be treated as a new district — this is the canonical sea-view echo case.
+assertEqual(
+  'parsed district inherited/echoed, absent from message ("Beylikdüzü") -> unclear',
+  resolveDistrictScopeAnswer('My wife wants a sea view.', { district: 'Beylikdüzü', districts: [] }),
+  'unclear'
+)
+
+// An inherited parsed district must never override an explicit broaden answer.
+assertEqual(
+  'inherited parsed district does not override broaden ("Anywhere is fine.") -> broaden',
+  resolveDistrictScopeAnswer('Anywhere is fine.', { district: 'Beylikdüzü', districts: [] }),
+  'broaden'
+)
+
+// Multiple parsed districts genuinely mentioned this turn.
+assertEqual(
+  'parsed multiple districts genuinely in message ("Şile or Sarıyer") -> replace',
+  resolveDistrictScopeAnswer('Search Şile or Sarıyer.', { district: null, districts: ['Şile', 'Sarıyer'] }),
+  'replace'
+)
+
+// Multiple parsed districts inherited but not mentioned this turn.
+assertEqual(
+  'parsed multiple districts inherited, absent from message -> unclear',
+  resolveDistrictScopeAnswer('I also want a sea view.', { district: null, districts: ['Beylikdüzü', 'Esenyurt'] }),
+  'unclear'
+)
+
+// Turkish locative suffix still matches by substring ("şile'de" contains "şile").
+assertEqual(
+  'parsed district with Turkish suffix ("Şile\'de") -> replace',
+  resolveDistrictScopeAnswer("Şile'de deniz manzaralı ev göster.", { district: 'Şile', districts: [] }),
+  'replace'
+)
+
+// Existing behavior remains unchanged with the second arg present.
+assertEqual(
+  'known district in message still replace, even with an inherited parsed district',
+  resolveDistrictScopeAnswer('Search in Beşiktaş instead.', { district: 'Beylikdüzü', districts: [] }),
+  'replace'
+)
+assertEqual('"Other districts too." -> broaden', resolveDistrictScopeAnswer('Other districts too.', {}), 'broaden')
+assertEqual('"Keep the same district." -> keep', resolveDistrictScopeAnswer('Keep the same district.', {}), 'keep')
+assertEqual('"I just want something nice." -> unclear', resolveDistrictScopeAnswer('I just want something nice.', { district: null, districts: [] }), 'unclear')
+
+// Missing / undefined / null parsedFromMessage must not crash.
+assertEqual('no second arg (undefined) still works', resolveDistrictScopeAnswer('yes'), 'keep')
+assertEqual('explicit undefined second arg still works', resolveDistrictScopeAnswer('yes', undefined), 'keep')
+assertEqual('null second arg does not crash', resolveDistrictScopeAnswer('Show me homes in Şile.', null), 'unclear')
+
 // ═══════════════════════════════════════════════════════════════════════
 // D. Concept extraction
 // ═══════════════════════════════════════════════════════════════════════
@@ -493,6 +570,148 @@ line()
   assertTrue('handled: reply is a non-empty string', typeof handled.reply === 'string' && handled.reply.length > 0)
   assertEqual('handled: event is clarification_requested', handled.event, 'clarification_requested')
   assertTrue('handled: pendingClarification is a plain object', typeof handled.pendingClarification === 'object' && handled.pendingClarification !== null)
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// O. districtScopeAction integration (consulted only when deterministic is
+//    'unclear', and only inside the pending district-scope branch)
+// ═══════════════════════════════════════════════════════════════════════
+line()
+console.log('O. districtScopeAction integration')
+line()
+{
+  const pending = () => ({ type: 'lifestyle_scope', unresolvedFields: ['district'], lifestyleConcepts: ['school'], retryCount: 0 })
+
+  // O1: natural Turkish broaden that the deterministic resolver cannot classify
+  // ("Konum önemli değil." -> deterministic 'unclear') is resolved via Gemini's
+  // districtScopeAction: 'broaden'.
+  const o1 = handleDistrictScopeClarification({
+    message: 'Konum önemli değil.',
+    currentFilters: { district: 'Kadıköy', pendingClarification: pending() },
+    parsedFromMessage: { districtScopeAction: 'broaden' },
+    parsed: { district: 'Kadıköy', districts: [], propertyType: 'Apartment', pendingClarification: pending() },
+    newLifestyleConceptsInMessage: new Set(),
+  })
+  assertEqual('O1: scopeAction broaden -> handled false (falls through)', o1.handled, false)
+  assertEqual('O1: district cleared', o1.parsed.district, null)
+  assertEqual('O1: districts cleared', o1.parsed.districts, [])
+  assertEqual('O1: pendingClarification cleared', o1.parsed.pendingClarification, null)
+
+  // O2: natural Turkish keep -> retain the district, clear the clarification.
+  const o2 = handleDistrictScopeClarification({
+    message: 'Aynı bölgede devam edelim.',
+    currentFilters: { district: 'Kadıköy', pendingClarification: pending() },
+    parsedFromMessage: { districtScopeAction: 'keep' },
+    parsed: { district: 'Kadıköy', districts: [], propertyType: 'Apartment', pendingClarification: pending() },
+    newLifestyleConceptsInMessage: new Set(),
+  })
+  assertEqual('O2: scopeAction keep -> district retained', o2.parsed.district, 'Kadıköy')
+  assertEqual('O2: scopeAction keep -> pendingClarification cleared', o2.parsed.pendingClarification, null)
+
+  // O3: scopeAction replace clears the clarification and retains the parsed
+  // district (deterministic 'unclear' because the district is not literally in
+  // this message).
+  const o3 = handleDistrictScopeClarification({
+    message: 'başka bir yer olsun',
+    currentFilters: { district: 'Kadıköy', pendingClarification: pending() },
+    parsedFromMessage: { district: 'Şile', districts: [], districtScopeAction: 'replace' },
+    parsed: { district: 'Şile', districts: [], propertyType: 'Apartment', pendingClarification: pending() },
+    newLifestyleConceptsInMessage: new Set(),
+  })
+  assertEqual('O3: scopeAction replace -> parsed district retained', o3.parsed.district, 'Şile')
+  assertEqual('O3: scopeAction replace -> pendingClarification cleared', o3.parsed.pendingClarification, null)
+
+  // O4: scopeAction 'unclear' preserves the existing retry flow (retryCount 0).
+  const o4 = handleDistrictScopeClarification({
+    message: 'hmm',
+    currentFilters: { district: 'Kadıköy', pendingClarification: pending() },
+    parsedFromMessage: { districtScopeAction: 'unclear' },
+    parsed: { district: 'Kadıköy', propertyType: 'Apartment', pendingClarification: pending() },
+    newLifestyleConceptsInMessage: new Set(),
+  })
+  assertEqual('O4: scopeAction unclear -> handled true (retry asked)', o4.handled, true)
+  assertEqual('O4: retryCount incremented to 1', o4.pendingClarification.retryCount, 1)
+
+  // O5: a high-confidence deterministic result WINS over a conflicting
+  // districtScopeAction (deterministic 'broaden' beats scopeAction 'keep').
+  const o5 = handleDistrictScopeClarification({
+    message: 'Anywhere is fine.',
+    currentFilters: { district: 'Kadıköy', pendingClarification: pending() },
+    parsedFromMessage: { districtScopeAction: 'keep' },
+    parsed: { district: 'Kadıköy', districts: [], propertyType: 'Apartment', pendingClarification: pending() },
+    newLifestyleConceptsInMessage: new Set(),
+  })
+  assertEqual('O5: deterministic broaden wins over scopeAction keep -> district cleared', o5.parsed.district, null)
+  assertEqual('O5: pendingClarification cleared', o5.parsed.pendingClarification, null)
+
+  // O6: with NO pending district clarification, districtScopeAction must be
+  // ignored — an ordinary search must not have its district cleared.
+  const o6 = handleDistrictScopeClarification({
+    message: 'Show me apartments in Kadıköy',
+    currentFilters: {},
+    parsedFromMessage: { districtScopeAction: 'broaden', district: 'Kadıköy' },
+    parsed: { district: 'Kadıköy', propertyType: 'Apartment' },
+    newLifestyleConceptsInMessage: new Set(),
+  })
+  assertEqual('O6: no pending clarification -> not handled', o6.handled, false)
+  assertEqual('O6: ordinary district NOT cleared by districtScopeAction', o6.parsed.district, 'Kadıköy')
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// P. Confidence tiering: districtScopeAction corrects unsafe deterministic
+//    keep/replace (negation), and false positives no longer silently keep.
+// ═══════════════════════════════════════════════════════════════════════
+line()
+console.log('P. Negation correction & false-positive tiering')
+line()
+{
+  const pending = () => ({ type: 'lifestyle_scope', unresolvedFields: ['district'], lifestyleConcepts: ['school'], retryCount: 0 })
+  const base = (msg, pf) => ({
+    message: msg,
+    currentFilters: { district: 'Beylikdüzü', pendingClarification: pending() },
+    parsedFromMessage: pf,
+    parsed: { district: 'Beylikdüzü', districts: [], propertyType: 'Apartment', pendingClarification: pending() },
+    newLifestyleConceptsInMessage: new Set(),
+  })
+
+  // P1: English negation — deterministic would say 'keep' ("keep it"); Gemini broaden corrects it.
+  const p1 = handleDistrictScopeClarification(base("Don't keep it there.", { districtScopeAction: 'broaden' }))
+  assertEqual('P1: "Don\'t keep it there." + action broaden -> district cleared', p1.parsed.district, null)
+  assertEqual('P1: districts cleared', p1.parsed.districts, [])
+
+  // P2: Turkish negation WITH a district name — deterministic would say 'replace'; Gemini broaden corrects it.
+  const p2 = handleDistrictScopeClarification(base('Beylikdüzü’nde kalmasın.', { district: 'Beylikdüzü', districts: [], districtScopeAction: 'broaden' }))
+  assertEqual('P2: "kalmasın" + action broaden -> district cleared (not retained)', p2.parsed.district, null)
+
+  // P3: Turkish negation, no district name.
+  const p3 = handleDistrictScopeClarification(base('Aynı ilçede kalmak istemiyorum.', { districtScopeAction: 'broaden' }))
+  assertEqual('P3: "kalmak istemiyorum" + action broaden -> district cleared', p3.parsed.district, null)
+
+  // P4: Arabic negation.
+  const p4 = handleDistrictScopeClarification(base('لا تبقَ في نفس المنطقة', { districtScopeAction: 'broaden' }))
+  assertEqual('P4: Arabic negation + action broaden -> district cleared', p4.parsed.district, null)
+
+  // P5: false-positive guard — "Stay close to the metro." + action unclear stays unclear -> retry (no silent keep).
+  const p5 = handleDistrictScopeClarification(base('Stay close to the metro.', { districtScopeAction: 'unclear' }))
+  assertEqual('P5: "stay close to the metro" + unclear -> retry asked', p5.handled, true)
+  assertEqual('P5: district retained during retry', p5.parsed.district, 'Beylikdüzü')
+
+  // P6: false-positive guard — "Keep the budget under five million." + unclear -> retry (not keep).
+  const p6 = handleDistrictScopeClarification(base('Keep the budget under five million.', { districtScopeAction: 'unclear' }))
+  assertEqual('P6: "keep the budget" + unclear -> retry asked (not silent keep)', p6.handled, true)
+
+  // P7: Gemini-outage high-confidence broaden fallback (action unclear, clear phrase).
+  const p7 = handleDistrictScopeClarification(base('Anywhere is fine.', { districtScopeAction: 'unclear' }))
+  assertEqual('P7: outage "anywhere is fine" -> broaden (district cleared)', p7.parsed.district, null)
+
+  // P8: Gemini-outage high-confidence keep fallback.
+  const p8 = handleDistrictScopeClarification(base('Keep the same district.', { districtScopeAction: 'unclear' }))
+  assertEqual('P8: outage "keep the same district" -> district retained', p8.parsed.district, 'Beylikdüzü')
+  assertEqual('P8: clarification cleared', p8.parsed.pendingClarification, null)
+
+  // P9: a clear deterministic BROADEN still beats a conflicting Gemini action (Tier 1).
+  const p9 = handleDistrictScopeClarification(base('Anywhere is fine.', { districtScopeAction: 'keep' }))
+  assertEqual('P9: deterministic broaden beats conflicting action keep -> district cleared', p9.parsed.district, null)
 }
 
 // ═══════════════════════════════════════════════════════════════════════

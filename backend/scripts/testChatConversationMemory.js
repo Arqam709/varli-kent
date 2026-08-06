@@ -1133,6 +1133,34 @@ line()
 }
 
 line()
+console.log('R14: districtScopeAction per-turn discipline')
+line()
+{
+  // A stale 'broaden' round-tripped in currentFilters must never survive: the
+  // current turn's value wins, and an absent current value collapses to 'unclear'.
+  const staleToUnclear = resolveConversationState({
+    message: 'what is the price',
+    currentFilters: { districtScopeAction: 'broaden', turn: 2 },
+    parsedFromMessage: emptyParsed({ districtScopeAction: 'unclear' }),
+  }).parsed
+  assertEqual('R14a: stale broaden + current unclear -> unclear', staleToUnclear.districtScopeAction, 'unclear')
+
+  const currentWins = resolveConversationState({
+    message: 'aynı bölgede devam edelim',
+    currentFilters: { districtScopeAction: 'broaden', turn: 2 },
+    parsedFromMessage: emptyParsed({ districtScopeAction: 'keep' }),
+  }).parsed
+  assertEqual('R14b: current-turn keep wins over stale broaden', currentWins.districtScopeAction, 'keep')
+
+  const absentCurrent = resolveConversationState({
+    message: 'show me more',
+    currentFilters: { districtScopeAction: 'broaden', turn: 2 },
+    parsedFromMessage: emptyParsed({}),
+  }).parsed
+  assertEqual('R14c: stale broaden + absent current -> unclear', absentCurrent.districtScopeAction, 'unclear')
+}
+
+line()
 console.log('SUMMARY')
 line()
 console.log(`${passCount} passed, ${failCount} failed`)
