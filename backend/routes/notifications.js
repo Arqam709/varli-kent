@@ -1,7 +1,9 @@
 import express from 'express'
 import Property from '../models/Property.js'
+import PropertyAlert from '../models/PropertyAlert.js'
 import User from '../models/User.js'
 import { protect } from '../middleware/auth.js'
+import { propertyMatchesAlert } from '../services/propertyAlerts.js'
 
 const router = express.Router()
 
@@ -47,35 +49,37 @@ router.get('/', protect, async (req, res, next) => {
   try {
     const since = baselineFor(req.user)
 
-    // Captured BEFORE the query so it can never be later than the newest
-    // property returned. The client sends this back to /seen, which is what
-    // stops a property created mid-request from being silently skipped.
     const snapshotAt = new Date()
 
-    // No status filter, matching GET /api/properties — the public list does
-    // not hide Sold/Rented either, so notifications stay consistent with what
-    // tapping through will actually show. Deleted properties are removed with
-    // findByIdAndDelete, so they simply cannot appear.
     const properties = await Property.find({ createdAt: { $gt: since } })
       .select(NOTIFICATION_PROPERTY_FIELDS)
       .sort({ createdAt: -1 })
       .limit(FEED_LIMIT)
+
+    const alerts = await PropertyAlert.find({ user: req.user._id, active: true })
+
+    const matchedPropertyIds = []
+    for (const property of properties) {
+      if (alerts.some((alert) => propertyMatchesAlert(property, alert))) {
+        matchedPropertyIds.push(String(property._id))
+      }
+    }
 
     res.json({
       success: true,
       count: properties.length,
       snapshotAt,
       notifications: properties,
+      
+      matchedPropertyIds,
+      
+      alertCount: alerts.length,
     })
   } catch (err) {
     next(err)
   }
 })
 
-// GET /api/notifications/unread-count
-// Cheap count for the bell badge. Deliberately separate from the feed so the
-// Home screen does not download up to 50 properties just to render a dot,
-// and — importantly — reading the badge never advances the seen timestamp.
 router.get('/unread-count', protect, async (req, res, next) => {
   try {
     const since = baselineFor(req.user)
@@ -87,11 +91,6 @@ router.get('/unread-count', protect, async (req, res, next) => {
   }
 })
 
-// PATCH /api/notifications/seen
-// Body: { seenAt?: ISO string }
-//
-// Advances this user's baseline. `seenAt` should be the `snapshotAt` returned
-// by the feed, so anything created after that snapshot stays unread.
 router.patch('/seen', protect, async (req, res, next) => {
   try {
     const now = new Date()
