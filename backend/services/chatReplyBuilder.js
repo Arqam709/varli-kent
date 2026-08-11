@@ -271,6 +271,8 @@ export const buildReply = (args = {}) => {
     relaxedFeatureIds,
     followUp,
     mixedListingTypes,
+    searchEvidence,
+    resultScope,
     language = 'en',
   } = args
 
@@ -299,6 +301,8 @@ export const buildReply = (args = {}) => {
     relaxedFeatureIds: effectiveRelaxedFeatureIds,
     followUp,
     mixedListingTypes,
+    searchEvidence,
+    resultScope,
   })
 
   const text = renderSearchResultPlan(plan, nextQuestion, language)

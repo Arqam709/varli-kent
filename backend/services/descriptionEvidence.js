@@ -224,6 +224,64 @@ export const propertyVerifiesDescription = (property, units) => {
   return evaluateDescriptionEvidence(coverage).verified
 }
 
+// ─── Per-criterion request model (one criterion per requirement phrase) ─────
+// A multi-part request ("family home near schools with a garden") must NOT be
+// collapsed into one merged unit pool, or majority coverage could hide a single
+// missing criterion (family+home outvoting a missing school). So each distinct
+// requirement PHRASE is its own criterion with its own evidence units — the
+// exact same granularity evaluateRequestEvidence already used, now shared as one
+// source of truth. Pure; deterministic; reuses buildEvidenceUnits (no new
+// evidence logic). A phrase with no verifiable units (e.g. "suitable") is
+// dropped. Deduped case-insensitively.
+export const buildRequestCriteria = (parsed = {}) => {
+  const seen = new Set()
+  const criteria = []
+
+  for (const phrase of getRequirementPhrases(parsed)) {
+    const key = String(phrase).trim().toLowerCase()
+    if (!key || seen.has(key)) continue
+
+    const units = buildEvidenceUnits({ lifestyle: [phrase] })
+    if (units.length === 0) continue
+
+    seen.add(key)
+    criteria.push({ phrase, units })
+  }
+
+  return criteria
+}
+
+// Per-property, per-criterion evidence for ONE property. Each criterion is
+// verified independently against this property's text (majority unit coverage /
+// phrase adjacency — the same rule the lexical search path uses), so a property
+// that supports only some requested criteria is never reported as fully
+// verified. Returns the smallest contract the reply layers need:
+//   { fullyVerified, verifiedCriteria, unverifiedCriteria }
+// When nothing verifiable was requested, fullyVerified is trivially true and
+// both lists are empty. `criteria` may be prebuilt once (via buildRequestCriteria)
+// and passed in to avoid rebuilding per candidate. Never mutates inputs.
+export const evaluatePropertyEvidence = (parsed = {}, property = {}, criteria = null) => {
+  const crit = criteria || buildRequestCriteria(parsed)
+
+  if (crit.length === 0) {
+    return { fullyVerified: true, verifiedCriteria: [], unverifiedCriteria: [] }
+  }
+
+  const verifiedCriteria = []
+  const unverifiedCriteria = []
+
+  for (const { phrase, units } of crit) {
+    if (propertyVerifiesDescription(property, units)) verifiedCriteria.push(phrase)
+    else unverifiedCriteria.push(phrase)
+  }
+
+  return {
+    fullyVerified: unverifiedCriteria.length === 0,
+    verifiedCriteria,
+    unverifiedCriteria,
+  }
+}
+
 // ─── Request-level soft-criteria evidence (across a returned set) ───────────
 // Change B: honest evidence for SEMANTIC results. Semantic retrieval ranks by
 // meaning only, so a returned candidate carries NO coverage guarantee — this
@@ -253,19 +311,11 @@ export const propertyVerifiesDescription = (property, units) => {
 // reporting stays valid). Both are the same honesty principle at the
 // granularity each retrieval mechanism can support — not two competing rules.
 export const evaluateRequestEvidence = (parsed = {}, properties = []) => {
-  const seen = new Set()
-  const criteria = []
-
-  for (const phrase of getRequirementPhrases(parsed)) {
-    const key = String(phrase).trim().toLowerCase()
-    if (!key || seen.has(key)) continue
-
-    const units = buildEvidenceUnits({ lifestyle: [phrase] })
-    if (units.length === 0) continue // no verifiable content (e.g. "suitable")
-
-    seen.add(key)
-    criteria.push({ phrase, units })
-  }
+  // Shared criterion model (buildRequestCriteria) — identical to the previous
+  // inline loop, now the single source of truth also used by
+  // evaluatePropertyEvidence, so aggregate and per-property evidence can never
+  // disagree about what the criteria are.
+  const criteria = buildRequestCriteria(parsed)
 
   if (criteria.length === 0) {
     return {

@@ -53,11 +53,21 @@ nextQuestion: null,
   // when such a clarification is pending; 'unclear' otherwise. See
   // PER_TURN_DIALOGUE_FIELDS below and the DISTRICT SCOPE ANSWER prompt rule.
   districtScopeAction: 'unclear',
+  // Per-turn dialogue field: whether the visitor is refining the property SET
+  // shown in the previous answer ("which of these are near schools?") versus
+  // starting a new/global search. Meaningful only for this turn; 'unclear'
+  // (= no restriction, normal global search) otherwise. See
+  // PER_TURN_DIALOGUE_FIELDS below and the RESULT SCOPE prompt rule.
+  resultScopeAction: 'unclear',
 }
 
 // The closed enum for districtScopeAction — one source of truth, reused by the
 // normalizeParsed guard, the merge, and the district-scope resolver.
 export const DISTRICT_SCOPE_ACTIONS = ['keep', 'broaden', 'replace', 'unclear']
+
+// The closed enum for resultScopeAction — one source of truth, reused by the
+// normalizeParsed guard, the merge, and the chat.js scope application.
+export const RESULT_SCOPE_ACTIONS = ['previous_results', 'new_search', 'unclear']
 
 // ─── Per-turn dialogue fields (Phase 1 boundary) ──────────────────────────────
 // These fields describe only the CURRENT message (what the visitor just did,
@@ -80,6 +90,7 @@ export const PER_TURN_DIALOGUE_FIELDS = [
   'uncertainPropertyType',
   'excludedConcepts',
   'districtScopeAction',
+  'resultScopeAction',
 ]
 
 // Returns a copy of old round-tripped state with every per-turn dialogue
@@ -230,6 +241,12 @@ safe.descriptionQuery =
   // collapses to the safe 'unclear', never an actionable keep/broaden/replace.
   safe.districtScopeAction = DISTRICT_SCOPE_ACTIONS.includes(safe.districtScopeAction)
     ? safe.districtScopeAction
+    : 'unclear'
+
+  // resultScopeAction is a per-turn enum — any invalid, missing, null, or
+  // inherited value collapses to 'unclear' (no scope restriction, normal search).
+  safe.resultScopeAction = RESULT_SCOPE_ACTIONS.includes(safe.resultScopeAction)
+    ? safe.resultScopeAction
     : 'unclear'
 
   // Canonicalize (or null out) listingType/propertyType — see the guard

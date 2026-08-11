@@ -150,10 +150,22 @@ const EXPECTED_SCHEMA_FIELDS = [
   'furnished', 'balcony', 'elevator', 'pool', 'garden', 'parking',
   'mustHave', 'niceToHave', 'lifestyle', 'lifestyleConcepts', 'excludedConcepts',
   'changedMind', 'noPreference', 'requirements', 'needsClarification', 'clarifyingQuestion',
-  'districtScopeAction',
+  'districtScopeAction', 'resultScopeAction',
 ]
 
 EXPECTED_SCHEMA_FIELDS.forEach((field) => assertTrue(`schema field "${field}" present`, promptEn.includes(`"${field}"`)))
+
+line()
+console.log('RESULT SCOPE rule and examples are present')
+line()
+
+assertTrue('schema includes resultScopeAction', promptEn.includes('"resultScopeAction"'))
+assertTrue('has a RESULT SCOPE rule section', promptEn.includes('RESULT SCOPE'))
+assertTrue('rule lists all three actions as quoted values', ['previous_results', 'new_search', 'unclear'].every((a) => promptEn.includes(`"${a}"`)))
+assertTrue('rule warns property_followup != previous_results', /property_followup.*(does NOT|not).*previous_results/i.test(promptEn) || /follow-up.*new_search/i.test(promptEn))
+assertTrue('has a refine-shown-set example without literal these/those', promptEn.includes('Which would be good for my children? I want a school nearby.'))
+assertTrue('has an explicit new-search example', promptEn.includes('Forget those, show villas in Sarıyer.'))
+assertTrue('has the "other districts" example that must stay new_search', promptEn.includes('What other districts have good sea-view apartments?'))
 
 line()
 console.log('13. districtScopeAction rule and examples are present (all languages)')

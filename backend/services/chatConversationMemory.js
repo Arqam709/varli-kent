@@ -247,6 +247,13 @@ const mergeParsedWithContext = (currentFilters = {}, newParsed = {}) => {
     ? newParsed.districtScopeAction
     : 'unclear'
 
+  // resultScopeAction is a per-turn dialogue act: take it from THIS turn's parse
+  // only (already stripped from the seed above), so a "previous_results" from an
+  // earlier turn can never leak forward — it collapses to 'unclear'.
+  merged.resultScopeAction = ['previous_results', 'new_search'].includes(newParsed.resultScopeAction)
+    ? newParsed.resultScopeAction
+    : 'unclear'
+
   // Clarification flags stay backend-owned: do not blindly trust Gemini
   // clarification after we already have memory — we decide missing info
   // ourselves.
