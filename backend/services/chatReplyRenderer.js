@@ -221,6 +221,11 @@ const pluralizePropertyTypeEn = (type) => (PROPERTY_TYPE_PLURAL_OVERRIDES_EN[typ
 
 const renderSearchResultPlanEn = (plan, nextQuestion) => {
   if (plan.type === 'no_results') {
+    // Scope was locked to the previously-shown set and nothing there matched —
+    // distinct from a global no-result; never broaden silently.
+    if (plan.scope === 'previous_results') {
+      return 'None of the properties I showed you earlier match that. Would you like me to search other properties instead?'
+    }
     // Unverified open-ended requirement, nothing to show: honest, terminal —
     // no "yet", no "try adding a district/budget/type" (narrowing a hard
     // filter cannot add the missing description evidence), no appended
@@ -237,21 +242,35 @@ const renderSearchResultPlanEn = (plan, nextQuestion) => {
   }
 
   if (plan.type === 'soft_match') {
-    const { count, verifiedCount, noneVerified, mixedVerified, matchedViaSemantic, requestedConceptIds, descriptionQuery, listingType, propertyType, propertyTypes } = plan
+    const { count, verifiedCount, noneVerified, mixedVerified, matchedViaSemantic, requestedConceptIds, unmatchedConceptIds = requestedConceptIds, hasUnmatchedCriteria = (requestedConceptIds || []).length > 0, scope, descriptionQuery, listingType, propertyType, propertyTypes } = plan
     const propertyText = count === 1 ? '1 property' : `${count} properties`
 
+    // Verification wins over the raw "by meaning" phrasing: an unverified or
+    // partially-verified semantic set must be described honestly, so
+    // noneVerified/mixedVerified are checked BEFORE matchedViaSemantic. (For
+    // description results matchedViaSemantic is false, so ordering is unchanged.)
     let reply
-    if (matchedViaSemantic) {
-      reply = `I found ${propertyText} that may match your request by meaning.`
+    if (noneVerified && !hasUnmatchedCriteria) {
+      // Example C: every requested criterion is met by SOME listing, but no
+      // single listing confirms all of them together — so name nothing as unverified.
+      reply = `I found ${propertyText} that match parts of your request, though no single listing confirms everything together.`
     } else if (noneVerified) {
-      const topics = requestedConceptIds.map((id) => conceptTopicPhrase(id, 'en')).filter(Boolean)
+      // Name ONLY the criteria unmatched across the whole set (not every requested
+      // concept) — the same truth the cards show, so summary and cards agree.
+      const topics = unmatchedConceptIds.map((id) => conceptTopicPhrase(id, 'en')).filter(Boolean)
       const topic = topics.length === 0 ? genericDescriptionTopic('en') : joinList(topics, 'en', 'or')
-      reply = `I could not verify ${topic} from the available listing descriptions. Here ${count === 1 ? 'is' : 'are'} ${propertyText} that match${count === 1 ? 'es' : ''} your other requirements.`
+      reply = scope === 'previous_results'
+        // Search was locked to the previously-shown set — say "those" and offer
+        // to broaden, never silently presenting unrelated global alternatives.
+        ? `Among the properties I showed you earlier, I could not confirm ${topic}. Would you like me to search other properties instead?`
+        : `I could not verify ${topic} from the available listing descriptions. Here ${count === 1 ? 'is' : 'are'} ${propertyText} that match${count === 1 ? 'es' : ''} your other requirements.`
     } else if (mixedVerified) {
       const verifiedText = verifiedCount === 1 ? '1 listing' : `${verifiedCount} listings`
       const remainderCount = count - verifiedCount
       const remainderText = remainderCount === 1 ? '1 broader alternative' : `${remainderCount} broader alternatives`
       reply = `I found ${verifiedText} with description-matched details, plus ${remainderText} that match your structured requirements.`
+    } else if (matchedViaSemantic) {
+      reply = `I found ${propertyText} that may match your request by meaning.`
     } else {
       reply = `I found ${propertyText} that may match your request based on the property descriptions.`
     }
@@ -337,6 +356,9 @@ const renderSearchResultPlanEn = (plan, nextQuestion) => {
 // structure). NEW for Phase 3 — needs native-speaker review; see report. ───
 const renderSearchResultPlanTr = (plan, nextQuestion) => {
   if (plan.type === 'no_results') {
+    if (plan.scope === 'previous_results') {
+      return 'Daha önce gösterdiğim mülkler arasında bununla eşleşen yok. Başka mülkleri aramamı ister misiniz?'
+    }
     if (plan.softOutcome === 'unverified_no_results') {
       return tMessage(['softUnverified', 'noResults'], 'tr')
     }
@@ -348,18 +370,23 @@ const renderSearchResultPlanTr = (plan, nextQuestion) => {
   }
 
   if (plan.type === 'soft_match') {
-    const { count, verifiedCount, noneVerified, mixedVerified, matchedViaSemantic, requestedConceptIds, descriptionQuery, listingType, propertyType, propertyTypes } = plan
+    const { count, verifiedCount, noneVerified, mixedVerified, matchedViaSemantic, requestedConceptIds, unmatchedConceptIds = requestedConceptIds, hasUnmatchedCriteria = (requestedConceptIds || []).length > 0, scope, descriptionQuery, listingType, propertyType, propertyTypes } = plan
     const propertyText = `${count} ${pluralize('tr', count, genericPropertyLabelForms('tr'))}`
 
     let reply
-    if (matchedViaSemantic) {
-      reply = `Anlamca isteğinizle eşleşebilecek ${propertyText} buldum.`
+    if (noneVerified && !hasUnmatchedCriteria) {
+      // Example C — see the English renderer for rationale.
+      reply = `İsteğinizin bazı kısımlarıyla eşleşen ${propertyText} buldum, ancak hiçbir ilan istediğiniz her şeyi birlikte karşılamıyor.`
     } else if (noneVerified) {
-      const topics = requestedConceptIds.map((id) => conceptTopicPhrase(id, 'tr')).filter(Boolean)
+      const topics = unmatchedConceptIds.map((id) => conceptTopicPhrase(id, 'tr')).filter(Boolean)
       const topic = topics.length === 0 ? genericDescriptionTopic('tr') : joinList(topics, 'tr', 'or')
-      reply = `${topic} mevcut ilan açıklamalarından doğrulayamadım. Yine de diğer isteklerinizle eşleşen ${propertyText} buluyorum.`
+      reply = scope === 'previous_results'
+        ? `Daha önce gösterdiğim mülkler arasında ${topic} doğrulayamadım. Başka mülkleri aramamı ister misiniz?`
+        : `${topic} mevcut ilan açıklamalarından doğrulayamadım. Yine de diğer isteklerinizle eşleşen ${propertyText} buluyorum.`
     } else if (mixedVerified) {
       reply = `Açıklamayla eşleşen ${verifiedCount} ilan, artı yapısal isteklerinizle eşleşen ${count - verifiedCount} alternatif buldum.`
+    } else if (matchedViaSemantic) {
+      reply = `Anlamca isteğinizle eşleşebilecek ${propertyText} buldum.`
     } else {
       reply = `Mülk açıklamalarına göre isteğinizle eşleşebilecek ${propertyText} buldum.`
     }
@@ -421,6 +448,9 @@ const renderSearchResultPlanTr = (plan, nextQuestion) => {
 
 const renderSearchResultPlanAr = (plan, nextQuestion) => {
   if (plan.type === 'no_results') {
+    if (plan.scope === 'previous_results') {
+      return 'لا يوجد بين العقارات التي عرضتها عليك سابقاً ما يطابق ذلك. هل تريد أن أبحث في عقارات أخرى؟'
+    }
     if (plan.softOutcome === 'unverified_no_results') {
       return tMessage(['softUnverified', 'noResults'], 'ar')
     }
@@ -432,18 +462,23 @@ const renderSearchResultPlanAr = (plan, nextQuestion) => {
   }
 
   if (plan.type === 'soft_match') {
-    const { count, verifiedCount, noneVerified, mixedVerified, matchedViaSemantic, requestedConceptIds, descriptionQuery, listingType, propertyType, propertyTypes } = plan
+    const { count, verifiedCount, noneVerified, mixedVerified, matchedViaSemantic, requestedConceptIds, unmatchedConceptIds = requestedConceptIds, hasUnmatchedCriteria = (requestedConceptIds || []).length > 0, scope, descriptionQuery, listingType, propertyType, propertyTypes } = plan
     const propertyText = `${count} ${pluralize('ar', count, genericPropertyLabelForms('ar'))}`
 
     let reply
-    if (matchedViaSemantic) {
-      reply = `وجدت ${propertyText} قد تتطابق مع طلبك من حيث المعنى.`
+    if (noneVerified && !hasUnmatchedCriteria) {
+      // Example C — see the English renderer for rationale.
+      reply = `وجدت ${propertyText} تطابق أجزاءً من طلبك، لكن لا يوجد إعلان واحد يؤكد كل ما طلبته معاً.`
     } else if (noneVerified) {
-      const topics = requestedConceptIds.map((id) => conceptTopicPhrase(id, 'ar')).filter(Boolean)
+      const topics = unmatchedConceptIds.map((id) => conceptTopicPhrase(id, 'ar')).filter(Boolean)
       const topic = topics.length === 0 ? genericDescriptionTopic('ar') : joinList(topics, 'ar', 'or')
-      reply = `تعذّر التأكد من ${topic} من أوصاف الإعلانات المتاحة. مع ذلك، وجدت ${propertyText} تطابق متطلباتك الأخرى.`
+      reply = scope === 'previous_results'
+        ? `من بين العقارات التي عرضتها عليك سابقاً، تعذّر عليّ تأكيد ${topic}. هل تريد أن أبحث في عقارات أخرى؟`
+        : `تعذّر التأكد من ${topic} من أوصاف الإعلانات المتاحة. مع ذلك، وجدت ${propertyText} تطابق متطلباتك الأخرى.`
     } else if (mixedVerified) {
       reply = `وجدت ${verifiedCount} إعلاناً مطابقاً للوصف، بالإضافة إلى ${count - verifiedCount} بديل يطابق متطلباتك الأساسية.`
+    } else if (matchedViaSemantic) {
+      reply = `وجدت ${propertyText} قد تتطابق مع طلبك من حيث المعنى.`
     } else {
       reply = `وجدت ${propertyText} قد تتطابق مع طلبك بناءً على أوصاف العقارات.`
     }
@@ -516,7 +551,7 @@ const renderMatchReasonPlanEn = (plan) => {
   const {
     propertyType, listingType, propertyTypeMatches, listingTypeMatches, districtMatches,
     propertyTypeInRequestedSet, bedsMatches, bathsMatches, budgetMatches, beds, baths,
-    matchedFeatureIds, matchedConceptIds, unverifiedConceptId, semanticGenericClaim, descriptionGenericClaim,
+    matchedFeatureIds, matchedConceptIds, unverifiedConceptId, hasUnverifiedRequirement, semanticGenericClaim, descriptionGenericClaim,
     requestedDistricts, propertyDistrict,
   } = plan
 
@@ -545,6 +580,16 @@ const renderMatchReasonPlanEn = (plan) => {
     unverifiedSoftNote = conceptUnverifiedLabel(unverifiedConceptId, 'en') || 'That part of your description could not be confirmed from the listing details.'
   }
 
+  // Independent unverified note (Area A): even when a matched concept or a
+  // structured feature was already shown above, an unconfirmed requirement must
+  // still be stated — so a partial semantic match ("has an elevator" / "family-
+  // friendly") never implies the missing part ("wheelchair" / "school") was met.
+  if (!unverifiedSoftNote && hasUnverifiedRequirement) {
+    unverifiedSoftNote = unverifiedConceptId
+      ? conceptUnverifiedLabel(unverifiedConceptId, 'en') || 'That part of your description could not be confirmed from the listing details.'
+      : 'That part of your description could not be confirmed from the listing details.'
+  }
+
   const clauses = []
   if (primaryParts.length > 0) clauses.push(`it is ${primaryParts.join(' ')}`)
   clauses.push(...extraParts)
@@ -570,7 +615,7 @@ const renderMatchReasonPlanTr = (plan) => {
   const {
     propertyType, listingType, propertyTypeMatches, listingTypeMatches, districtMatches,
     propertyTypeInRequestedSet, bedsMatches, bathsMatches, budgetMatches, beds, baths,
-    matchedFeatureIds, matchedConceptIds, unverifiedConceptId, semanticGenericClaim, descriptionGenericClaim,
+    matchedFeatureIds, matchedConceptIds, unverifiedConceptId, hasUnverifiedRequirement, semanticGenericClaim, descriptionGenericClaim,
     requestedDistricts, propertyDistrict,
   } = plan
 
@@ -598,6 +643,13 @@ const renderMatchReasonPlanTr = (plan) => {
     unverifiedSoftNote = conceptUnverifiedLabel(unverifiedConceptId, 'tr') || 'Açıklamanızın bu kısmı ilan detaylarından doğrulanamadı.'
   }
 
+  // Independent unverified note (Area A) — see the English renderer for rationale.
+  if (!unverifiedSoftNote && hasUnverifiedRequirement) {
+    unverifiedSoftNote = unverifiedConceptId
+      ? conceptUnverifiedLabel(unverifiedConceptId, 'tr') || 'Açıklamanızın bu kısmı ilan detaylarından doğrulanamadı.'
+      : 'Açıklamanızın bu kısmı ilan detaylarından doğrulanamadı.'
+  }
+
   const allParts = [...primaryParts, ...extraParts].filter(Boolean)
 
   let reason
@@ -620,7 +672,7 @@ const renderMatchReasonPlanAr = (plan) => {
   const {
     propertyType, listingType, propertyTypeMatches, listingTypeMatches, districtMatches,
     propertyTypeInRequestedSet, bedsMatches, bathsMatches, budgetMatches, beds, baths,
-    matchedFeatureIds, matchedConceptIds, unverifiedConceptId, semanticGenericClaim, descriptionGenericClaim,
+    matchedFeatureIds, matchedConceptIds, unverifiedConceptId, hasUnverifiedRequirement, semanticGenericClaim, descriptionGenericClaim,
     requestedDistricts, propertyDistrict,
   } = plan
 
@@ -646,6 +698,13 @@ const renderMatchReasonPlanAr = (plan) => {
     extraParts.push(genericMatchReasonClause('ar'))
   } else if (unverifiedConceptId) {
     unverifiedSoftNote = conceptUnverifiedLabel(unverifiedConceptId, 'ar') || 'تعذّر التأكد من هذا الجزء من الوصف بناءً على تفاصيل الإعلان.'
+  }
+
+  // Independent unverified note (Area A) — see the English renderer for rationale.
+  if (!unverifiedSoftNote && hasUnverifiedRequirement) {
+    unverifiedSoftNote = unverifiedConceptId
+      ? conceptUnverifiedLabel(unverifiedConceptId, 'ar') || 'تعذّر التأكد من هذا الجزء من الوصف بناءً على تفاصيل الإعلان.'
+      : 'تعذّر التأكد من هذا الجزء من الوصف بناءً على تفاصيل الإعلان.'
   }
 
   const allParts = [...primaryParts, ...extraParts].filter(Boolean)

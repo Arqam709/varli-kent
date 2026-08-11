@@ -17,7 +17,7 @@
 // This module does not parse messages, run searches, build Mongo filters,
 // or know about Express/req/res.
 
-import { extractConceptIdsFromText } from '../utils/lifestyleConcepts.js'
+import { extractConceptIdsFromText, CANONICAL_CONCEPT_IDS } from '../utils/lifestyleConcepts.js'
 import { hasSoftDescriptionSearch } from './chatMessageParsing.js'
 
 // ─── Shared small helpers (kept as independent copies, matching this
@@ -85,7 +85,13 @@ export const buildSearchResultPlan = ({
   relaxedFeatureIds = [],
   followUp,
   mixedListingTypes,
+  searchEvidence,
+  resultScope,
 } = {}) => {
+  // 'previous_results' when the search was locked inside the previously-shown
+  // set (chat.js applied filter._id.$in) — lets the renderer say "none of THOSE"
+  // and offer to broaden, distinct from a global no-result. Language-independent.
+  const scope = resultScope === 'previous_results' ? 'previous_results' : null
   const count = properties.length
   const followUpPlan = followUp
     ? { offerSlot: followUp.offerSlot ?? null, reOffer: Boolean(followUp.reOffer) }
@@ -103,6 +109,7 @@ export const buildSearchResultPlan = ({
       type: 'no_results',
       descriptionSearchAttempted,
       softOutcome,
+      scope,
       followUp: followUpPlan,
       mixedListingTypes: mixedListingPlan,
     }
@@ -117,9 +124,44 @@ export const buildSearchResultPlan = ({
   // interpolating the internal, English-only parsed.descriptionQuery.
   const requestedConceptIds = extractConceptIdsFromText(getConceptSourcePhrases(parsed).join(' '))
 
+  // ─── Result-set-level criterion coverage (the summary/card source of truth) ──
+  // searchEvidence.unmatchedSoftCriteria is the criteria NOT verified by ANY
+  // returned property — already computed once in runPropertySearch
+  // (evaluateRequestEvidence / evaluateSoftCriteriaEvidence), the SAME truth the
+  // per-card softEvidence aggregates to. The summary must name ONLY these, never
+  // all requestedConceptIds, or it contradicts the cards (a criterion verified by
+  // some property but not by ALL is NOT "unverified" at the set level).
+  //   - unmatchedConceptIds:  the labelable (concept-id) subset, for localized wording.
+  //   - hasUnmatchedCriteria: whether ANY criterion is genuinely unmatched — including
+  //       open, non-concept requirements ("wheelchair suitable") that map to no
+  //       concept id; distinguishes a real miss from Example C (every criterion met
+  //       by SOME listing, but no single listing meets all).
+  // Backward-compatible: with no searchEvidence (older callers/fixtures), fall
+  // back to requestedConceptIds — the exact pre-fix behavior.
+  const unmatchedSoftCriteria =
+    searchEvidence && Array.isArray(searchEvidence.unmatchedSoftCriteria) ? searchEvidence.unmatchedSoftCriteria : null
+  const toConceptIds = (entry) => {
+    const ids = extractConceptIdsFromText(String(entry)) // phrase -> ids ("sea view" -> ["sea_view"])
+    if (ids.length > 0) return ids
+    return CANONICAL_CONCEPT_IDS.includes(entry) ? [entry] : [] // already a concept id ("sea_view")
+  }
+  const unmatchedConceptIds = unmatchedSoftCriteria
+    ? [...new Set(unmatchedSoftCriteria.flatMap(toConceptIds))]
+    : requestedConceptIds
+  const hasUnmatchedCriteria = unmatchedSoftCriteria ? unmatchedSoftCriteria.length > 0 : requestedConceptIds.length > 0
+
   if (matchedViaDescription || matchedViaSemantic) {
+    // Semantic path: count only candidates whose per-property softEvidence
+    // (attached in the search layer) confirms EVERY requested criterion.
+    // Backward-compatible: if no property carries softEvidence (older callers/
+    // fixtures), fall back to the previous "count all semantic" behavior so
+    // nothing that predates this evidence contract changes.
+    const semanticHasEvidence = matchedViaSemantic && properties.some((property) => property && property.softEvidence)
+
     const verifiedCount = matchedViaSemantic
-      ? count
+      ? semanticHasEvidence
+        ? properties.filter((property) => property?.softEvidence?.fullyVerified).length
+        : count
       : properties.filter((property) => {
           // requestedConceptIds depends only on `parsed`, not the property —
           // reuse the value already hoisted above rather than recomputing it
@@ -128,8 +170,13 @@ export const buildSearchResultPlan = ({
           return requestedConceptIds.length === 0 || matchedConceptIds.length > 0
         }).length
 
-    const noneVerified = !matchedViaSemantic && verifiedCount === 0
-    const mixedVerified = !matchedViaSemantic && verifiedCount > 0 && verifiedCount < count
+    // noneVerified/mixedVerified now apply to the semantic path too, but ONLY
+    // when real softEvidence is present (semanticHasEvidence). Description keeps
+    // its existing behavior (`!matchedViaSemantic`), and a semantic result with
+    // no evidence keeps the old "may match by meaning" wording.
+    const evidenceGoverned = !matchedViaSemantic || semanticHasEvidence
+    const noneVerified = evidenceGoverned && verifiedCount === 0
+    const mixedVerified = evidenceGoverned && verifiedCount > 0 && verifiedCount < count
 
     return {
       type: 'soft_match',
@@ -140,6 +187,9 @@ export const buildSearchResultPlan = ({
       matchedViaSemantic,
       matchedViaDescription,
       requestedConceptIds,
+      unmatchedConceptIds,
+      hasUnmatchedCriteria,
+      scope,
       descriptionQuery: parsed.descriptionQuery || null,
       listingType: parsed.listingType || null,
       propertyType: !isMultiType ? parsed.propertyType || null : null,
@@ -237,6 +287,38 @@ export const buildMatchReasonPlan = (property = {}, parsed = {}, matchedViaDescr
       ? unmatchedConceptIds[0] || null
       : null
 
+  // ─── Semantic evidence override (Area A) ────────────────────────────────
+  // When the search layer attached per-property softEvidence, the soft claim
+  // and the unverified note come from THAT requirement-agnostic, per-criterion
+  // verdict — not from concept-only similarity. This lets an open requirement
+  // (wheelchair, music studio) be reported honestly, and lets a partial match
+  // (family confirmed, school not) show BOTH the confirmed part and the
+  // unconfirmed note. Description/fallback keep the concept-only logic above.
+  const softEvidence = matchedViaSemantic && property && property.softEvidence ? property.softEvidence : null
+
+  let planMatchedConceptIds = finalConfirmedConceptIds
+  let planUnverifiedConceptId = unverifiedConceptId
+  let planHasUnverifiedRequirement = false
+  let planSemanticGenericClaim = semanticGenericClaim
+  let planDescriptionGenericClaim = descriptionGenericClaim
+
+  if (softEvidence) {
+    const conceptsOf = (phrases) =>
+      [...new Set((Array.isArray(phrases) ? phrases : []).flatMap((phrase) => extractConceptIdsFromText(phrase)))]
+    const verifiedConceptIds = conceptsOf(softEvidence.verifiedCriteria)
+    const unverifiedConceptIds = conceptsOf(softEvidence.unverifiedCriteria)
+
+    planMatchedConceptIds = verifiedConceptIds
+    planUnverifiedConceptId = unverifiedConceptIds[0] || null
+    planHasUnverifiedRequirement =
+      Array.isArray(softEvidence.unverifiedCriteria) && softEvidence.unverifiedCriteria.length > 0
+    // A positive generic claim only when EVERYTHING was verified but no concept
+    // label applies (an open requirement confirmed by evidence units) — never
+    // when a requirement is left unconfirmed.
+    planSemanticGenericClaim = softEvidence.fullyVerified === true && verifiedConceptIds.length === 0
+    planDescriptionGenericClaim = false
+  }
+
   return {
     propertyType: parsed.propertyType || null,
     propertyTypeValue: property.propertyType || null,
@@ -251,10 +333,11 @@ export const buildMatchReasonPlan = (property = {}, parsed = {}, matchedViaDescr
     beds: parsed.beds || null,
     baths: parsed.baths || null,
     matchedFeatureIds,
-    matchedConceptIds: finalConfirmedConceptIds,
-    unverifiedConceptId,
-    semanticGenericClaim,
-    descriptionGenericClaim,
+    matchedConceptIds: planMatchedConceptIds,
+    unverifiedConceptId: planUnverifiedConceptId,
+    hasUnverifiedRequirement: planHasUnverifiedRequirement,
+    semanticGenericClaim: planSemanticGenericClaim,
+    descriptionGenericClaim: planDescriptionGenericClaim,
     matchedViaSemantic,
     matchedViaDescription,
     descriptionQuery: parsed.descriptionQuery || null,

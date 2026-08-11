@@ -141,6 +141,30 @@ line()
   assertEqual('null parsed input falls back to defaultParsed shape (listingType null)', result.listingType, null)
 }
 
+// ─── districtScopeAction: enum normalization + per-turn discipline ──────────
+{
+  assertEqual('defaultParsed.districtScopeAction is unclear', defaultParsed.districtScopeAction, 'unclear')
+  assertTrue('districtScopeAction is a per-turn dialogue field', PER_TURN_DIALOGUE_FIELDS.includes('districtScopeAction'))
+
+  assertEqual('absent districtScopeAction defaults to unclear', normalizeParsed({}, 'hello').districtScopeAction, 'unclear')
+  assertEqual('valid "keep" passes through', normalizeParsed({ districtScopeAction: 'keep' }, 'hi').districtScopeAction, 'keep')
+  assertEqual('valid "broaden" passes through', normalizeParsed({ districtScopeAction: 'broaden' }, 'hi').districtScopeAction, 'broaden')
+  assertEqual('valid "replace" passes through', normalizeParsed({ districtScopeAction: 'replace' }, 'hi').districtScopeAction, 'replace')
+  assertEqual('uppercase "KEEP" is invalid -> unclear', normalizeParsed({ districtScopeAction: 'KEEP' }, 'hi').districtScopeAction, 'unclear')
+  assertEqual('unknown "other" -> unclear', normalizeParsed({ districtScopeAction: 'other' }, 'hi').districtScopeAction, 'unclear')
+  assertEqual('null -> unclear', normalizeParsed({ districtScopeAction: null }, 'hi').districtScopeAction, 'unclear')
+  assertEqual('empty string -> unclear', normalizeParsed({ districtScopeAction: '' }, 'hi').districtScopeAction, 'unclear')
+  assertEqual('boolean true -> unclear', normalizeParsed({ districtScopeAction: true }, 'hi').districtScopeAction, 'unclear')
+
+  // stripPerTurnFields must drop a stale round-tripped value while keeping durable fields.
+  const stripped = stripPerTurnFields({ district: 'Kadıköy', districtScopeAction: 'broaden' })
+  assertTrue('stripPerTurnFields removes districtScopeAction', !('districtScopeAction' in stripped))
+  assertEqual('stripPerTurnFields keeps durable district', stripped.district, 'Kadıköy')
+
+  // keywordFallbackParser (Gemini-down path) defaults to unclear, never guesses an action.
+  assertEqual('keywordFallbackParser defaults districtScopeAction to unclear', keywordFallbackParser('rent an apartment').districtScopeAction, 'unclear')
+}
+
 line()
 console.log('detectMentionedDistricts')
 line()

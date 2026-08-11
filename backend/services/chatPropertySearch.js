@@ -17,7 +17,13 @@
 
 import Property from '../models/Property.js'
 import { extractConceptIdsFromText } from '../utils/lifestyleConcepts.js'
-import { buildEvidenceUnits, propertyVerifiesDescription, evaluateRequestEvidence } from './descriptionEvidence.js'
+import {
+  buildEvidenceUnits,
+  propertyVerifiesDescription,
+  evaluateRequestEvidence,
+  buildRequestCriteria,
+  evaluatePropertyEvidence,
+} from './descriptionEvidence.js'
 import { hasSoftDescriptionSearch } from './chatMessageParsing.js'
 import { LISTING_TYPE_TERMS, PROPERTY_TYPE_TERMS } from '../locales/chatParsingVocabulary.js'
 import { buildHardFilterForDescriptionSearch } from './chatFilters.js'
@@ -340,7 +346,17 @@ export const runPropertySearch = async ({ parsed, filter, mustHaveFilter, messag
     }
 
     if (semanticResults.length > 0) {
-      properties = semanticResults.map((property) => ({ ...property, matchedViaSemantic: true }))
+      // DEMOTE, don't drop: keep every semantic candidate visible, but attach
+      // per-property, per-criterion evidence so the reply layers can tell a
+      // fully-verified match from an unverified broader alternative. Criteria
+      // are built once and reused across candidates. Cosine similarity alone is
+      // never treated as proof of any specific requirement.
+      const semanticCriteria = buildRequestCriteria(parsed)
+      properties = semanticResults.map((property) => ({
+        ...property,
+        matchedViaSemantic: true,
+        softEvidence: evaluatePropertyEvidence(parsed, property, semanticCriteria),
+      }))
       matchedViaSemantic = true
       console.log(`Semantic search matched ${properties.length} propert${properties.length === 1 ? 'y' : 'ies'}.`)
     } else {

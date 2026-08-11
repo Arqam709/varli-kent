@@ -48,6 +48,17 @@ const userSchema = new mongoose.Schema({
   appleId: { type: String },
   isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
+  // When this user last opened their notifications feed.
+  //
+  // Intentionally OPTIONAL with no default, so every existing account keeps
+  // working without a migration. When it is absent the notification routes
+  // fall back to `createdAt`, which means "new since you joined" — a
+  // brand-new account therefore starts with zero notifications rather than
+  // being shown the entire back catalogue.
+  //
+  // Deliberately generic ("notifications", not "newPropertyAlerts") so the
+  // saved-alert filters planned for a later phase can build on it.
+  notificationsLastSeenAt: { type: Date },
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },
 })

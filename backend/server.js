@@ -18,6 +18,7 @@ import translateRoutes from './routes/translate.js'
 import chatRoutes from './routes/chat.js'
 import chatConversationRoutes from './routes/chatConversations.js'
 import adminChatRoutes from './routes/adminChats.js'
+import notificationRoutes from './routes/notifications.js'
 
 dotenv.config()
 
@@ -48,6 +49,7 @@ app.use('/api/translate', translateRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/chat/conversations', chatConversationRoutes)
 app.use('/api/admin/chats', adminChatRoutes)
+app.use('/api/notifications', notificationRoutes)
 // Health check
 app.get('/', (req, res) => {
   res.json({ message: 'Varlikent API is running' })

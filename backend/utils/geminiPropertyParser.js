@@ -213,8 +213,26 @@ Return JSON in this exact shape:
   "noPreference": false,
   "requirements": [],
   "needsClarification": false,
-  "clarifyingQuestion": null
+  "clarifyingQuestion": null,
+  "districtScopeAction": "unclear",
+  "resultScopeAction": "unclear"
 }
+
+RESULT SCOPE (resultScopeAction):
+- This field classifies WHERE the visitor wants to search THIS turn: within the property SET the assistant just showed, or in a new/global search. It describes the search SCOPE only — always keep filling propertyType/lifestyle/etc. as usual.
+- "previous_results": the visitor is asking about, filtering, or refining the properties that were JUST shown in the most recent assistant turn — e.g. "which of these are near schools?", "do any of the options you showed have parking?", "which of those would be good for my children? I want a school nearby". Set this ONLY when the immediately previous assistant turn clearly presented property results AND this message is evaluating/narrowing that same shown set. The visitor need not use the exact words "these/those/them" — infer it from the conversational meaning, in any language.
+- "new_search": the visitor clearly wants a fresh or broader search, NOT restricted to the shown set — e.g. "forget those, show villas in Sarıyer", "show other apartments near schools", "what other districts have sea-view apartments?". A follow-up that broadens or changes direction is a new_search, NOT previous_results.
+- "unclear": an ordinary/first search, small talk, or any message that does not clearly restrict to the previously shown set (e.g. "show apartments in Kadıköy"). This is the safe default.
+- IMPORTANT: intentType "property_followup" does NOT imply "previous_results" — a follow-up can still be a new/global search ("what other districts have sea views?" is property_followup + new_search). This is a per-turn dialogue act; never carry a previous turn's value forward.
+
+DISTRICT SCOPE ANSWER (districtScopeAction):
+- This field classifies the visitor's answer to ONE specific pending question: when the most recent Assistant turn asked whether to KEEP searching in the currently active district, or to BROADEN the search to other districts (e.g. "Should I keep searching in Beylikdüzü, or include other districts?").
+- ONLY set an actionable value ("keep", "broaden", or "replace") when the conversation history shows that exact pending district-scope question was just asked and the latest visitor message is answering it. In every other situation — an ordinary property search, a lifestyle request, small talk, or any message that is not answering that specific question — set "unclear".
+- "keep": the visitor wants to continue in the current district (e.g. "keep the same district", "let's stay with Beylikdüzü", "aynı bölgede devam edelim", "ابق في نفس المنطقة").
+- "broaden": the visitor allows or asks to search outside the current district, INCLUDING negated forms (e.g. "search other districts too", "the location is not important", "you don't have to limit it to Beylikdüzü", "don't keep it in the same district", "Beylikdüzü ile sınırlı kalmana gerek yok", "aynı ilçede kalmak istemiyorum", "لا أريد البقاء في نفس المنطقة").
+- "replace": the visitor names a specific new district instead (e.g. "search in Şile instead", "Kadıköy olsun"). Still fill the real district/districts fields as usual — districtScopeAction only describes the action.
+- "unclear": the message does not clearly answer that question — including sentences that merely CONTAIN words like keep/stay/kal/نفس المنطقة but mean something else ("stay close to the metro", "keep the budget below five million") or introduce unrelated new criteria ("show me villas instead").
+- Understand the FULL meaning and any negation — never classify from a single keyword. This field is a dialogue act about THIS turn only; never carry a previous turn's value forward.
 
 Example 1:
 Visitor: I want an apartment
@@ -938,6 +956,58 @@ Correct JSON:
   "clarifyingQuestion": null
 }
 
+DISTRICT SCOPE ANSWER EXAMPLES (focus on districtScopeAction — the rest of the JSON keeps its normal shape and rules):
+
+Example S1 (natural broaden with negation, Turkish):
+Assistant: Should I keep searching in Beylikdüzü, or include other districts?
+Visitor: Beylikdüzü ile sınırlı kalmana gerek yok.
+=> districtScopeAction: "broaden"
+
+Example S2 (natural keep, Turkish):
+Assistant: Should I keep searching in Beylikdüzü, or include other districts?
+Visitor: Aynı bölgede devam edelim.
+=> districtScopeAction: "keep"
+
+Example S3 (NOT a district answer — contains "stay" but means proximity, English):
+Assistant: Should I keep searching in Beylikdüzü, or include other districts?
+Visitor: Stay close to the metro.
+=> districtScopeAction: "unclear"
+
+Example S4 (natural broaden with negation, Arabic):
+Assistant: Should I keep searching in Beylikdüzü, or include other districts?
+Visitor: لا أريد البقاء في نفس المنطقة
+=> districtScopeAction: "broaden"
+
+Example S5 (ordinary search — NO pending district question — must stay "unclear"):
+Visitor: Show me apartments in Kadıköy.
+=> district: "Kadıköy", districtScopeAction: "unclear"
+
+RESULT SCOPE EXAMPLES (focus on resultScopeAction — the rest of the JSON keeps its normal shape and rules):
+
+Example R1 (refine the just-shown set, no literal "these/those"):
+Assistant: I found 3 apartments with a sea view.
+Visitor: Which would be good for my children? I want a school nearby.
+=> lifestyle includes "sea view" and "near schools", resultScopeAction: "previous_results"
+
+Example R2 (feature question about the shown set):
+Assistant: I found 4 apartments for you.
+Visitor: Do any of the options you showed have parking?
+=> parking: true, resultScopeAction: "previous_results"
+
+Example R3 (explicit new/broader search — NOT the shown set):
+Assistant: I found 3 apartments with a sea view.
+Visitor: Forget those, show villas in Sarıyer.
+=> propertyType: "Villa", district: "Sarıyer", resultScopeAction: "new_search"
+
+Example R4 (follow-up that is still a NEW search, not a refinement of the shown set):
+Assistant: I found 3 apartments with a sea view.
+Visitor: What other districts have good sea-view apartments?
+=> resultScopeAction: "new_search"
+
+Example R5 (ordinary first search — no shown set to refine):
+Visitor: Show me apartments in Kadıköy.
+=> district: "Kadıköy", resultScopeAction: "unclear"
+
 ${conversationBlock}
 `
 }
@@ -980,6 +1050,17 @@ export const parsePropertyMessageWithGemini = async (message, history = [], lang
       excludedConcepts: sanitizeConcepts(parsed.excludedConcepts),
       changedMind: Boolean(parsed.changedMind),
       noPreference: Boolean(parsed.noPreference),
+      // Per-turn district-scope answer classification. Coerced to the closed
+      // enum here (normalizeParsed re-validates it too); anything else -> the
+      // safe 'unclear', so a missing/garbage value never becomes actionable.
+      districtScopeAction: ['keep', 'broaden', 'replace', 'unclear'].includes(parsed.districtScopeAction)
+        ? parsed.districtScopeAction
+        : 'unclear',
+      // Per-turn result-scope classification (refine the shown set vs new search).
+      // Coerced to the closed enum here (normalizeParsed re-validates it too).
+      resultScopeAction: ['previous_results', 'new_search', 'unclear'].includes(parsed.resultScopeAction)
+        ? parsed.resultScopeAction
+        : 'unclear',
     }
   } catch (err) {
     console.log('Gemini parser failed:', err.message)

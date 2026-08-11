@@ -6,6 +6,25 @@ import { generatePropertyEmbedding, embeddingSourceFieldsChanged } from '../serv
 
 const router = express.Router()
 
+// Fields that exist only to serve semantic/chatbot search and are never read
+// by any browsing client (website, admin panel or mobile app).
+//
+// `descriptionEmbedding` is a large float vector that accounted for ~98% of
+// the GET /properties payload; `embeddingUpdatedAt` is internal bookkeeping
+// about when that vector was generated. Neither belongs in a public property
+// representation.
+//
+// This is a ROUTE-LEVEL exclusion on purpose, not `select: false` on the
+// schema: services/propertySemanticSearch.js selects descriptionEmbedding
+// explicitly for cosine scoring, and scripts/backfillPropertyEmbeddings.js
+// reads and writes it directly. Both query the model rather than these
+// routes, so they keep working untouched — a schema-level default would have
+// silently changed their behaviour.
+//
+// The values stay in MongoDB. Nothing is deleted and embedding generation on
+// create/update is unchanged.
+const PUBLIC_PROPERTY_EXCLUDE = '-descriptionEmbedding -embeddingUpdatedAt'
+
 // GET /api/properties
 router.get('/', async (req, res, next) => {
   try {
@@ -44,7 +63,9 @@ router.get('/', async (req, res, next) => {
       if (maxSqm) filter.sqm.$lte = Number(maxSqm)
     }
 
-    const properties = await Property.find(filter).sort({ createdAt: -1 })
+    const properties = await Property.find(filter)
+      .select(PUBLIC_PROPERTY_EXCLUDE)
+      .sort({ createdAt: -1 })
     res.json({ success: true, count: properties.length, properties })
   } catch (err) {
     next(err)
@@ -69,7 +90,9 @@ router.get('/areas', async (req, res, next) => {
 // GET /api/properties/sale - MUST be before /:id
 router.get('/sale', async (req, res, next) => {
   try {
-    const properties = await Property.find({ listingType: 'Sale' }).sort({ createdAt: -1 })
+    const properties = await Property.find({ listingType: 'Sale' })
+      .select(PUBLIC_PROPERTY_EXCLUDE)
+      .sort({ createdAt: -1 })
     res.json({ success: true, count: properties.length, properties })
   } catch (err) {
     next(err)
@@ -79,7 +102,9 @@ router.get('/sale', async (req, res, next) => {
 // GET /api/properties/rent - MUST be before /:id
 router.get('/rent', async (req, res, next) => {
   try {
-    const properties = await Property.find({ listingType: 'Rent' }).sort({ createdAt: -1 })
+    const properties = await Property.find({ listingType: 'Rent' })
+      .select(PUBLIC_PROPERTY_EXCLUDE)
+      .sort({ createdAt: -1 })
     res.json({ success: true, count: properties.length, properties })
   } catch (err) {
     next(err)
@@ -89,7 +114,7 @@ router.get('/rent', async (req, res, next) => {
 // GET /api/properties/:id
 router.get('/:id', async (req, res, next) => {
   try {
-    const property = await Property.findById(req.params.id)
+    const property = await Property.findById(req.params.id).select(PUBLIC_PROPERTY_EXCLUDE)
     if (!property) {
       return res.status(404).json({ success: false, message: 'Property not found' })
     }

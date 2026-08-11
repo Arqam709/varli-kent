@@ -390,9 +390,28 @@ if (nonPropertyReply) {
   ? shownPropertyIds.filter((id) => mongoose.Types.ObjectId.isValid(id))
   : []
 
-if (validShownPropertyIds.length > 0) {
-  filter._id = { $nin: validShownPropertyIds }
-}
+    // Valid _id list from the MOST RECENT shown set (lastShownProperties), for
+    // previous-result refinement. shownPropertyIds (all turns) stays reserved
+    // for show-more exclusion.
+    const validPreviousResultIds = Array.isArray(lastShownProperties)
+      ? lastShownProperties.map((p) => p && p._id).filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+      : []
+
+    // Scope decision — MUTUALLY EXCLUSIVE, show-more first (both write filter._id,
+    // so only one branch may run). resultScopeAction is deterministic backend
+    // execution of Gemini's per-turn meaning; no message-word matching here.
+    //   scope 'previous_results' → the search is locked inside the shown set.
+    // filter._id is preserved by every downstream path (semantic/description
+    // hard filters + searchWithFallback steps), so the scope can never leak.
+    let resultScope = null
+    if (validShownPropertyIds.length > 0) {
+      filter._id = { $nin: validShownPropertyIds }
+    } else if (parsed.resultScopeAction === 'previous_results' && validPreviousResultIds.length > 0) {
+      filter._id = { $in: validPreviousResultIds }
+      resultScope = 'previous_results'
+    }
+    // No previous IDs (fresh conversation, reload, lost client state) → no _id
+    // restriction: fall back to a normal global search rather than $in: [].
 
     console.log('Filter:', JSON.stringify(filter, null, 2))
 
@@ -464,8 +483,10 @@ const reply = buildReply({
   matchedViaSemantic,
   descriptionSearchAttempted,
   relaxedFeatureIds,
+  resultScope,
   followUp: followUpDecision,
   mixedListingTypes,
+  searchEvidence,
   language,
 })
 

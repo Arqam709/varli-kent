@@ -150,9 +150,35 @@ const EXPECTED_SCHEMA_FIELDS = [
   'furnished', 'balcony', 'elevator', 'pool', 'garden', 'parking',
   'mustHave', 'niceToHave', 'lifestyle', 'lifestyleConcepts', 'excludedConcepts',
   'changedMind', 'noPreference', 'requirements', 'needsClarification', 'clarifyingQuestion',
+  'districtScopeAction', 'resultScopeAction',
 ]
 
 EXPECTED_SCHEMA_FIELDS.forEach((field) => assertTrue(`schema field "${field}" present`, promptEn.includes(`"${field}"`)))
+
+line()
+console.log('RESULT SCOPE rule and examples are present')
+line()
+
+assertTrue('schema includes resultScopeAction', promptEn.includes('"resultScopeAction"'))
+assertTrue('has a RESULT SCOPE rule section', promptEn.includes('RESULT SCOPE'))
+assertTrue('rule lists all three actions as quoted values', ['previous_results', 'new_search', 'unclear'].every((a) => promptEn.includes(`"${a}"`)))
+assertTrue('rule warns property_followup != previous_results', /property_followup.*(does NOT|not).*previous_results/i.test(promptEn) || /follow-up.*new_search/i.test(promptEn))
+assertTrue('has a refine-shown-set example without literal these/those', promptEn.includes('Which would be good for my children? I want a school nearby.'))
+assertTrue('has an explicit new-search example', promptEn.includes('Forget those, show villas in Sarıyer.'))
+assertTrue('has the "other districts" example that must stay new_search', promptEn.includes('What other districts have good sea-view apartments?'))
+
+line()
+console.log('13. districtScopeAction rule and examples are present (all languages)')
+line()
+
+assertTrue('schema includes districtScopeAction', promptEn.includes('"districtScopeAction"'))
+assertTrue('has a DISTRICT SCOPE ANSWER rule section', promptEn.includes('DISTRICT SCOPE ANSWER'))
+assertTrue('rule lists all four actions as quoted values', ['keep', 'broaden', 'replace', 'unclear'].every((a) => promptEn.includes(`"${a}"`)))
+assertTrue('rule instructs understanding negation', /negation/i.test(promptEn))
+assertTrue('has a Turkish broaden-with-negation example', promptEn.includes('Beylikdüzü ile sınırlı kalmana gerek yok'))
+assertTrue('has a not-a-district-answer example (stay close to the metro)', /Stay close to the metro/i.test(promptEn))
+assertTrue('has an Arabic broaden example', promptEn.includes('لا أريد البقاء في نفس المنطقة'))
+assertTrue('has an ordinary-search example that must stay unclear', promptEn.includes('Show me apartments in Kadıköy'))
 
 line()
 console.log('12. No "Correct JSON:" example ever uses a non-canonical (translated) enum value')
