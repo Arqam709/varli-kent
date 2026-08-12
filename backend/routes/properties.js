@@ -4,6 +4,7 @@ import { protect } from '../middleware/auth.js'
 import { requireRole, requirePermission } from '../middleware/checkPermission.js'
 import { generatePropertyEmbedding, embeddingSourceFieldsChanged } from '../services/propertyEmbeddingService.js'
 import { resolveAgentContact, publicAgent, AGENT_POPULATE_FIELDS } from '../services/agentAssignment.js'
+import { handlePropertyAgentReassignment } from '../services/propertyMessaging.js'
 // Not called directly — importing it registers the 'User' model with Mongoose,
 // which populate('agent') below depends on.
 import '../models/User.js'
@@ -238,6 +239,42 @@ router.put(
       if (!property) {
         return res.status(404).json({ success: false, message: 'Property not found' })
       }
+
+      // Keep existing conversations in step with who now holds this listing.
+      // Runs AFTER the property write succeeds, so a rejected update never
+      // moves a thread. This route is the natural caller because it is the
+      // only place that knows both the previous and the new agent.
+      //
+      // ── Why a failure here is survivable ─────────────────────────────────
+      // The listing is already saved and correct, so failing the admin's edit
+      // would be the worse outcome. What makes swallowing it acceptable is
+      // that messaging authorization does NOT trust this write: agent access
+      // is decided against Property.agent on every request
+      // (services/propertyMessaging.js), so a conversation pointer left
+      // pointing at the outgoing agent grants them nothing. The pointer then
+      // repairs itself the next time the customer sends or reopens.
+      //
+      // The cost of a failure is therefore availability, not privacy: the
+      // incoming agent cannot see the thread until it reconciles.
+      try {
+        await handlePropertyAgentReassignment({
+          propertyId: property._id,
+          previousAgentId: existingProperty.agent,
+          nextAgentId: property.agent,
+        })
+      } catch (messagingErr) {
+        // Ids only — never message text or conversation content.
+        console.error(
+          '[messaging] conversation reassignment failed; conversations for this property are stale until reconciled.',
+          {
+            propertyId: String(property._id),
+            previousAgentId: existingProperty.agent ? String(existingProperty.agent) : null,
+            nextAgentId: property.agent ? String(property.agent) : null,
+            error: messagingErr.message,
+          }
+        )
+      }
+
       res.json({ success: true, property })
     } catch (err) {
       next(err)

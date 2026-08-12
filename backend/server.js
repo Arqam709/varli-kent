@@ -21,6 +21,7 @@ import adminChatRoutes from './routes/adminChats.js'
 import notificationRoutes from './routes/notifications.js'
 import propertyAlertRoutes from './routes/propertyAlerts.js'
 import agentRoutes from './routes/agent.js'
+import propertyConversationRoutes from './routes/propertyConversations.js'
 
 dotenv.config()
 
@@ -54,6 +55,9 @@ app.use('/api/admin/chats', adminChatRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/property-alerts', propertyAlertRoutes)
 app.use('/api/agent', agentRoutes)
+// Human customer↔agent messaging. Separate from /api/chat (the AI assistant)
+// and from /api/agent (customers and agents share this API).
+app.use('/api/property-conversations', propertyConversationRoutes)
 // Health check
 app.get('/', (req, res) => {
   res.json({ message: 'Varlikent API is running' })
