@@ -38,7 +38,10 @@ const Navbar = () => {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [servicesOpen, setServicesOpen] = useState(false)
   const [mobileServicesOpen, setMobileServicesOpen] = useState(false)
-  const { isLoggedIn, isAdmin, user, logout } = useAuth()
+  // `portal` is derived once in AuthContext — { to, label } for staff, null
+  // for a normal user — so the desktop dropdown and the mobile drawer below
+  // cannot drift apart, and neither repeats a role check.
+  const { isLoggedIn, portal, user, logout } = useAuth()
   const { language, setLanguage, t } = useLanguage()
   const navigate = useNavigate()
   const location = useLocation()
@@ -232,10 +235,13 @@ const Navbar = () => {
                       <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                       Settings
                     </Link>
-                    {isAdmin && (
-                      <Link to="/admin/dashboard" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.1em] text-slate-600 hover:bg-slate-50 hover:text-[#4b6741]">
+                    {portal && (
+                      <Link to={portal.to} onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.1em] text-slate-600 hover:bg-slate-50 hover:text-[#4b6741]">
                         <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" /></svg>
-                        {t.nav.dashboard}
+                        {/* Admins keep their translated "Dashboard"; the agent
+                            portal has no translation key yet, so it falls back
+                            to the label from AuthContext. */}
+                        {portal.to === '/admin/dashboard' ? t.nav.dashboard : portal.label}
                       </Link>
                     )}
                     <div className="my-1 border-t border-slate-100" />
@@ -440,13 +446,13 @@ const Navbar = () => {
                     >
                       Settings
                     </Link>
-                    {isAdmin && (
+                    {portal && (
                       <Link
-                        to="/admin/dashboard"
+                        to={portal.to}
                         onClick={closeMobile}
                         className="block py-3 text-sm text-white/60 hover:text-white transition-colors"
                       >
-                        {t.nav.dashboard}
+                        {portal.to === '/admin/dashboard' ? t.nav.dashboard : portal.label}
                       </Link>
                     )}
                     <button

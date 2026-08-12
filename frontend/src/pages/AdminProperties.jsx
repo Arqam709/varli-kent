@@ -6,7 +6,14 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { formatPrice } from '../lib/formatPrice'
 
-const emptyForm = { title:'', listingType:'Sale', price:'', priceLabel:'', district:'', address:'', propertyType:'Apartment', beds:'', baths:'', sqm:'', description:'', agentName:'', agentPhone:'', agentEmail:'', whatsappNumber:'', featured:false, status:'Available' }
+// `agent` is the assigned agent's User id, or '' for Unassigned. There is no
+// agentName field: the name now comes from the selected account, so an admin
+// never types the same person's name twice. agentEmail is read-only and filled
+// from the selection; phone and WhatsApp stay manual.
+const emptyForm = { title:'', listingType:'Sale', price:'', priceLabel:'', district:'', address:'', propertyType:'Apartment', beds:'', baths:'', sqm:'', description:'', agent:'', agentPhone:'', agentEmail:'', whatsappNumber:'', featured:false, status:'Available' }
+
+/** The list endpoint returns a raw id; a populated response returns an object. */
+const agentIdOf = (agent) => (agent && typeof agent === 'object' ? agent._id : agent) || ''
 
 const AdminProperties = () => {
   const { hasPermission } = useAuth()
@@ -21,6 +28,7 @@ const AdminProperties = () => {
   const [images, setImages] = useState([])
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [agents, setAgents] = useState([])
 
   const fetchProperties = () => {
     setLoading(true)
@@ -28,10 +36,46 @@ const AdminProperties = () => {
   }
   useEffect(() => { fetchProperties() }, [])
 
+  // Real agent accounts for the selector — never a hardcoded list. The
+  // endpoint returns ACTIVE agents only and just four public fields.
+  // A failure leaves the list empty rather than blocking the form; every
+  // other field still works and the server would reject a bad id anyway.
+  useEffect(() => {
+    api.get('/users/agents').then(r => setAgents(r.data.agents || [])).catch(() => setAgents([]))
+  }, [])
+
+  /**
+   * Choosing an agent rewrites the agent-derived contact state.
+   *
+   * Email is copied straight from the selected account — the admin never types
+   * it. Phone and WhatsApp are CLEARED whenever the agent actually changes,
+   * because carrying the previous agent's numbers over to a new one would
+   * publish "Agent: Mehmet / Phone: Ahmet's number" on the listing. Re-picking
+   * the same agent is not a change and leaves them alone.
+   *
+   * The server enforces the same rules independently — this is here so the
+   * admin sees the truth while filling the form, not as the safeguard.
+   */
+  const handleAgentChange = (nextAgentId) => {
+    setForm(prev => {
+      if (prev.agent === nextAgentId) return prev
+
+      const selected = agents.find(a => a._id === nextAgentId)
+
+      return {
+        ...prev,
+        agent: nextAgentId,
+        agentEmail: selected?.email || '',
+        agentPhone: '',
+        whatsappNumber: '',
+      }
+    })
+  }
+
   const openAdd = () => { setEditingId(null); setForm(emptyForm); setImages([]); setFormOpen(true) }
   const openEdit = (prop) => {
     setEditingId(prop._id)
-    setForm({ title: prop.title, listingType: prop.listingType, price: prop.price, priceLabel: prop.priceLabel || '', district: prop.district, address: prop.address, propertyType: prop.propertyType, beds: prop.beds, baths: prop.baths, sqm: prop.sqm, description: prop.description || '', agentName: prop.agentName || '', agentPhone: prop.agentPhone || '', agentEmail: prop.agentEmail || '', whatsappNumber: prop.whatsappNumber || '', featured: prop.featured, status: prop.status })
+    setForm({ title: prop.title, listingType: prop.listingType, price: prop.price, priceLabel: prop.priceLabel || '', district: prop.district, address: prop.address, propertyType: prop.propertyType, beds: prop.beds, baths: prop.baths, sqm: prop.sqm, description: prop.description || '', agent: agentIdOf(prop.agent), agentPhone: prop.agentPhone || '', agentEmail: prop.agentEmail || '', whatsappNumber: prop.whatsappNumber || '', featured: prop.featured, status: prop.status })
     setImages(prop.images || [])
     setFormOpen(true)
   }
@@ -71,7 +115,9 @@ const AdminProperties = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
-    const payload = { ...form, price: Number(form.price), beds: Number(form.beds), baths: Number(form.baths), sqm: Number(form.sqm), images, mainImage: images[0] || '' }
+    // '' means Unassigned — sent as an explicit null so an edit that clears
+    // the agent actually clears it, rather than being read as "unchanged".
+    const payload = { ...form, agent: form.agent || null, price: Number(form.price), beds: Number(form.beds), baths: Number(form.baths), sqm: Number(form.sqm), images, mainImage: images[0] || '' }
     try {
       if (editingId) {
         await api.put(`/properties/${editingId}`, payload)
@@ -183,17 +229,55 @@ const AdminProperties = () => {
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.description || 'Description'}</label>
                   <textarea value={form.description} onChange={e => setForm(prev => ({...prev, description: e.target.value}))} rows={4} className={inputCls} placeholder="Property description..." />
                 </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.assignedAgent || 'Assigned Agent'}</label>
+                  <select value={form.agent} onChange={e => handleAgentChange(e.target.value)} className={inputCls}>
+                    <option value="">{p.unassigned || 'Unassigned'}</option>
+                    {agents.map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
+                    {/*
+                      Keeps a previously-assigned agent visible if they have
+                      since been deactivated or demoted, instead of the form
+                      quietly resetting to Unassigned and wiping the link on
+                      the next save. Saving it unchanged is rejected by the
+                      server, which is the honest outcome.
+                    */}
+                    {form.agent && !agents.some(a => a._id === form.agent) && (
+                      <option value={form.agent}>Currently assigned — no longer an active agent</option>
+                    )}
+                  </select>
+                  {form.agent && !agents.some(a => a._id === form.agent) ? (
+                    <p className="mt-1.5 text-[11px] text-amber-600">
+                      The assigned account is no longer an active agent. Pick another agent or set Unassigned before saving.
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-[11px] text-slate-400">
+                      The listing&apos;s agent name and email come from this account. Phone and WhatsApp are entered below.
+                    </p>
+                  )}
+                </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.agentName || 'Agent Name'}</label>
-                  <input value={form.agentName} onChange={e => setForm(prev => ({...prev, agentName: e.target.value}))} className={inputCls} placeholder="Selin Kaya" />
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.agentEmail || 'Agent Email'}</label>
+                  {/*
+                    Read-only: when an agent is assigned this mirrors their
+                    account email, and the server derives it again on save
+                    regardless of what is sent. Legacy listings with no
+                    assigned agent keep whatever address they already had.
+                  */}
+                  <input
+                    value={form.agentEmail}
+                    readOnly
+                    className={`${inputCls} cursor-not-allowed text-slate-500`}
+                    placeholder={form.agent ? '' : 'Assign an agent to fill this'}
+                  />
+                  <p className="mt-1.5 text-[11px] text-slate-400">
+                    {form.agent
+                      ? 'Automatically taken from the assigned Agent account.'
+                      : 'Assign an agent to set this automatically.'}
+                  </p>
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.agentPhone || 'Agent Phone'}</label>
                   <input value={form.agentPhone} onChange={e => setForm(prev => ({...prev, agentPhone: e.target.value}))} className={inputCls} placeholder="+90 530 123 4567" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.agentEmail || 'Agent Email'}</label>
-                  <input value={form.agentEmail} onChange={e => setForm(prev => ({...prev, agentEmail: e.target.value}))} className={inputCls} placeholder="agent@varlikent.com" />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.whatsapp || 'WhatsApp Number'}</label>

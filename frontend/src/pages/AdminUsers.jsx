@@ -34,8 +34,42 @@ const PERMISSION_GROUPS = [...new Set(ALL_PERMISSIONS.map(p => p.group))]
 const roleBadgeCls = (role) => {
   if (role === 'owner') return 'bg-amber-100 text-amber-700'
   if (role === 'admin') return 'bg-blue-100 text-blue-700'
+  if (role === 'agent') return 'bg-emerald-100 text-emerald-700'
   return 'bg-slate-100 text-slate-600'
 }
+
+const ROLE_LABELS = { owner: 'Owner', admin: 'Admin', agent: 'Agent', user: 'User' }
+
+/**
+ * Which roles the signed-in actor may hand out.
+ *
+ * Mirrors assignableRolesFor() in backend/services/roleManagement.js. This is
+ * UX ONLY — the server recomputes the same answer from req.user and rejects
+ * anything outside it, so a tampered dropdown changes nothing. Owner is absent
+ * for the same reason it is absent server-side: it is created by
+ * scripts/createOwner.js and nowhere else.
+ */
+const assignableRolesFor = (isOwner, hasPermission) => {
+  if (isOwner) return ['admin', 'agent', 'user']
+  if (hasPermission('user_management')) return ['agent', 'user']
+  return []
+}
+
+/**
+ * How the list is sectioned.
+ *
+ * Previously this page filtered into "admin or owner" and "role === 'user'"
+ * only, so a promoted agent matched neither list and vanished from the page
+ * entirely. Driving the sections from this table — plus the catch-all below
+ * it — means a future role shows up somewhere rather than disappearing.
+ */
+const USER_GROUPS = [
+  { key: 'staff', label: 'Admins & Owners', roles: ['owner', 'admin'] },
+  { key: 'agents', label: 'Agents', roles: ['agent'] },
+  { key: 'members', label: 'Regular Users', roles: ['user'] },
+]
+
+const GROUPED_ROLES = USER_GROUPS.flatMap((group) => group.roles)
 
 const ConfirmModal = ({ message, onConfirm, onCancel, danger = true }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -55,6 +89,7 @@ const ConfirmModal = ({ message, onConfirm, onCancel, danger = true }) => (
 )
 
 const emptyCreate = { name: '', email: '', password: '', role: 'admin', permissions: [] }
+
 
 const AdminUsers = () => {
   const { isOwner, user: currentUser, hasPermission } = useAuth()
@@ -92,8 +127,16 @@ const AdminUsers = () => {
     })
   }, [users, search, roleFilter])
 
-  const adminsAndOwners = filtered.filter(u => u.role === 'admin' || u.role === 'owner')
-  const regularUsers = filtered.filter(u => u.role === 'user')
+  const assignableRoles = assignableRolesFor(isOwner, hasPermission)
+
+  const sections = USER_GROUPS.map(group => ({
+    ...group,
+    users: filtered.filter(u => group.roles.includes(u.role)),
+  }))
+
+  // Safety net: anyone whose role matches no section still gets rendered,
+  // rather than silently disappearing the way agents would have.
+  const ungrouped = filtered.filter(u => !GROUPED_ROLES.includes(u.role))
 
   if (!canAccess) return (
     <AdminLayout>
@@ -254,14 +297,21 @@ const AdminUsers = () => {
 
             {canEditThis && (
               <>
-                {isOwner && (
+                {/*
+                  Shown only when the actor could actually re-assign THIS
+                  target's current role — so an admin with user_management
+                  gets the control on agents and users, but not on other
+                  admins, matching what the server would allow.
+                */}
+                {assignableRoles.includes(u.role) && (
                   <select
                     value={u.role}
                     onChange={e => changeRole(u._id, e.target.value)}
                     className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#4b6741]"
                   >
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
+                    {assignableRoles.map(role => (
+                      <option key={role} value={role}>{ROLE_LABELS[role]}</option>
+                    ))}
                   </select>
                 )}
 
@@ -325,7 +375,7 @@ const AdminUsers = () => {
           </div>
           {isOwner && (
             <button
-              onClick={() => { setCreateForm(emptyCreate); setCreateModal(true) }}
+              onClick={() => { setCreateForm({ ...emptyCreate, role: assignableRoles[0] || 'user' }); setCreateModal(true) }}
               className="flex items-center gap-2 rounded-xl bg-[#4b6741] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#3d5535] transition cursor-pointer"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -356,6 +406,7 @@ const AdminUsers = () => {
             <option value="all">{p.allRoles || 'All Roles'}</option>
             <option value="owner">Owner</option>
             <option value="admin">Admin</option>
+            <option value="agent">Agent</option>
             <option value="user">User</option>
           </select>
         </div>
@@ -366,16 +417,18 @@ const AdminUsers = () => {
           </div>
         ) : (
           <div className="space-y-8">
-            {adminsAndOwners.length > 0 && (
-              <div>
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">{p.adminsOwners || 'Admins & Owners'} ({adminsAndOwners.length})</h2>
-                <div className="space-y-3">{adminsAndOwners.map(u => <UserCard key={u._id} u={u} />)}</div>
+            {sections.map(section => section.users.length > 0 && (
+              <div key={section.key}>
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
+                  {(section.key === 'staff' && p.adminsOwners) || (section.key === 'members' && p.regularUsers) || section.label} ({section.users.length})
+                </h2>
+                <div className="space-y-3">{section.users.map(u => <UserCard key={u._id} u={u} />)}</div>
               </div>
-            )}
-            {regularUsers.length > 0 && (
+            ))}
+            {ungrouped.length > 0 && (
               <div>
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">{p.regularUsers || 'Regular Users'} ({regularUsers.length})</h2>
-                <div className="space-y-3">{regularUsers.map(u => <UserCard key={u._id} u={u} />)}</div>
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Other ({ungrouped.length})</h2>
+                <div className="space-y-3">{ungrouped.map(u => <UserCard key={u._id} u={u} />)}</div>
               </div>
             )}
             {filtered.length === 0 && (
@@ -498,8 +551,9 @@ const AdminUsers = () => {
               <div>
                 <label className={labelCls}>{p.role || 'Role'}</label>
                 <select className={inputCls} value={createForm.role} onChange={e => setCreateForm(f => ({ ...f, role: e.target.value }))}>
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
+                  {assignableRoles.map(role => (
+                    <option key={role} value={role}>{ROLE_LABELS[role]}</option>
+                  ))}
                 </select>
               </div>
               <div className="flex justify-end gap-3 pt-2">

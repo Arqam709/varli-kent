@@ -5,6 +5,8 @@ import cloudinary from '../config/cloudinary.js'
 import User from '../models/User.js'
 import { protect } from '../middleware/auth.js'
 import { requireRole } from '../middleware/checkPermission.js'
+import { validateRoleChange, canReceiveAdminPermissions } from '../services/roleManagement.js'
+import { adminAgentOption, ADMIN_AGENT_OPTION_FIELDS } from '../services/agentAssignment.js'
 
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
@@ -29,11 +31,59 @@ const canChangePasswords = (req, res, next) => {
   return res.status(403).json({ success: false, message: 'Forbidden: requires owner role or manage_passwords permission' })
 }
 
+// Guard for the agent selector on the property form.
+//
+// Deliberately NOT canManageUsers: an admin granted add_listing/edit_listing
+// but not user_management can legitimately create and edit properties, and
+// gating the selector behind user_management would leave them staring at an
+// empty dropdown on a form they are allowed to submit.
+//
+// This mirrors the pairing the property routes already use —
+// requireRole('owner','admin') + requirePermission('add_listing'|'edit_listing')
+// — so exactly the people who can assign an agent can list them.
+const PROPERTY_MANAGEMENT_PERMISSIONS = ['add_listing', 'edit_listing']
+
+const canAssignPropertyAgents = (req, res, next) => {
+  if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' })
+  if (req.user.role === 'owner') return next()
+  if (
+    req.user.role === 'admin' &&
+    PROPERTY_MANAGEMENT_PERMISSIONS.some((perm) => req.user.permissions?.includes(perm))
+  ) {
+    return next()
+  }
+  return res.status(403).json({ success: false, message: 'Forbidden: requires property management access' })
+}
+
 // GET /api/users
 router.get('/', protect, canManageUsers, async (req, res, next) => {
   try {
     const users = await User.find().select('-password -resetPasswordToken -resetPasswordExpires')
     res.json({ success: true, count: users.length, users })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /api/users/agents — the Assigned Agent selector on the property form.
+// MUST be before any '/:id' route so the wildcard cannot swallow 'agents'.
+//
+// Narrow on purpose. Reusing GET /api/users here would ship every account in
+// the system, each with its full permissions array, to anyone editing a
+// listing — and would also be unreachable for an admin without
+// user_management. This returns active agents and four safe fields.
+//
+// It includes `email`, which the PUBLIC agent serializer deliberately does
+// not: the property form auto-fills Property.agentEmail from the selected
+// account, so an admin never retypes it. Two audiences, two serializers —
+// adminAgentOption() here, publicAgent() on the listing page.
+router.get('/agents', protect, canAssignPropertyAgents, async (req, res, next) => {
+  try {
+    const agents = await User.find({ role: 'agent', isActive: true })
+      .select(ADMIN_AGENT_OPTION_FIELDS)
+      .sort({ name: 1 })
+
+    res.json({ success: true, count: agents.length, agents: agents.map(adminAgentOption) })
   } catch (err) {
     next(err)
   }
@@ -152,22 +202,54 @@ router.delete('/favourites/:propertyId', protect, async (req, res, next) => {
 })
 
 // PUT /api/users/:id/role
+//
+// Also the activate/deactivate endpoint — the admin UI PUTs the target's
+// unchanged current role alongside an isActive toggle. validateRoleChange()
+// treats "same role as now" and "no role sent" as NOT a role change, so
+// toggling isActive never has to satisfy the promotion hierarchy.
+//
+// The rules themselves live in services/roleManagement.js.
 router.put('/:id/role', protect, canManageUsers, async (req, res, next) => {
   try {
     const target = await User.findById(req.params.id)
     if (!target) {
       return res.status(404).json({ success: false, message: 'User not found' })
     }
-    if (target.role === 'owner') {
-      return res.status(403).json({ success: false, message: 'Cannot change the role of another owner' })
+
+    // The actor is req.user — resolved from the JWT by `protect`. Nothing
+    // about the caller is ever read from the request body.
+    const decision = validateRoleChange({
+      actor: req.user,
+      target,
+      requestedRole: req.body.role,
+    })
+
+    if (!decision.ok) {
+      return res.status(decision.status).json({ success: false, message: decision.message })
     }
 
-    target.role = req.body.role
-    if (req.body.isActive !== undefined) target.isActive = req.body.isActive
+    if (decision.roleChanged) {
+      target.role = decision.role
+
+      // An agent holds no admin permissions, by definition. Clearing on
+      // promotion is what stops a demoted admin keeping delete_listing while
+      // wearing the agent label.
+      if (decision.role === 'agent') target.permissions = []
+    }
+
+    if (req.body.isActive !== undefined) {
+      if (typeof req.body.isActive !== 'boolean') {
+        return res.status(400).json({ success: false, message: 'isActive must be true or false' })
+      }
+      target.isActive = req.body.isActive
+    }
+
     await target.save()
 
     const userObj = target.toObject() //convert the mongoose document to a plain JavaScript object
     delete userObj.password //bcz now we delete the password field from the user object before sending it in the response
+    delete userObj.resetPasswordToken
+    delete userObj.resetPasswordExpires
     res.json({ success: true, user: userObj })
   } catch (err) {
     next(err)
@@ -186,7 +268,20 @@ router.put('/:id/permissions', protect, canManageUsers, async (req, res, next) =
       return res.status(403).json({ success: false, message: 'Cannot modify owner permissions' })
     }
 
-    let allowedPerms = req.body.permissions
+    let allowedPerms = Array.isArray(req.body.permissions) ? req.body.permissions : []
+
+    // Agents are a customer-facing role, not a staff role — they must never
+    // hold admin permissions. Rejecting rather than silently dropping so the
+    // caller learns the grant did not happen. An empty array still succeeds,
+    // which is what lets an admin clear permissions on someone being moved to
+    // the agent role.
+    if (!canReceiveAdminPermissions(target.role) && allowedPerms.length > 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'Agents cannot be granted admin permissions',
+      })
+    }
+
     // Non-owner admins with user_management can only grant permissions they themselves hold
     if (req.user.role !== 'owner') {
       allowedPerms = allowedPerms.filter(p => req.user.permissions?.includes(p))

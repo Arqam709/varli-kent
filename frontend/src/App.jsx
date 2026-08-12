@@ -28,6 +28,9 @@ import AdminTeam from './pages/AdminTeam'
 import AdminShowroom from './pages/AdminShowroom'
 import AdminSiteSettings from './pages/AdminSiteSettings'
 import AdminLeadRouting from './pages/AdminLeadRouting'
+import AgentDashboard from './pages/AgentDashboard'
+import AgentProperties from './pages/AgentProperties'
+import AgentProfile from './pages/AgentProfile'
 import TeamPage from './pages/TeamPage'
 
 const ArchitecturePage = lazy(() => import('./pages/ArchitecturePage'))
@@ -78,6 +81,16 @@ const App = () => (
           <Route path="/admin/team" element={<ProtectedRoute requiredRole="admin"><AdminTeam /></ProtectedRoute>} />
           <Route path="/admin/showroom" element={<ProtectedRoute requiredRole="admin"><AdminShowroom /></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute requiredRole="owner"><AdminSiteSettings /></ProtectedRoute>} />
+          {/*
+            Agent Portal — strictly role === 'agent'. Admins and owners are
+            refused here just as agents are refused /admin/*; the two portals
+            never overlap. Kept as flat sibling routes to match the admin
+            section above.
+          */}
+          <Route path="/agent" element={<Navigate to="/agent/dashboard" replace />} />
+          <Route path="/agent/dashboard" element={<ProtectedRoute requiredRole="agent"><AgentDashboard /></ProtectedRoute>} />
+          <Route path="/agent/properties" element={<ProtectedRoute requiredRole="agent"><AgentProperties /></ProtectedRoute>} />
+          <Route path="/agent/profile" element={<ProtectedRoute requiredRole="agent"><AgentProfile /></ProtectedRoute>} />
           <Route path="*" element={<PublicLayout><HomePage /></PublicLayout>} />
         </Routes>
       </Suspense>

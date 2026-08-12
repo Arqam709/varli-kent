@@ -10,7 +10,15 @@ const userSchema = new mongoose.Schema({
   enum: ['local', 'google', 'microsoft', 'apple'],
   default: 'local',
 },
-  role: { type: String, enum: ['owner', 'admin', 'user'], default: 'user' },
+  // 'agent' is a real estate consultant: a fully authenticated account that
+  // can be assigned to a Property, but which carries NO admin access. Every
+  // protected route is an allowlist (requireRole('owner','admin')), so an
+  // agent is refused everywhere by default rather than by exception.
+  //
+  // 'owner' is in this enum because owners exist, NOT because the role can be
+  // requested — see services/roleManagement.js. It is assignable only by
+  // scripts/createOwner.js.
+  role: { type: String, enum: ['owner', 'admin', 'agent', 'user'], default: 'user' },
   permissions: {
     type: [String],
     enum: [

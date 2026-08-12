@@ -59,7 +59,7 @@ const SecondaryBtn = ({ children, ...props }) => (
 )
 
 const SettingsPage = () => {
-  const { user, updateUser, logout } = useAuth()
+  const { user, portal, updateUser, logout } = useAuth()
   const { theme, setTheme, themes } = useTheme()
   const navigate = useNavigate()
   const fileRef = useRef(null)
@@ -130,7 +130,7 @@ const SettingsPage = () => {
     toast.success('Signed out')
   }
 
-  const roleLabel = user?.role === 'owner' ? 'Owner' : user?.role === 'admin' ? 'Admin' : 'Member'
+  const roleLabel = user?.role === 'owner' ? 'Owner' : user?.role === 'admin' ? 'Admin' : user?.role === 'agent' ? 'Agent' : 'Member'
   const roleColor = user?.role === 'owner'
     ? { background: '#fef3c7', color: '#92400e' }
     : user?.role === 'admin'
@@ -290,7 +290,9 @@ const SettingsPage = () => {
               { to: '/properties', label: 'Browse Properties', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
               { to: '/favourites', label: 'My Favourites', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
               { to: '/contact', label: 'Contact Us', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
-              ...(user?.role === 'admin' || user?.role === 'owner' ? [{ to: '/admin/dashboard', label: 'Admin Panel', icon: 'M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7' }] : []),
+              // Same derivation the Navbar uses — one definition of "which
+              // staff portal, if any" instead of a hand-rolled role check here.
+              ...(portal ? [{ to: portal.to, label: portal.label, icon: 'M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7' }] : []),
             ].map(({ to, label, icon }) => (
               <Link key={to} to={to} className="flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-medium transition cursor-pointer" style={{ borderColor: 'var(--t-border)', color: 'var(--t-text)', background: 'var(--t-input-bg)' }}>
                 <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--t-accent)' }}>

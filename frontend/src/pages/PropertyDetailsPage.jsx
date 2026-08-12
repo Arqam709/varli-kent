@@ -83,6 +83,26 @@ const PropertyDetailsPage = () => {
   const fav = isFavourite(property._id)
   const whatsapp = property.whatsappNumber || property.agentPhone || ''
 
+  // Shared by the assigned-agent block and the legacy one below it, so the
+  // phone and email lines are written once rather than twice. A JSX value,
+  // not a component — it must not remount when the page re-renders.
+  const agentContactLines = (
+    <>
+      {property.agentPhone && (
+        <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+          <svg className="h-4 w-4 text-[#4b6741]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+          {property.agentPhone}
+        </div>
+      )}
+      {property.agentEmail && (
+        <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+          <svg className="h-4 w-4 text-[#4b6741]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+          {property.agentEmail}
+        </div>
+      )}
+    </>
+  )
+
   const getDisplayPrice = (property) => {
   const label = property.priceLabel?.trim()
   const amount = Number(property.price || 0).toLocaleString('en-US')
@@ -203,24 +223,40 @@ const PropertyDetailsPage = () => {
 
               <hr className="my-5 border-slate-100" />
 
-              {property.agentName && (
+              {/*
+                Agent identity. The assigned account wins outright: when
+                `agent` is set the name comes from that User, and the legacy
+                free-text agentName is not rendered at all — otherwise an old
+                listing reassigned to a new agent would print both names.
+                Listings created before the agent system fall back to it.
+
+                "Agent" is a fixed label, not a stored per-person job title.
+              */}
+              {property.agent ? (
+                <div className="mb-5">
+                  <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
+                    {property.agent.avatar ? (
+                      <img src={property.agent.avatar} alt={property.agent.name} className="h-10 w-10 shrink-0 rounded-full object-cover" loading="lazy" />
+                    ) : (
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#202a36] text-sm font-bold text-white">
+                        {property.agent.name?.[0]?.toUpperCase() || 'A'}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Listed by</p>
+                      <p className="truncate font-semibold text-[#202a36]">{property.agent.name}</p>
+                      <p className="truncate text-xs text-slate-500">Agent</p>
+                    </div>
+                  </div>
+                  {agentContactLines}
+                </div>
+              ) : property.agentName ? (
                 <div className="mb-5">
                   <p className="mb-3 text-sm font-semibold text-slate-700">Agent</p>
                   <p className="font-semibold text-[#202a36]">{property.agentName}</p>
-                  {property.agentPhone && (
-                    <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
-                      <svg className="h-4 w-4 text-[#4b6741]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
-                      {property.agentPhone}
-                    </div>
-                  )}
-                  {property.agentEmail && (
-                    <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
-                      <svg className="h-4 w-4 text-[#4b6741]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                      {property.agentEmail}
-                    </div>
-                  )}
+                  {agentContactLines}
                 </div>
-              )}
+              ) : null}
 
               <div className="space-y-3">
                 {whatsapp && (

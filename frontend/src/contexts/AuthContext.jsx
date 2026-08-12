@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import api from '../lib/api'
 
 const AuthContext = createContext(null)
@@ -111,10 +111,56 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('varlikent_user', JSON.stringify(updated))
   }
 
+  /**
+   * Re-reads the signed-in user from the server and refreshes the cached copy.
+   *
+   * Needed because fields can be changed by someone else while a session is
+   * open — an administrator setting an agent's professional title, for
+   * instance. Reuses the existing /auth/me rather than adding an endpoint.
+   *
+   * A failure is swallowed on purpose: the cached user stays as-is and the
+   * page keeps working. Only session restoration (above) treats a 401 as
+   * grounds for clearing the session.
+   *
+   * useCallback keeps the identity stable so callers can safely list it in a
+   * useEffect dependency array.
+   */
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await api.get('/auth/me')
+      const fresh = res.data.user || res.data
+      setUser(fresh)
+      localStorage.setItem('varlikent_user', JSON.stringify(fresh))
+      return fresh
+    } catch {
+      return null
+    }
+  }, [])
+
   const isLoggedIn = !!user
   const isOwner = user?.role === 'owner'
   const isAdmin = user?.role === 'admin' || user?.role === 'owner'
+  // Deliberately NOT folded into isAdmin. An agent is staff, but not an
+  // administrator — they get their own portal and none of /admin/*.
+  const isAgent = user?.role === 'agent'
   const hasPermission = (perm) => user?.role === 'owner' || user?.permissions?.includes(perm)
+
+  /**
+   * Which staff portal (if any) this account's account menu should offer.
+   *
+   * Derived in ONE place because three separate call sites need the answer —
+   * the desktop Navbar dropdown, the mobile Navbar drawer, and the Settings
+   * quick links — and they were previously each hand-rolling their own role
+   * check. `null` means "no staff portal", which is the normal-user case.
+   *
+   * Roles are mutually exclusive (the User schema enum allows exactly one), so
+   * the order of these branches is a formality rather than a precedence rule.
+   */
+  const portal = isAdmin
+    ? { to: '/admin/dashboard', label: 'Dashboard' }
+    : isAgent
+      ? { to: '/agent/dashboard', label: 'Agent Dashboard' }
+      : null
 
   return (
     <AuthContext.Provider
@@ -125,12 +171,15 @@ export const AuthProvider = ({ children }) => {
         isLoggedIn,
         isOwner,
         isAdmin,
+        isAgent,
+        portal,
         login,
         loginWithToken,
         microsoftLogin,
         register,
         logout,
         updateUser,
+        refreshUser,
         hasPermission,
       }}
     >

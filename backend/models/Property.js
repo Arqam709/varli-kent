@@ -30,10 +30,23 @@ const propertySchema = new mongoose.Schema({
   description: { type: String },
   images: [{ type: String }],
   mainImage: { type: String },
+  // LEGACY. Nothing writes this any more — the property routes strip it and
+  // the admin form no longer offers the input. Kept because existing listings
+  // still carry a name here and both clients fall back to it when no `agent`
+  // is assigned. Stored values are left untouched; no migration, no erasure.
   agentName: { type: String },
   agentPhone: { type: String },
+  // Server-derived from the assigned agent's User.email, never accepted from
+  // the client. A copy, not a live link: if the agent changes their account
+  // email this does not follow until the property is saved again.
   agentEmail: { type: String },
   whatsappNumber: { type: String },
+  agent: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+    index: true,
+  },
   featured: { type: Boolean, default: false },
   status: {
     type: String,
