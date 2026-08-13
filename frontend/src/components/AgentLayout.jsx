@@ -1,7 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import {
+  HUMAN_UNREAD_EVENT,
+  getPropertyConversationUnreadCount,
+} from '../lib/propertyMessagingApi'
 
 const LANGS = [{ code: 'en', label: 'EN' }, { code: 'tr', label: 'TR' }, { code: 'ar', label: 'AR' }]
 
@@ -17,6 +21,14 @@ const NAV_LINKS = [
     icon: <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>,
   },
   {
+    to: '/agent/messages',
+    label: 'Messages',
+    // Human customer↔agent enquiries — NOT the AI assistant transcripts under
+    // /admin/user-chats, and not admin contact messages.
+    badge: 'humanUnread',
+    icon: <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>,
+  },
+  {
     to: '/agent/profile',
     label: 'Profile',
     icon: <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
@@ -28,7 +40,7 @@ export const AGENT_ROLE_LABEL = 'Agent'
 const linkCls = ({ isActive }) =>
   `flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors cursor-pointer ${isActive ? 'bg-[#4b6741] text-white' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`
 
-const Sidebar = ({ user, onNavigate, onLogout }) => (
+const Sidebar = ({ user, onNavigate, onLogout, humanUnread }) => (
   <div className="flex h-full flex-col" style={{ backgroundColor: '#202a36' }}>
     <div className="px-6 py-6 border-b border-slate-700">
       <Link to="/" className="block">
@@ -41,8 +53,19 @@ const Sidebar = ({ user, onNavigate, onLogout }) => (
 
     <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
       {NAV_LINKS.map(l => (
+        // No `end` prop: /agent/messages must stay highlighted while the agent
+        // is inside /agent/messages/:id.
         <NavLink key={l.to} to={l.to} className={linkCls} onClick={onNavigate}>
-          {l.icon}{l.label}
+          {l.icon}
+          <span className="flex-1">{l.label}</span>
+          {/* Gold, not the portal green: the active link's own background is
+              that green, and a green-on-green badge would disappear exactly
+              when the agent is looking at it. */}
+          {l.badge === 'humanUnread' && humanUnread > 0 && (
+            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#d97706] px-1.5 text-[11px] font-bold text-white">
+              {humanUnread > 99 ? '99+' : humanUnread}
+            </span>
+          )}
         </NavLink>
       ))}
     </nav>
@@ -70,14 +93,42 @@ const Sidebar = ({ user, onNavigate, onLogout }) => (
 )
 
 const AgentLayout = ({ children }) => {
-  const { user, logout, refreshUser } = useAuth()
+  const { user, logout, refreshUser, isAgent } = useAuth()
   const navigate = useNavigate()
   const { language, setLanguage } = useLanguage()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [humanUnread, setHumanUnread] = useState(0)
 
   useEffect(() => {
     refreshUser()
   }, [refreshUser])
+
+  /**
+   * Unread HUMAN customer messages, for the Messages badge.
+   *
+   * Read on mount — which every navigation within the portal performs, since
+   * each agent page renders its own AgentLayout — and again whenever this tab
+   * marks a thread read. There is NO polling and no socket: this phase is
+   * REST-only, so a badge can be a few minutes stale and that is intended.
+   *
+   * Strictly separate from the property-alert notification count, which
+   * measures new LISTINGS rather than messages.
+   *
+   * Failure is swallowed: the portal must not be disturbed by a badge.
+   */
+  const loadUnread = useCallback(() => {
+    getPropertyConversationUnreadCount()
+      .then(setHumanUnread)
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!isAgent) return
+
+    loadUnread()
+    window.addEventListener(HUMAN_UNREAD_EVENT, loadUnread)
+    return () => window.removeEventListener(HUMAN_UNREAD_EVENT, loadUnread)
+  }, [isAgent, loadUnread])
 
   const handleLogout = async () => {
     await logout()
@@ -96,7 +147,7 @@ const AgentLayout = ({ children }) => {
         <div className="fixed inset-0 z-50 lg:hidden flex">
           <div className="absolute inset-0 bg-black/50" onClick={closeSidebar} />
           <div className="relative w-64 h-full overflow-hidden">
-            <Sidebar user={user} onNavigate={closeSidebar} onLogout={handleLogout} />
+            <Sidebar user={user} onNavigate={closeSidebar} onLogout={handleLogout} humanUnread={humanUnread} />
           </div>
         </div>
       )}

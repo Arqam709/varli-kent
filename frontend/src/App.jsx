@@ -30,6 +30,7 @@ import AdminSiteSettings from './pages/AdminSiteSettings'
 import AdminLeadRouting from './pages/AdminLeadRouting'
 import AgentDashboard from './pages/AgentDashboard'
 import AgentProperties from './pages/AgentProperties'
+import AgentMessages from './pages/AgentMessages'
 import AgentProfile from './pages/AgentProfile'
 import TeamPage from './pages/TeamPage'
 
@@ -90,6 +91,16 @@ const App = () => (
           <Route path="/agent" element={<Navigate to="/agent/dashboard" replace />} />
           <Route path="/agent/dashboard" element={<ProtectedRoute requiredRole="agent"><AgentDashboard /></ProtectedRoute>} />
           <Route path="/agent/properties" element={<ProtectedRoute requiredRole="agent"><AgentProperties /></ProtectedRoute>} />
+          {/*
+            Human customer↔agent enquiries. Both routes render the same page:
+            on desktop the list and the open thread sit side by side, and below
+            `lg` the id decides which of the two is shown. Guarded as agent-only
+            — these are private participant conversations, so they are NOT
+            under /admin/* and admins/owners cannot reach them here or on the
+            API.
+          */}
+          <Route path="/agent/messages" element={<ProtectedRoute requiredRole="agent"><AgentMessages /></ProtectedRoute>} />
+          <Route path="/agent/messages/:id" element={<ProtectedRoute requiredRole="agent"><AgentMessages /></ProtectedRoute>} />
           <Route path="/agent/profile" element={<ProtectedRoute requiredRole="agent"><AgentProfile /></ProtectedRoute>} />
           <Route path="*" element={<PublicLayout><HomePage /></PublicLayout>} />
         </Routes>

@@ -17,7 +17,7 @@ import { parseLimit } from '../utils/pagination.js'
 import { isAssignableAgent } from '../services/agentAssignment.js'
 import {
   authorizeConversationAccess,
-  conversationScopeFor,
+  inboxScopeFor,
   currentPropertyAgentId,
   reconcileConversationAgent,
   conversationResponse,
@@ -202,6 +202,12 @@ router.post('/', async (req, res, next) => {
  *
  * The caller's own conversations, newest activity first. Which side they are
  * on is derived from participation, never from a query parameter.
+ *
+ * Threads nobody has written in yet are EXCLUDED. A conversation exists from
+ * the moment a customer taps Message — before they have typed anything — so
+ * without that condition an agent's inbox showed customers who had not
+ * actually contacted them. The thread itself remains fully readable by id; see
+ * inboxScopeFor.
  */
 router.get('/', async (req, res, next) => {
   try {
@@ -210,7 +216,7 @@ router.get('/', async (req, res, next) => {
     // For an agent this requires BOTH the conversation pointer and current
     // ownership of the listing, so a stale pointer cannot keep a thread in the
     // outgoing agent's inbox. Two indexed queries, never one per row.
-    const filter = await conversationScopeFor(req.user)
+    const filter = await inboxScopeFor(req.user)
 
     const conversations = await PropertyConversation.find(filter)
       .populate('property', PROPERTY_SUMMARY_FIELDS)
@@ -247,9 +253,11 @@ router.get('/unread-count', async (req, res, next) => {
   try {
     const isAgent = req.user.role === 'agent'
 
-    // Same ownership-aware scope as the inbox, so a stale pointer cannot keep
-    // inflating the outgoing agent's badge either.
-    const match = await conversationScopeFor(req.user)
+    // Exactly the scope the inbox uses, so the badge can never count a thread
+    // the list does not show. An empty thread contributes 0 by construction
+    // (only a send increments a counter), so excluding it changes no total —
+    // but keeping the two definitions identical means they cannot drift.
+    const match = await inboxScopeFor(req.user)
     const field = isAgent ? '$agentUnreadCount' : '$customerUnreadCount'
 
     const [result] = await PropertyConversation.aggregate([

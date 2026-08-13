@@ -507,7 +507,8 @@ const stubOwnedProperties = (ids) => { Property.find = () => ({ select: async ()
 stubOwnedProperties([propertyId])
 
 await call(listHandler, { user: customer, query: {}, body: {} })
-check('customer sees threads they opened', Object.keys(captured.listFilter).join(','), 'customer')
+// 'lastMessage.at' is the empty-thread exclusion; see the section below.
+check('customer sees threads they opened', Object.keys(captured.listFilter).sort().join(','), 'customer,lastMessage.at')
 check('scoped to their own id', String(captured.listFilter.customer), String(customerId))
 
 resetCaptured()
@@ -541,6 +542,158 @@ resetCaptured()
 PropertyConversation.aggregate = async () => []
 const noneUnread = await call(unreadHandler, { user: customer, query: {}, body: {} })
 check('no conversations → 0, not undefined', noneUnread.body.count, 0)
+
+/* ══════════ EMPTY THREADS ARE HIDDEN FROM INBOX LISTS ══════════
+ *
+ * REGRESSION: a conversation is created the moment a customer taps Message,
+ * before they type anything. The agent's inbox showed those as a customer with
+ * "No messages yet" — someone who had not actually contacted them.
+ *
+ * The trap this guards against: `{ lastMessage: { $ne: null } }` matches every
+ * document and fixes nothing, because lastMessage is an inline nested path
+ * that Mongoose materialises as { text: '', sender: null, at: null } on
+ * create. `lastMessage.at` is the field that actually transitions.
+ *
+ * Hiding is a LIST rule only. Direct access by id must be untouched.
+ */
+
+console.log('\n== empty threads: the shape a brand-new conversation really has ==')
+
+// Not hand-written — built by the real schema, so this asserts Mongoose's
+// actual defaults rather than an assumption about them.
+const freshDoc = new PropertyConversation({
+  property: propertyId,
+  customer: customerId,
+  agent: agentAId,
+  status: 'open',
+  lastActivityAt: new Date(),
+}).toObject()
+
+check('lastMessage is NOT null on create', freshDoc.lastMessage === null, false)
+check('lastMessage.at IS null on create', freshDoc.lastMessage.at, null)
+check('lastMessage.text is empty on create', freshDoc.lastMessage.text, '')
+check('no unread on either side', freshDoc.customerUnreadCount + freshDoc.agentUnreadCount, 0)
+check('starts open', freshDoc.status, 'open')
+check('lastActivityAt is set at creation', freshDoc.lastActivityAt instanceof Date, true)
+
+const emptyThreadId = oid()
+const spokenThreadId = oid()
+const firstMessageAt = new Date()
+
+const emptyThread = {
+  _id: emptyThreadId,
+  property: propertyId,
+  customer: customerId,
+  agent: agentAId,
+  status: 'open',
+  lastMessage: { text: '', sender: null, at: null },
+  lastActivityAt: new Date(),
+  customerUnreadCount: 0,
+  agentUnreadCount: 0,
+}
+
+const spokenThread = {
+  ...emptyThread,
+  _id: spokenThreadId,
+  lastMessage: { text: 'Hello, is this available?', sender: customerId, at: firstMessageAt },
+  lastActivityAt: firstMessageAt,
+  agentUnreadCount: 1,
+}
+
+/** Enough of Mongo's matching semantics to exercise the real inbox filter. */
+const matchesFilter = (row, filter) =>
+  Object.entries(filter).every(([key, condition]) => {
+    if (key === 'lastMessage.at') {
+      // Mongo's $ne: null excludes explicit null AND a missing path.
+      const value = row.lastMessage?.at ?? null
+      return value !== null
+    }
+    if (key === 'property') return condition.$in.some((id) => String(id) === String(row.property))
+    return String(condition) === String(row[key])
+  })
+
+const stubInbox = (rows) => {
+  PropertyConversation.find = (filter) => {
+    captured.listFilter = filter
+    return query(rows.filter((row) => matchesFilter(row, filter)))
+  }
+}
+
+console.log('\n== A/G/H: an unspoken thread is in NEITHER inbox ==')
+resetCaptured()
+stubOwnedProperties([propertyId])
+stubInbox([emptyThread])
+
+const agentEmptyList = await call(listHandler, { user: agentA, query: {}, body: {} })
+check('agent list excludes the empty thread', agentEmptyList.body.conversations.length, 0)
+check('agent count reports 0', agentEmptyList.body.count, 0)
+check('exclusion is in the query, not post-filtered', JSON.stringify(captured.listFilter['lastMessage.at']), '{"$ne":null}')
+
+resetCaptured()
+const customerEmptyList = await call(listHandler, { user: customer, query: {}, body: {} })
+// The same rule on both sides: tapping Message and leaving must not leave a
+// ghost row in the customer's own inbox either.
+check('customer list excludes it too', customerEmptyList.body.conversations.length, 0)
+check('customer scope carries the same condition', JSON.stringify(captured.listFilter['lastMessage.at']), '{"$ne":null}')
+
+console.log('\n== D/E: the first real message makes it appear ==')
+resetCaptured()
+stubInbox([spokenThread, emptyThread])
+
+const afterFirstMessage = await call(listHandler, { user: agentA, query: {}, body: {} })
+check('exactly one row returned', afterFirstMessage.body.conversations.length, 1)
+check('it is the spoken thread', String(afterFirstMessage.body.conversations[0]._id), String(spokenThreadId))
+check('preview is the real first message', afterFirstMessage.body.conversations[0].lastMessage.text, 'Hello, is this available?')
+check('sent by the customer', String(afterFirstMessage.body.conversations[0].lastMessage.sender), String(customerId))
+// J — the agent's badge on that row.
+check('agent unread is 1', afterFirstMessage.body.conversations[0].unreadCount, 1)
+// There must be no window in which the agent sees a row with no preview.
+check('no "empty preview" row reaches the client', afterFirstMessage.body.conversations.some((c) => c.lastMessage === null), false)
+check('ordering key is the message timestamp', afterFirstMessage.body.conversations[0].lastActivityAt, firstMessageAt)
+
+console.log('\n== B/C: hiding from the list does NOT restrict access ==')
+// The mobile app navigates straight to the thread it just created, so this is
+// the case that must keep working.
+stubConversation(emptyThread)
+check('customer can open the empty thread → 200', (await call(detailHandler, { ...req(customer), params: { id: String(emptyThreadId) } })).statusCode, 200)
+check('assigned agent can open it → 200', (await call(detailHandler, { ...req(agentA), params: { id: String(emptyThreadId) } })).statusCode, 200)
+check('a stranger still cannot → 404', (await call(detailHandler, { ...req(stranger), params: { id: String(emptyThreadId) } })).statusCode, 404)
+check('admin still cannot → 404', (await call(detailHandler, { ...req(adminUser), params: { id: String(emptyThreadId) } })).statusCode, 404)
+
+const emptyDetail = await call(detailHandler, { ...req(customer), params: { id: String(emptyThreadId) } })
+check('detail reports no lastMessage', emptyDetail.body.conversation.lastMessage, null)
+
+stubMessages([])
+const emptyMessages = await call(messagesHandler, { user: customer, params: { id: String(emptyThreadId) }, query: {}, body: {} })
+check('messages → 200', emptyMessages.statusCode, 200)
+check('messages → empty array, not an error', Array.isArray(emptyMessages.body.messages) && emptyMessages.body.messages.length === 0, true)
+check('no further pages', emptyMessages.body.hasMore, false)
+
+console.log('\n== F: reopen before any message reuses the thread, still hidden ==')
+resetCaptured()
+const unspokenExisting = { ...emptyThread, save: async function () { captured.saved = this } }
+stubStart({ existing: unspokenExisting })
+const reopenedEmpty = await call(startHandler, { user: customer, body: { propertyId: String(propertyId) } })
+check('same conversation id returned', String(reopenedEmpty.body.conversationId), String(emptyThreadId))
+check('no duplicate created', reopenedEmpty.body.created, false)
+check('start never writes lastMessage', captured.create, undefined)
+
+stubOwnedProperties([propertyId])
+stubInbox([unspokenExisting])
+check('still absent from the agent inbox', (await call(listHandler, { user: agentA, query: {}, body: {} })).body.conversations.length, 0)
+
+console.log('\n== I: the unread badge uses the identical scope ==')
+resetCaptured()
+PropertyConversation.aggregate = async (pipeline) => {
+  captured.pipeline = pipeline
+  // An empty thread contributes 0 by construction: only a send increments a
+  // counter. The aggregate therefore matches nothing to sum.
+  return []
+}
+const emptyUnread = await call(unreadHandler, { user: agentA, query: {}, body: {} })
+check('badge reads 0 for an unspoken thread', emptyUnread.body.count, 0)
+check('unread $match carries the same exclusion', JSON.stringify(captured.pipeline[0].$match['lastMessage.at']), '{"$ne":null}')
+check('unread $match still gated on ownership', Array.isArray(captured.pipeline[0].$match.property.$in), true)
 
 /* ══════════ HALF-COMPLETED REASSIGNMENT — EVERY SURFACE ══════════
  *

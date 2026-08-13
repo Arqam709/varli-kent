@@ -176,6 +176,54 @@ export const conversationScopeFor = async (user) => {
   return { agent: user._id, property: { $in: propertyIds } }
 }
 
+/**
+ * "This thread has at least one real message."
+ *
+ * ── Why `lastMessage.at` and NOT `lastMessage` ──────────────────────────
+ * A conversation is created the moment a customer taps Message, before they
+ * type anything — that is deliberate (the mobile app needs a conversationId to
+ * navigate to, and reopening must reuse the same thread). So an empty thread
+ * exists, and without this it appeared in the agent's inbox as a customer who
+ * had said nothing at all.
+ *
+ * The tempting filter, `{ lastMessage: { $ne: null } }`, MATCHES EVERY
+ * DOCUMENT AND FIXES NOTHING. `lastMessage` is an inline nested path, so
+ * Mongoose materialises it on create with its own defaults:
+ *
+ *   lastMessage: { text: '', sender: null, at: null }
+ *
+ * The object is always there; it is never null. `at` is the field that
+ * actually transitions — null until the first send, then set to the message's
+ * createdAt in the same atomic update that moves the unread counter. It is
+ * already the has-a-message test conversationResponse() uses to decide whether
+ * to emit a lastMessage at all, so this reuses an established signal rather
+ * than inventing a second one that could disagree with it.
+ *
+ * `$ne: null` also excludes documents where the path is MISSING entirely (an
+ * older row written before this sub-schema existed, say). That is the right
+ * direction to fail: hidden, not wrongly shown.
+ */
+export const HAS_MESSAGES = { 'lastMessage.at': { $ne: null } }
+
+/**
+ * What belongs in a participant's inbox LIST: their own conversations, minus
+ * the ones nobody has spoken in yet.
+ *
+ * Deliberately separate from conversationScopeFor, which stays a pure
+ * authorization scope — these are two different questions, and merging them
+ * would mean the access rule and a presentation rule could only ever change
+ * together. Access is unaffected: an empty thread is still fully readable at
+ * GET /:id and /:id/messages, because those load by id and never consult this.
+ *
+ * Applies to BOTH sides on purpose. A customer who opens a listing, taps
+ * Message and leaves without typing should not accumulate ghost threads in
+ * their own inbox either.
+ */
+export const inboxScopeFor = async (user) => ({
+  ...(await conversationScopeFor(user)),
+  ...HAS_MESSAGES,
+})
+
 /* ── Serializers ───────────────────────────────────────────────────────── */
 
 /** The only shape a conversation participant is ever exposed as. */

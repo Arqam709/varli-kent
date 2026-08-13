@@ -1,0 +1,275 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import AgentLayout from '../components/AgentLayout'
+import AgentConversationThread from '../components/AgentConversationThread'
+import { formatConversationTime } from '../lib/formatMessageTime'
+import { getPropertyConversations, previewOf } from '../lib/propertyMessagingApi'
+
+/**
+ * Agent Messages — the website half of customer↔agent property enquiries.
+ *
+ * ── One page, two routes ────────────────────────────────────────────────
+ * /agent/messages and /agent/messages/:id both render this. On desktop the
+ * list and the open thread sit side by side and the URL simply says which
+ * thread; below `lg` only one pane is visible at a time, so the same URL reads
+ * as "inbox" or "thread". Two panes driven by one route is considerably less
+ * to maintain than two separate screens that must stay in step, and it keeps
+ * every thread deep-linkable.
+ *
+ * These are NOT admin messages, and the API behind them is the same
+ * participant API the mobile customer app uses — see lib/propertyMessagingApi.
+ */
+
+const ChatEmptyIcon = () => (
+  <svg className="h-16 w-16 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+  </svg>
+)
+
+const AlertIcon = () => (
+  <svg className="h-10 w-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+  </svg>
+)
+
+const initialsOf = (name) =>
+  (name || '')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase())
+    .join('') || 'C'
+
+const Avatar = ({ name, avatar }) =>
+  avatar ? (
+    <img src={avatar} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
+  ) : (
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#202a36] text-sm font-bold text-white">
+      {initialsOf(name)}
+    </div>
+  )
+
+/**
+ * One inbox row.
+ *
+ * `counterparty` is the customer — the backend has already worked out which of
+ * the two participants is "the other one" for the caller. The participant
+ * serializer returns name and avatar only; there is no email or phone here
+ * because the API intentionally does not expose them on this surface.
+ */
+const ConversationRow = ({ conversation, isSelected, onSelect }) => {
+  const customer = conversation.counterparty
+  const unread = conversation.unreadCount || 0
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(conversation._id)}
+      aria-current={isSelected ? 'true' : undefined}
+      className={`flex w-full cursor-pointer items-start gap-3 px-4 py-3.5 text-left transition ${
+        isSelected ? 'bg-[#4b6741]/10' : 'hover:bg-slate-50'
+      }`}
+    >
+      <Avatar name={customer?.name} avatar={customer?.avatar} />
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="truncate text-sm font-semibold text-[#202a36]">{customer?.name || 'Customer'}</p>
+          <span className="shrink-0 text-[11px] text-slate-400">
+            {formatConversationTime(conversation.lastActivityAt)}
+          </span>
+        </div>
+
+        <p className="truncate text-xs text-slate-500">
+          {conversation.property?.title || 'Listing no longer available'}
+        </p>
+
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <p className="min-w-0 flex-1 truncate text-xs text-slate-600">
+            {conversation.lastMessage?.text || 'No messages yet'}
+          </p>
+          {unread > 0 && (
+            <span
+              aria-label={`${unread} unread`}
+              className="flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-[#4b6741] px-1.5 text-[11px] font-bold text-white"
+            >
+              {unread}
+            </span>
+          )}
+        </div>
+      </div>
+    </button>
+  )
+}
+
+const AgentMessages = () => {
+  const { id: selectedId } = useParams()
+  const navigate = useNavigate()
+
+  const [conversations, setConversations] = useState([])
+  const [status, setStatus] = useState('loading') // loading | success | error
+
+  // Generation counter, the convention AdminUserChats already uses: a slower
+  // superseded request can never overwrite a faster, more recent one.
+  const requestRef = useRef(0)
+
+  const load = useCallback(() => {
+    const requestId = ++requestRef.current
+
+    getPropertyConversations()
+      .then((list) => {
+        if (requestId !== requestRef.current) return
+        setConversations(list)
+        setStatus('success')
+      })
+      .catch(() => {
+        if (requestId !== requestRef.current) return
+        setStatus('error')
+      })
+  }, [])
+
+  // Loads once per visit to the section. Deliberately not polled — this phase
+  // is REST-only, and a customer's reply appears when the agent refreshes.
+  // `status` already starts at 'loading', so the effect itself sets no state.
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const handleRetry = () => {
+    setStatus('loading')
+    load()
+  }
+
+  // The sidebar badge re-reads itself when AgentLayout mounts, which every
+  // navigation into this section already does — so nothing extra is needed
+  // here to keep it in step on arrival.
+
+  const handleSelect = (conversationId) => navigate(`/agent/messages/${conversationId}`)
+  const handleBack = () => navigate('/agent/messages')
+
+  /** The thread cleared its own unread counter; mirror that on the row. */
+  const handleRead = useCallback((conversationId) => {
+    setConversations((prev) =>
+      prev.map((c) => (c._id === conversationId ? { ...c, unreadCount: 0 } : c))
+    )
+  }, [])
+
+  /**
+   * Keep the row's preview and position honest after the agent replies,
+   * without re-fetching the whole inbox. Mirrors what the backend just wrote:
+   * lastMessage + lastActivityAt, then the same lastActivityAt-descending
+   * order the API returns.
+   */
+  const handleMessageSent = useCallback((conversationId, message) => {
+    setConversations((prev) =>
+      prev
+        .map((c) =>
+          c._id === conversationId
+            ? {
+                ...c,
+                lastMessage: {
+                  text: previewOf(message.text),
+                  sender: message.sender,
+                  at: message.createdAt,
+                },
+                lastActivityAt: message.createdAt,
+              }
+            : c
+        )
+        .sort((a, b) => new Date(b.lastActivityAt) - new Date(a.lastActivityAt))
+    )
+  }, [])
+
+  const paneCls = 'flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
+
+  return (
+    <AgentLayout>
+      <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
+        <div className="shrink-0">
+          <h1 style={{ fontFamily: 'Cinzel, serif' }} className="text-2xl font-bold text-[#202a36]">
+            Messages
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Customer enquiries about the listings assigned to you.
+          </p>
+        </div>
+
+        <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[340px_1fr]">
+          {/* Conversations. Hidden below `lg` while a thread is open, so the
+              thread gets the full width of a phone browser. */}
+          <div className={`${selectedId ? 'hidden lg:flex' : 'flex'} ${paneCls}`}>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {status === 'loading' && (
+                <div className="flex justify-center py-16">
+                  <div className="h-9 w-9 animate-spin rounded-full border-4 border-[#4b6741] border-t-transparent" />
+                </div>
+              )}
+
+              {status === 'error' && (
+                <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+                  <AlertIcon />
+                  <p className="text-sm text-slate-500">Could not load your messages.</p>
+                  <button
+                    type="button"
+                    onClick={handleRetry}
+                    className="cursor-pointer rounded-full bg-[#4b6741] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#3d5535]"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {status === 'success' &&
+                (conversations.length === 0 ? (
+                  // A quiet inbox is normal, not a failure — say so rather than
+                  // leaving a blank panel that looks broken.
+                  <div className="m-4 rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center">
+                    <p className="font-semibold text-slate-700">No messages yet</p>
+                    <p className="mx-auto mt-2 max-w-xs text-sm text-slate-500">
+                      Customer inquiries about your assigned properties will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {conversations.map((conversation) => (
+                      <ConversationRow
+                        key={conversation._id}
+                        conversation={conversation}
+                        isSelected={conversation._id === selectedId}
+                        onSelect={handleSelect}
+                      />
+                    ))}
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {/* Thread. `key` forces a remount per conversation so none of the
+              thread's per-conversation state (messages, cursor, draft, scroll
+              intent) can leak from one into the next. */}
+          <div className={`${selectedId ? 'flex' : 'hidden lg:flex'} ${paneCls}`}>
+            {selectedId ? (
+              <AgentConversationThread
+                key={selectedId}
+                conversationId={selectedId}
+                onBack={handleBack}
+                onRead={handleRead}
+                onMessageSent={handleMessageSent}
+              />
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                <ChatEmptyIcon />
+                <p className="text-lg font-semibold text-slate-600">Select a conversation</p>
+                <p className="max-w-xs text-sm text-slate-400">
+                  Choose a customer from the list to read their enquiry and reply.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </AgentLayout>
+  )
+}
+
+export default AgentMessages

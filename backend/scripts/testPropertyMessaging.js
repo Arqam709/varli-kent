@@ -15,6 +15,8 @@ import {
   matchesAgentPointer,
   authorizeConversationAccess,
   conversationScopeFor,
+  inboxScopeFor,
+  HAS_MESSAGES,
   reconcileConversationAgent,
   participantSummary,
   propertySummary,
@@ -290,6 +292,47 @@ check('agent scope lists their properties', String(agentScope.property.$in[0]), 
 Property.find = () => ({ select: async () => [] })
 const noListings = await conversationScopeFor(agentA)
 check('agent with no listings matches nothing', noListings.property.$in.length, 0)
+
+/* ── Inbox visibility: empty threads ──────────────────────────────────────
+ *
+ * A conversation exists from the moment a customer taps Message, before they
+ * type anything. It must not surface in either participant's inbox until
+ * somebody has actually spoken.
+ */
+
+console.log('\n== empty threads are excluded from inbox lists ==')
+Property.find = () => ({ select: async () => [{ _id: propertyId }] })
+
+// The whole reason the filter is on `lastMessage.at` and not on `lastMessage`:
+// Mongoose materialises the inline nested path with its own defaults, so the
+// object is present — and never null — from the moment the document is made.
+const brandNew = new PropertyConversation({
+  property: propertyId,
+  customer: customerId,
+  agent: agentAId,
+  status: 'open',
+}).toObject()
+
+check('lastMessage is an object, not null, on create', typeof brandNew.lastMessage, 'object')
+check('so `lastMessage: {$ne: null}` would match it', brandNew.lastMessage !== null, true)
+check('but lastMessage.at is null on create', brandNew.lastMessage.at, null)
+
+check('the condition targets lastMessage.at', Object.keys(HAS_MESSAGES).join(','), 'lastMessage.at')
+check('and excludes null (and missing)', HAS_MESSAGES['lastMessage.at'].$ne, null)
+
+const customerInbox = await inboxScopeFor(customer)
+check('customer inbox keeps the ownership scope', String(customerInbox.customer), String(customerId))
+check('customer inbox adds the message condition', JSON.stringify(customerInbox['lastMessage.at']), '{"$ne":null}')
+
+const agentInbox = await inboxScopeFor(agentA)
+check('agent inbox keeps the pointer condition', String(agentInbox.agent), String(agentAId))
+check('agent inbox keeps the ownership condition', Array.isArray(agentInbox.property.$in), true)
+check('agent inbox adds the message condition', JSON.stringify(agentInbox['lastMessage.at']), '{"$ne":null}')
+
+// The authorization scope itself must stay untouched — access and inbox
+// presentation are separate rules, and only one of them changed.
+const stillPureScope = await conversationScopeFor(customer)
+check('conversationScopeFor stays authorization-only', Object.keys(stillPureScope).join(','), 'customer')
 
 /* ── Reconciliation ───────────────────────────────────────────────────── */
 
