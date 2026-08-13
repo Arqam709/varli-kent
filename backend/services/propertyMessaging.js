@@ -36,13 +36,39 @@ import { isAssignableAgent } from './agentAssignment.js'
  * wait for that repair, and never depends on it having worked.
  */
 
-const sameId = (a, b) => Boolean(a) && Boolean(b) && String(a) === String(b)
-
-/** Unwraps an id that may arrive raw or as a populated document. */
+/**
+ * Unwraps an id that may arrive raw or as a populated document.
+ *
+ * A conversation reference is an ObjectId until someone calls .populate() on
+ * it, after which it is a full Mongoose document. Both shapes reach the
+ * comparisons below — GET /:id populates, every other route does not — so an
+ * id comparison MUST normalise before comparing.
+ */
 const idOf = (value) => {
   if (!value) return null
   if (typeof value === 'object' && value._id) return String(value._id)
   return String(value)
+}
+
+/**
+ * Compares two ids that may each be an ObjectId, a hex string, or a populated
+ * document.
+ *
+ * ── Why this cannot be String(a) === String(b) ───────────────────────────
+ * That was the original implementation, and it silently broke the one route
+ * that populates. `String(objectId)` gives the hex id, but `String()` of a
+ * populated Mongoose document gives its inspect output:
+ *
+ *   "{ name: 'john', _id: new ObjectId('68f2...') }"
+ *
+ * which never equals a hex id. The customer check therefore returned false on
+ * GET /:id, and a customer opening their own thread got 404 Conversation not
+ * found — while messages, send and read (none of which populate) worked.
+ */
+const sameId = (a, b) => {
+  const left = idOf(a)
+  const right = idOf(b)
+  return Boolean(left) && Boolean(right) && left === right
 }
 
 /**

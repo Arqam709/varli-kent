@@ -75,19 +75,6 @@ const AgentLayout = ({ children }) => {
   const { language, setLanguage } = useLanguage()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  /**
-   * Re-read the signed-in user when the portal opens.
-   *
-   * The cached user in localStorage can be out of date in ways this session
-   * did not cause — most importantly the ROLE. If an administrator has since
-   * moved this account back to a normal user, the refreshed value flows into
-   * AuthContext, isAgent turns false, and ProtectedRoute removes them from the
-   * portal immediately instead of at the next login. It also picks up a name
-   * or avatar changed from another device.
-   *
-   * Reuses the existing GET /auth/me; no new endpoint, no polling, no socket.
-   * Costs one small request per portal visit.
-   */
   useEffect(() => {
     refreshUser()
   }, [refreshUser])

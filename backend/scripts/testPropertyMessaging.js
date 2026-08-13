@@ -202,6 +202,71 @@ stubPropertyAgent(undefined) // findById → null
 check('agent denied when ownership cannot be verified', await sideFor(stale, agentA), null)
 check('customer history survives a deleted listing', await sideFor(stale, customer), 'customer')
 
+/* ── REGRESSION: populated references ─────────────────────────────────────
+ *
+ * GET /:id loads the conversation with .populate() on customer, agent and
+ * property; every other route does not. That single difference shipped a bug:
+ * the id comparison was String(a) === String(b), and String() of a populated
+ * Mongoose document is its inspect output, not a hex id. A customer opening
+ * their own thread got 404 while messages/send/read worked.
+ *
+ * These use REAL Mongoose documents, not plain objects. The earlier tests
+ * above pass raw ObjectIds, which is exactly why they never caught it.
+ */
+console.log('\n== populated refs authorize identically to raw ones ==')
+
+const UserModel = (await import('../models/User.js')).default
+
+const populatedConversation = {
+  _id: conversation._id,
+  property: propertyId,
+  // What .populate() actually produces — full documents, not ids.
+  customer: new UserModel({ _id: customerId, name: 'Ahsan', role: 'user', isActive: true }),
+  agent: new UserModel({ _id: agentAId, name: 'Ahmet', role: 'agent', isActive: true }),
+  status: 'open',
+}
+
+// Proves the trap is real rather than theoretical.
+check(
+  'String() of a populated doc is NOT the id',
+  String(populatedConversation.customer) === String(customerId),
+  false
+)
+
+stubPropertyAgent(agentAId)
+check('customer authorised with a populated customer ref', await sideFor(populatedConversation, customer), 'customer')
+check('agent authorised with a populated agent ref', await sideFor(populatedConversation, agentA), 'agent')
+check('stranger still denied', await sideFor(populatedConversation, stranger), null)
+check('other agent still denied', await sideFor(populatedConversation, agentB), null)
+check('admin still denied', await sideFor(populatedConversation, admin), null)
+
+// The security rules must survive the unwrap, not be softened by it.
+stubPropertyAgent(agentBId)
+check(
+  'stale pointer still denies the outgoing agent (populated)',
+  await sideFor(populatedConversation, agentA),
+  null
+)
+check(
+  'customer keeps access under a stale pointer (populated)',
+  await sideFor(populatedConversation, customer),
+  'customer'
+)
+
+const demotedPopulated = { ...agentA, role: 'user' }
+stubPropertyAgent(agentAId)
+check('demoted agent still denied (populated)', await sideFor(populatedConversation, demotedPopulated), null)
+
+console.log('\n== a populated property ref resolves too ==')
+// conversation.property is populated on the same route.
+const PropertyModel = (await import('../models/Property.js')).default
+const populatedPropertyRef = {
+  ...populatedConversation,
+  property: new PropertyModel({ _id: propertyId, title: 'Sarıyer flat' }),
+}
+stubPropertyAgent(agentAId)
+check('agent authorised via a populated property ref', await sideFor(populatedPropertyRef, agentA), 'agent')
+
 console.log('\n== customer authorization never consults the property ==')
 stubPropertyAgent(agentBId)
 check('customer side ignores role', await sideFor(conversation, { ...customer, role: 'admin' }), 'customer')

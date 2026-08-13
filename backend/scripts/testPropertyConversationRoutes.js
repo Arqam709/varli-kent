@@ -268,6 +268,45 @@ const stubConversation = (conversation, currentAgentId = agentAId) => {
   })
 }
 
+/* ── REGRESSION: the reported "Conversation not found" bug ────────────────
+ *
+ * GET /:id is the ONLY route that populates, and populate turns
+ * conversation.customer from an ObjectId into a full Mongoose document. The
+ * original id comparison was String(a) === String(b), and String() of a
+ * document is its inspect output — so a customer opening their own thread was
+ * refused with 404 while messages/send/read (which do not populate) worked.
+ *
+ * The stub below returns REAL populated documents, which is what the route
+ * actually receives. The generic `query()` helper's .populate() is a no-op
+ * returning the same plain object, which is precisely why this slipped past
+ * the original suite.
+ */
+console.log('\n== detail route with POPULATED refs (the shipped bug) ==')
+
+const UserModel = (await import('../models/User.js')).default
+
+const populatedConversation = {
+  ...openConversation(),
+  customer: new UserModel({ _id: customerId, name: 'Ahsan', role: 'user', isActive: true }),
+  agent: new UserModel({ _id: agentAId, name: 'Ahmet', role: 'agent', isActive: true }),
+}
+
+stubConversation(populatedConversation, agentAId)
+const populatedReq = (user) => ({ user, params: { id: String(conversationId) }, query: {}, body: {} })
+
+check('customer opening their own thread → 200', (await call(detailHandler, populatedReq(customer))).statusCode, 200)
+check('assigned agent → 200', (await call(detailHandler, populatedReq(agentA))).statusCode, 200)
+// The unwrap must not soften any rule.
+check('stranger → still 404', (await call(detailHandler, populatedReq(stranger))).statusCode, 404)
+check('other agent → still 404', (await call(detailHandler, populatedReq(agentB))).statusCode, 404)
+check('admin → still 404', (await call(detailHandler, populatedReq(adminUser))).statusCode, 404)
+
+const populatedBody = (await call(detailHandler, populatedReq(customer))).body
+check('response names the caller as customer', populatedBody.conversation.role, 'customer')
+check('counterparty resolved to the agent', populatedBody.conversation.counterparty.name, 'Ahmet')
+// The serializer whitelist must still hold on populated documents.
+check('no email leaked from the populated doc', JSON.stringify(populatedBody).includes('@'), false)
+
 console.log('\n== participant access: 404 for everyone else ==')
 stubConversation(openConversation())
 const req = (user, extra = {}) => ({ user, params: { id: String(conversationId) }, query: {}, body: {}, ...extra })
