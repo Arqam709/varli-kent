@@ -2,10 +2,12 @@ import { useState, useEffect, useRef, useLayoutEffect, useCallback, useMemo } fr
 import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { useAuth } from '../contexts/AuthContext'
+import { useRealtime } from '../contexts/RealtimeContext'
 import { formatPrice } from '../lib/formatPrice'
 import { formatMessageTime, formatDayDivider } from '../lib/formatMessageTime'
 import {
   MAX_MESSAGE_LENGTH,
+  PROPERTY_MESSAGE_NEW_EVENT,
   getPropertyConversation,
   getPropertyMessages,
   sendPropertyMessage,
@@ -168,6 +170,7 @@ const UnavailableState = ({ onBack }) => (
 
 const AgentConversationThread = ({ conversationId, onBack, onRead, onMessageSent }) => {
   const { user } = useAuth()
+  const realtime = useRealtime()
   const currentUserId = user?._id ? String(user._id) : null
 
   const [conversation, setConversation] = useState(null)
@@ -255,6 +258,92 @@ const AgentConversationThread = ({ conversationId, onBack, onRead, onMessageSent
       })
       .catch(() => {})
   }, [status, conversationId, conversation, onRead])
+
+  /*
+   * Live messages for THIS thread.
+   *
+   * The socket is a notification channel only — nothing is ever sent through
+   * it. Sending still goes through POST /:id/messages exactly as before, and
+   * this component works completely without a socket: if the connection is
+   * down, the thread behaves the way it did before RT-1 and the agent sees new
+   * messages on their next refresh.
+   *
+   * ── Why the socket is read inside the effect ────────────────────────────
+   * RealtimeProvider stores the socket in a REF, which by design does not
+   * trigger a render when it changes. `isConnected` is the state that does, so
+   * it drives this effect: when the socket finishes connecting the effect
+   * re-runs and subscribes. That matters because a thread can easily mount
+   * before the handshake completes — reading socketRef.current once during the
+   * first render would silently subscribe to nothing.
+   *
+   * The socket instance is captured in a local const so cleanup calls .off() on
+   * exactly the object and handler it called .on() with, even if the ref has
+   * since been repointed or nulled by a logout.
+   *
+   * Gated on status === 'ready' so an event cannot append to a message list
+   * that the initial fetch is about to replace wholesale.
+   */
+  useEffect(() => {
+    const socket = realtime?.socket?.current
+    if (!socket || status !== 'ready') return undefined
+
+    const handleNewMessage = (payload) => {
+      // Defensive: one event serves every conversation this agent is part of,
+      // so a mismatched or malformed payload is expected traffic, not an error.
+      if (!payload || payload.conversationId !== conversationId) return
+
+      const incoming = payload.message
+      if (!incoming?._id) return
+
+      /*
+       * Decide the scroll intent BEFORE the list changes.
+       *
+       * Only follow the conversation down if the agent is already reading at
+       * the bottom. Someone scrolled up through history must not be yanked to
+       * the end because a message arrived — that is the classic chat bug. This
+       * reuses the existing one-shot scrollToBottomRef mechanism rather than
+       * introducing a second way to scroll.
+       */
+      const el = scrollRef.current
+      const nearBottom = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 120
+      if (nearBottom) scrollToBottomRef.current = true
+
+      setMessages((prev) =>
+        // Dedupe by server id. The sender receives BOTH the REST response and
+        // this event, and either can arrive first — comparing on `_id` makes
+        // the order irrelevant and needs no optimistic-message reconciliation.
+        // Same idiom the older-messages pagination above already uses.
+        prev.some((m) => String(m._id) === String(incoming._id)) ? prev : [...prev, incoming]
+      )
+
+      /*
+       * The agent is looking at this exact thread, so they have now genuinely
+       * read it — but the server incremented agentUnreadCount when it stored
+       * the message. Clear it through the EXISTING REST route.
+       *
+       * Only for the OTHER participant's messages: the agent also receives
+       * their own sends back on this event (that is what keeps a second tab in
+       * step), and marking read because of your own message would be a pointless
+       * write. The endpoint is idempotent ($set to 0, never a decrement), so
+       * a burst of messages costs a few harmless repeat calls rather than
+       * needing new read-state machinery.
+       *
+       * This clears only the AGENT'S OWN counter. Nothing is emitted to the
+       * customer — RT-1 has no read receipts.
+       */
+      if (currentUserId && String(incoming.sender) !== currentUserId) {
+        markPropertyConversationRead(conversationId).catch(() => {})
+      }
+    }
+
+    socket.on(PROPERTY_MESSAGE_NEW_EVENT, handleNewMessage)
+
+    return () => {
+      // Same instance, same function reference — so switching conversations
+      // cannot leave a previous thread's handler behind and run one event twice.
+      socket.off(PROPERTY_MESSAGE_NEW_EVENT, handleNewMessage)
+    }
+  }, [realtime, realtime?.isConnected, conversationId, currentUserId, status])
 
   /*
    * The ONLY place scrolling happens.

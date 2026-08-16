@@ -48,6 +48,24 @@ export const notifyHumanUnreadChanged = () => {
 }
 
 /**
+ * The Socket.IO event the backend emits after a message is safely stored.
+ *
+ * Named here, beside the REST calls it complements, so the string exists in one
+ * place on this side of the wire — it must match NEW_MESSAGE_EVENT in
+ * backend/services/propertyMessagingRealtime.js exactly, and a typo would fail
+ * silently as "no live updates" rather than as an error.
+ *
+ * Payload:
+ *   { conversationId, message: { _id, sender, text, createdAt },
+ *     lastMessage: { text, sender, at }, lastActivityAt }
+ *
+ * `message` is the SAME shape sendPropertyMessage() returns, so a thread can
+ * append it with the same code either way. Deliberately carries no unread count
+ * for either side — that would be a read receipt.
+ */
+export const PROPERTY_MESSAGE_NEW_EVENT = 'property-message:new'
+
+/**
  * The caller's own conversations, newest activity first.
  *
  * The sort is the server's ({ lastActivityAt: -1 }) and is not redone here.

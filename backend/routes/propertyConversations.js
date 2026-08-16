@@ -32,6 +32,7 @@ import {
   PARTICIPANT_FIELDS,
   PROPERTY_SUMMARY_FIELDS,
 } from '../services/propertyMessaging.js'
+import { emitNewPropertyMessage } from '../services/propertyMessagingRealtime.js'
 
 const router = express.Router()
 
@@ -421,6 +422,38 @@ router.post('/:id/messages', async (req, res, next) => {
         },
       }
     )
+
+    /*
+     * Announce it — and only now.
+     *
+     * This sits AFTER both writes have committed, so the socket can never tell
+     * anyone about a message MongoDB did not accept. Every earlier exit from
+     * this handler (404 not authorised, 400 invalid text, 409 closed or
+     * unassigned) returns before reaching this line, so a rejected send emits
+     * nothing at all.
+     *
+     * The recipient agent is `currentAgentId` — read from the PROPERTY earlier
+     * in this handler — never conversation.agent, which is only a routing
+     * pointer and can be stale after a reassignment.
+     *
+     * Not awaited and not error-checked on purpose: emitNewPropertyMessage
+     * swallows its own failures. A realtime problem must never turn a
+     * successfully stored message into a failed request, and an offline
+     * recipient is a normal condition rather than an error.
+     *
+     * `req.app?.get` rather than `req.app.get` for the same reason. Express
+     * always sets req.app, so this is not about production — it is about the
+     * failure boundary being real rather than assumed. Looking up the io
+     * instance happens AFTER the message is committed, so anything that can
+     * throw on this line would report a stored message as failed. The optional
+     * chaining makes that impossible instead of unlikely.
+     */
+    emitNewPropertyMessage(req.app?.get('io'), {
+      conversationId: conversation._id,
+      customerId: conversation.customer,
+      currentAgentId,
+      message,
+    })
 
     res.status(201).json({ success: true, message: messageResponse(message) })
   } catch (err) {

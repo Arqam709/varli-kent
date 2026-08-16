@@ -103,19 +103,7 @@ const AgentLayout = ({ children }) => {
     refreshUser()
   }, [refreshUser])
 
-  /**
-   * Unread HUMAN customer messages, for the Messages badge.
-   *
-   * Read on mount — which every navigation within the portal performs, since
-   * each agent page renders its own AgentLayout — and again whenever this tab
-   * marks a thread read. There is NO polling and no socket: this phase is
-   * REST-only, so a badge can be a few minutes stale and that is intended.
-   *
-   * Strictly separate from the property-alert notification count, which
-   * measures new LISTINGS rather than messages.
-   *
-   * Failure is swallowed: the portal must not be disturbed by a badge.
-   */
+  
   const loadUnread = useCallback(() => {
     getPropertyConversationUnreadCount()
       .then(setHumanUnread)

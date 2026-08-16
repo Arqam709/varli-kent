@@ -1,7 +1,11 @@
 import express from 'express'
+import http from 'http'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import { Server } from 'socket.io'
 import connectDB from './config/db.js'
+import { ALLOWED_ORIGINS } from './config/origins.js'
+import { registerRealtime } from './realtime/socket.js'
 import authRoutes from './routes/auth.js'
 import propertyRoutes from './routes/properties.js'
 import contactRoutes from './routes/contact.js'
@@ -69,10 +73,47 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ success: false, message: err.message || 'Internal Server Error' })
 })
 
+/* ───────────────────────── Realtime ─────────────────────────
+ *
+ * Socket.IO attaches to the Node HTTP SERVER, not to the Express app, which is
+ * why `app.listen()` below became `server.listen()`. app.listen() is itself
+ * only a shorthand that creates this same http.Server internally — so nothing
+ * about how Express handles requests changes. Every middleware, route, the
+ * health check and the error handler above are untouched and still serve on the
+ * same port. Socket.IO simply also answers upgrade requests on /socket.io.
+ *
+ * ── CORS is configured twice on purpose ──────────────────────────────────
+ * Socket.IO does NOT read the Express cors() options set above; it performs its
+ * own check during the handshake. Both now read the same allowlist from
+ * config/origins.js so they cannot drift.
+ *
+ * RT-0 emits nothing. This block only proves an authenticated socket can exist.
+ */
+const server = http.createServer(app)
+
+const io = new Server(server, {
+  cors: {
+    origin: ALLOWED_ORIGINS,
+    credentials: true,
+  },
+  // pingInterval / pingTimeout are left at their defaults (25s / 20s) on
+  // purpose: they already sit under Render's ~100s proxy idle timeout, so the
+  // built-in heartbeat is what keeps a quiet connection alive. Tuning them
+  // without a measured reason is how you break that.
+})
+
+registerRealtime(io)
+
+// How a route reaches Socket.IO later, in RT-1: `req.app.get('io')`. Chosen
+// over a getIo/setIo singleton module because a route file can never import
+// server.js, so there is no import cycle to create by accident.
+app.set('io', io)
+
 const PORT = process.env.PORT || 5000
 
 connectDB().then(() => {
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`)
+    console.log(`[realtime] Socket.IO ready; allowed origins: ${ALLOWED_ORIGINS.join(', ')}`)
   })
 })

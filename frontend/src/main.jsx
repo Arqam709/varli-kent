@@ -7,6 +7,7 @@ import App from './App.jsx'
 import './index.css'
 
 import { AuthProvider } from './contexts/AuthContext.jsx'
+import { RealtimeProvider } from './contexts/RealtimeContext.jsx'
 import { FavouritesProvider } from './contexts/FavouritesContext.jsx'
 import { LanguageProvider } from './contexts/LanguageContext.jsx'
 import { ChatProvider } from './contexts/ChatContext.jsx'
@@ -41,11 +42,15 @@ msalInstance.initialize().then(() => {
         <GoogleOAuthProvider clientId={googleClientId}>
           <LanguageProvider>
             <AuthProvider>
-              <FavouritesProvider>
-                <ChatProvider>
-                  <Root />
-                </ChatProvider>
-              </FavouritesProvider>
+              {/* Inside AuthProvider because the socket needs the JWT to
+                  connect and must close when logout clears it. */}
+              <RealtimeProvider>
+                <FavouritesProvider>
+                  <ChatProvider>
+                    <Root />
+                  </ChatProvider>
+                </FavouritesProvider>
+              </RealtimeProvider>
             </AuthProvider>
           </LanguageProvider>
         </GoogleOAuthProvider>
