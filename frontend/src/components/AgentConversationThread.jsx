@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { useAuth } from '../contexts/AuthContext'
 import { useRealtime } from '../contexts/RealtimeContext'
+import { appendUniqueMessage } from '../lib/appendUniqueMessage'
 import { formatPrice } from '../lib/formatPrice'
 import { formatMessageTime, formatDayDivider } from '../lib/formatMessageTime'
 import {
@@ -308,13 +309,9 @@ const AgentConversationThread = ({ conversationId, onBack, onRead, onMessageSent
       const nearBottom = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 120
       if (nearBottom) scrollToBottomRef.current = true
 
-      setMessages((prev) =>
-        // Dedupe by server id. The sender receives BOTH the REST response and
-        // this event, and either can arrive first — comparing on `_id` makes
-        // the order irrelevant and needs no optimistic-message reconciliation.
-        // Same idiom the older-messages pagination above already uses.
-        prev.some((m) => String(m._id) === String(incoming._id)) ? prev : [...prev, incoming]
-      )
+      // Deduped by server id: the sender also receives its own message here,
+      // and this event can beat the POST response. See appendUniqueMessage.
+      setMessages((prev) => appendUniqueMessage(prev, incoming))
 
       /*
        * The agent is looking at this exact thread, so they have now genuinely
@@ -419,7 +416,16 @@ const AgentConversationThread = ({ conversationId, onBack, onRead, onMessageSent
       .then((message) => {
         if (!message) return
         scrollToBottomRef.current = true
-        setMessages((prev) => [...prev, message])
+        /*
+         * Deduped, because the socket copy of this very message may ALREADY be
+         * in state — property-message:new is emitted the moment the write
+         * commits, which can beat this POST response back to the browser.
+         *
+         * A blind [...prev, message] here is the same defect that produced
+         * duplicate React keys on mobile. The agent side is equally exposed:
+         * the race is about which transport wins, not about which client.
+         */
+        setMessages((prev) => appendUniqueMessage(prev, message))
         // Cleared only on success, so a failed send leaves the draft intact.
         setDraft('')
         onMessageSent?.(conversationId, message)
