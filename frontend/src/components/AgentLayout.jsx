@@ -8,6 +8,7 @@ import {
   PROPERTY_MESSAGE_NEW_EVENT,
   getPropertyConversationUnreadCount,
 } from '../lib/propertyMessagingApi'
+import { useRecoveryReconcile } from '../lib/useRecoveryReconcile'
 
 const LANGS = [{ code: 'en', label: 'EN' }, { code: 'tr', label: 'TR' }, { code: 'ar', label: 'AR' }]
 
@@ -107,11 +108,15 @@ const AgentLayout = ({ children }) => {
   }, [refreshUser])
 
   
-  const loadUnread = useCallback(() => {
-    getPropertyConversationUnreadCount()
-      .then(setHumanUnread)
-      .catch(() => {})
-  }, [])
+  // Returns the promise so useRecoveryReconcile's in-flight guard can actually
+  // await it; without a return it would treat every call as instantly finished.
+  const loadUnread = useCallback(
+    () =>
+      getPropertyConversationUnreadCount()
+        .then(setHumanUnread)
+        .catch(() => {}),
+    []
+  )
 
   useEffect(() => {
     if (!isAgent) return
@@ -151,6 +156,16 @@ const AgentLayout = ({ children }) => {
       socket.off(PROPERTY_MESSAGE_NEW_EVENT, loadUnread)
     }
   }, [isAgent, realtime, realtime?.isConnected, loadUnread])
+
+  /*
+   * After a reconnect, re-read the authoritative total.
+   *
+   * Messages that arrived while the socket was away raised the server's counters
+   * without this tab ever hearing about it. There is deliberately no local
+   * arithmetic to catch up on — the server already knows the right number, so
+   * this simply asks it. Nothing runs on the first connect.
+   */
+  useRecoveryReconcile(isAgent ? realtime?.recoveryVersion ?? 0 : 0, loadUnread)
 
   const handleLogout = async () => {
     await logout()

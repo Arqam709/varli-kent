@@ -41,9 +41,37 @@ export const RealtimeProvider = ({ children }) => {
 
   const [isConnected, setIsConnected] = useState(false)
 
+  /**
+   * Bumped every time the socket comes back AFTER having been connected before.
+   *
+   * ── Why a counter and not a boolean ─────────────────────────────────────
+   * Consumers reconcile in a `useEffect` keyed on this value, and a boolean
+   * would only fire once — a second disconnect/reconnect would not re-trigger
+   * anything. A monotonically increasing number gives every reconnection its own
+   * distinct value, so each one causes exactly one reconciliation.
+   *
+   * Starts at 0 and DELIBERATELY stays 0 for the first connect: signing in
+   * already loads every screen through REST, so reconciling then would fire a
+   * duplicate round of requests for data that is seconds old.
+   *
+   *   sign in          → 0   (no reconciliation)
+   *   drop + reconnect → 1
+   *   drop + reconnect → 2
+   */
+  const [recoveryVersion, setRecoveryVersion] = useState(0)
+
   // The live socket, kept in a ref because consumers must not re-render every
   // time its internal state changes — only `isConnected` is render-relevant.
   const socketRef = useRef(null)
+
+  /**
+   * Whether a connection has ever succeeded for THIS socket instance.
+   *
+   * A ref rather than state because it must not cause a render, and it is reset
+   * per effect run so a fresh login is treated as a first connect rather than
+   * as a reconnection.
+   */
+  const hasConnectedBeforeRef = useRef(false)
 
   useEffect(() => {
     if (!token || !isAgent) {
@@ -55,10 +83,21 @@ export const RealtimeProvider = ({ children }) => {
 
     const socket = createSocket(token)
     socketRef.current = socket
+    hasConnectedBeforeRef.current = false
 
     const onConnect = () => {
       setIsConnected(true)
-      if (import.meta.env.DEV) console.log('[realtime] connected')
+
+      if (hasConnectedBeforeRef.current) {
+        // A connection we HAD and lost is now back, so this client may have
+        // missed events while it was away. Signal interested screens to
+        // reconcile against REST, which is authoritative.
+        setRecoveryVersion((version) => version + 1)
+        if (import.meta.env.DEV) console.log('[realtime] reconnected — reconciling')
+      } else {
+        hasConnectedBeforeRef.current = true
+        if (import.meta.env.DEV) console.log('[realtime] connected')
+      }
     }
 
     const onDisconnect = (reason) => {
@@ -85,6 +124,7 @@ export const RealtimeProvider = ({ children }) => {
       // so a logged-out session cannot quietly reconnect with a stale token.
       socket.disconnect()
       socketRef.current = null
+      hasConnectedBeforeRef.current = false
       setIsConnected(false)
     }
   }, [token, isAgent])
@@ -93,8 +133,8 @@ export const RealtimeProvider = ({ children }) => {
   // change to it does not (and should not) re-render. Consumers that need the
   // socket read it at event-subscription time in RT-1.
   const value = useMemo(
-    () => ({ socket: socketRef, isConnected }),
-    [isConnected]
+    () => ({ socket: socketRef, isConnected, recoveryVersion }),
+    [isConnected, recoveryVersion]
   )
 
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>

@@ -4,6 +4,8 @@ import { toast } from 'react-toastify'
 import { useAuth } from '../contexts/AuthContext'
 import { useRealtime } from '../contexts/RealtimeContext'
 import { appendUniqueMessage } from '../lib/appendUniqueMessage'
+import { applyRecovery, collectRecoveryPages } from '../lib/recoverThreadMessages'
+import { useRecoveryReconcile } from '../lib/useRecoveryReconcile'
 import { formatPrice } from '../lib/formatPrice'
 import { formatMessageTime, formatDayDivider } from '../lib/formatMessageTime'
 import {
@@ -189,6 +191,19 @@ const AgentConversationThread = ({ conversationId, onBack, onRead, onMessageSent
   const scrollRef = useRef(null)
   const textareaRef = useRef(null)
 
+  /**
+   * The current messages, readable without being a dependency.
+   *
+   * Recovery needs to know what is already loaded, but listing `messages` in
+   * reconcileMessages' dependencies would change its identity on every single
+   * message — and useRecoveryReconcile keys its effect on that identity, so it
+   * would reconcile after every message instead of after every reconnect.
+   */
+  const messagesRef = useRef(messages)
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
   // Scroll intents, resolved once in the layout effect below. Refs rather than
   // state because they must not themselves trigger a render.
   const scrollToBottomRef = useRef(true)
@@ -353,6 +368,84 @@ const AgentConversationThread = ({ conversationId, onBack, onRead, onMessageSent
     // `onRead` is a stable useCallback in AgentMessages, so listing it is
     // correctness for free — it cannot cause the subscription to churn.
   }, [realtime, realtime?.isConnected, conversationId, currentUserId, status, onRead])
+
+  /*
+   * Recover this thread's messages after a reconnect.
+   *
+   * The inbox reconciliation cannot do this job: it refreshes conversation ROWS,
+   * and knows nothing about the message list on screen. So the thread repairs
+   * its own state.
+   *
+   * Deliberately silent — `status` is never touched, so the conversation stays
+   * readable throughout and a failure leaves the existing bubbles alone.
+   */
+  const reconcileMessages = useCallback(async () => {
+    const recovery = await collectRecoveryPages({
+      current: messagesRef.current,
+      fetchPage: ({ before }) => getPropertyMessages(conversationId, { before }),
+    })
+
+    if (recovery.messages.length === 0) return
+
+    /*
+     * Same near-bottom rule the live handler uses: follow the conversation down
+     * only if the agent was already reading at the end. A reconnect must never
+     * yank someone who is scrolled up through history — and reconnects happen at
+     * moments the user did not choose, so this matters more here than anywhere.
+     */
+    const el = scrollRef.current
+    const nearBottom = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 120
+
+    let appliedNew = false
+
+    setMessages((prev) => {
+      const { messages: next } = applyRecovery(prev, recovery)
+      appliedNew = next.length !== prev.length
+      return next
+    })
+
+    if (appliedNew && nearBottom) scrollToBottomRef.current = true
+
+    /*
+     * Only adopt the fetched cursor when the recovered block could NOT be
+     * bridged to local history — otherwise the existing cursor is still the
+     * correct one, because recovery only ever adds messages NEWER than the
+     * oldest message already loaded. Overwriting it would make "Load older"
+     * re-fetch history the agent already has, or skip past it.
+     */
+    if (!recovery.contiguous) {
+      setNextCursor(recovery.nextCursor)
+      setHasMore(recovery.hasMore)
+    }
+
+    /*
+     * The agent is looking at this thread, so anything recovered from the
+     * customer has genuinely been seen. Clear the server counter through the
+     * existing route — the same thing RT-1 does for a live message.
+     *
+     * Guarded on `appliedNew` so a reconnect that recovered nothing does not
+     * fire a pointless write, and on the sender so the agent's own messages
+     * never trigger it. Still no read-receipt event: nothing is sent to the
+     * customer.
+     */
+    if (appliedNew && currentUserId) {
+      const fromOther = recovery.messages.some((m) => String(m.sender) !== currentUserId)
+      if (fromOther) {
+        markPropertyConversationRead(conversationId)
+          .then(() => {
+            onRead?.(conversationId)
+            notifyHumanUnreadChanged()
+          })
+          .catch(() => {})
+      }
+    }
+  }, [conversationId, currentUserId, onRead])
+
+  useRecoveryReconcile(
+    // Only reconcile a thread that has actually finished loading.
+    status === 'ready' ? realtime?.recoveryVersion ?? 0 : 0,
+    reconcileMessages
+  )
 
   /*
    * The ONLY place scrolling happens.

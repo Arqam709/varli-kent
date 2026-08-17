@@ -11,6 +11,7 @@ import {
   getPropertyConversations,
   previewOf,
 } from '../lib/propertyMessagingApi'
+import { useRecoveryReconcile } from '../lib/useRecoveryReconcile'
 
 /**
  * Agent Messages — the website half of customer↔agent property enquiries.
@@ -130,6 +131,17 @@ const AgentMessages = () => {
   const unknownRefetchRef = useRef(false)
 
   /**
+   * Counts socket events this page has processed.
+   *
+   * Used to detect the reconnect race the hard way round: a reconciliation GET
+   * is a SNAPSHOT taken when the request left, so if a live event lands while it
+   * is in flight, applying the response would revert that row's preview, its
+   * position and its unread count. Comparing this counter before and after tells
+   * us the snapshot is stale, and we ask again rather than apply it.
+   */
+  const eventSeqRef = useRef(0)
+
+  /**
    * `selectedId` read through a ref as well as directly.
    *
    * The socket handler below must know which conversation is open WITHOUT
@@ -193,6 +205,10 @@ const AgentMessages = () => {
     const handleNewMessage = (payload) => {
       if (!payload?.conversationId) return
 
+      // Marks this page as having newer knowledge than any reconciliation
+      // request already in flight.
+      eventSeqRef.current += 1
+
       setConversations((prev) => {
         const { conversations: next, unknown } = applyMessageEventToConversations(prev, payload, {
           currentUserId: user?._id,
@@ -242,6 +258,49 @@ const AgentMessages = () => {
       socket.off(PROPERTY_MESSAGE_NEW_EVENT, handleNewMessage)
     }
   }, [realtime, realtime?.isConnected, user?._id])
+
+  /*
+   * Reconcile the inbox after a reconnect.
+   *
+   * This repairs everything that happened while the socket was away — missed
+   * previews, row ordering, unread counts, conversations whose first message
+   * arrived offline, and (through the server's own inbox scope) conversations
+   * this agent no longer has access to because a listing was reassigned.
+   *
+   * SILENT by design: `status` is left alone, so the existing rows stay visible
+   * and there is no loading flash. A failure leaves the current list untouched
+   * rather than blanking usable data.
+   */
+  const reconcileInbox = useCallback(async () => {
+    // Two attempts, then accept. The retry exists for the narrow case where a
+    // live event lands mid-request; looping indefinitely under a steady stream
+    // of messages would be worse than applying a snapshot that is one message
+    // behind, which the next event corrects anyway.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const seqBefore = eventSeqRef.current
+      const requestId = ++requestRef.current
+
+      let list
+      try {
+        list = await getPropertyConversations()
+      } catch {
+        return // Keep what is on screen.
+      }
+
+      // A newer request (or a retry / manual reload) superseded this one.
+      if (requestId !== requestRef.current) return
+
+      // A socket event arrived while this was in flight, so the response is a
+      // stale snapshot. Ask again rather than reverting the live update.
+      if (eventSeqRef.current !== seqBefore && attempt === 0) continue
+
+      setConversations(list)
+      setStatus('success')
+      return
+    }
+  }, [])
+
+  useRecoveryReconcile(realtime?.recoveryVersion ?? 0, reconcileInbox)
 
   // The sidebar badge re-reads itself when AgentLayout mounts, which every
   // navigation into this section already does — so nothing extra is needed
