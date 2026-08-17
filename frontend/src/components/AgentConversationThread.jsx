@@ -329,7 +329,17 @@ const AgentConversationThread = ({ conversationId, onBack, onRead, onMessageSent
        * customer — RT-1 has no read receipts.
        */
       if (currentUserId && String(incoming.sender) !== currentUserId) {
-        markPropertyConversationRead(conversationId).catch(() => {})
+        markPropertyConversationRead(conversationId)
+          .then(() => {
+            // Reconcile the two other places this count is shown. `onRead`
+            // zeroes the inbox row; the window event makes the sidebar badge
+            // re-read the authoritative total. Both already existed for the
+            // open-on-arrival case — this just reuses them for the live one, so
+            // there is still exactly one source of truth for the number.
+            onRead?.(conversationId)
+            notifyHumanUnreadChanged()
+          })
+          .catch(() => {})
       }
     }
 
@@ -340,7 +350,9 @@ const AgentConversationThread = ({ conversationId, onBack, onRead, onMessageSent
       // cannot leave a previous thread's handler behind and run one event twice.
       socket.off(PROPERTY_MESSAGE_NEW_EVENT, handleNewMessage)
     }
-  }, [realtime, realtime?.isConnected, conversationId, currentUserId, status])
+    // `onRead` is a stable useCallback in AgentMessages, so listing it is
+    // correctness for free — it cannot cause the subscription to churn.
+  }, [realtime, realtime?.isConnected, conversationId, currentUserId, status, onRead])
 
   /*
    * The ONLY place scrolling happens.

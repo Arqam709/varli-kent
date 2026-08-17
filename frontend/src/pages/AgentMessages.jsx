@@ -2,8 +2,15 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import AgentLayout from '../components/AgentLayout'
 import AgentConversationThread from '../components/AgentConversationThread'
+import { useAuth } from '../contexts/AuthContext'
+import { useRealtime } from '../contexts/RealtimeContext'
 import { formatConversationTime } from '../lib/formatMessageTime'
-import { getPropertyConversations, previewOf } from '../lib/propertyMessagingApi'
+import { applyMessageEventToConversations } from '../lib/applyMessageEventToConversations'
+import {
+  PROPERTY_MESSAGE_NEW_EVENT,
+  getPropertyConversations,
+  previewOf,
+} from '../lib/propertyMessagingApi'
 
 /**
  * Agent Messages — the website half of customer↔agent property enquiries.
@@ -105,6 +112,8 @@ const ConversationRow = ({ conversation, isSelected, onSelect }) => {
 const AgentMessages = () => {
   const { id: selectedId } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const realtime = useRealtime()
 
   const [conversations, setConversations] = useState([])
   const [status, setStatus] = useState('loading') // loading | success | error
@@ -112,6 +121,31 @@ const AgentMessages = () => {
   // Generation counter, the convention AdminUserChats already uses: a slower
   // superseded request can never overwrite a faster, more recent one.
   const requestRef = useRef(0)
+
+  /**
+   * In-flight guard for the unknown-conversation refetch, so a burst of events
+   * for conversations this inbox has not loaded collapses into one GET rather
+   * than one per message.
+   */
+  const unknownRefetchRef = useRef(false)
+
+  /**
+   * `selectedId` read through a ref as well as directly.
+   *
+   * The socket handler below must know which conversation is open WITHOUT
+   * having selectedId in its dependency array — otherwise selecting a
+   * conversation would tear down and rebuild the subscription on every
+   * navigation, and an event landing in that gap would be missed.
+   */
+  const selectedIdRef = useRef(selectedId)
+
+  // Synced in an effect, not during render: writing a ref while rendering is a
+  // React rules violation that misbehaves under concurrent rendering. An effect
+  // runs after commit, which is comfortably before any socket event — those
+  // arrive asynchronously, never mid-render.
+  useEffect(() => {
+    selectedIdRef.current = selectedId
+  }, [selectedId])
 
   const load = useCallback(() => {
     const requestId = ++requestRef.current
@@ -139,6 +173,75 @@ const AgentMessages = () => {
     setStatus('loading')
     load()
   }
+
+  /*
+   * Live inbox updates.
+   *
+   * This listener owns the CONVERSATION LIST only. AgentConversationThread
+   * subscribes to the same event for the open thread's message bubbles — two
+   * components, two pieces of state, one event. That is why each removes only
+   * its own handler on cleanup and nothing here ever calls removeAllListeners,
+   * which would silently kill the thread's subscription.
+   *
+   * Keyed on `isConnected` so a page that mounts before the handshake finishes
+   * still subscribes once the socket comes up.
+   */
+  useEffect(() => {
+    const socket = realtime?.socket?.current
+    if (!socket) return undefined
+
+    const handleNewMessage = (payload) => {
+      if (!payload?.conversationId) return
+
+      setConversations((prev) => {
+        const { conversations: next, unknown } = applyMessageEventToConversations(prev, payload, {
+          currentUserId: user?._id,
+          // Read from a ref so switching conversations does not resubscribe.
+          // A message landing in the conversation the agent is currently
+          // reading must not raise a badge — the thread has already PATCHed it
+          // read, so a count here would contradict what they are looking at.
+          activeConversationId: selectedIdRef.current,
+        })
+
+        if (unknown) {
+          /*
+           * A conversation this inbox has never seen — the first-message case.
+           * A thread stays hidden from the inbox until someone actually speaks,
+           * so the customer's opening message is the moment the row should
+           * appear.
+           *
+           * Refetched rather than invented: the event deliberately carries no
+           * customer name, property title or image, and a placeholder row would
+           * put fake text on screen. GET /property-conversations is already
+           * authorized and returns the safe summary — and because it applies
+           * the server's own inbox scope, a row can only appear if the agent is
+           * genuinely entitled to it.
+           */
+          if (!unknownRefetchRef.current) {
+            unknownRefetchRef.current = true
+            getPropertyConversations()
+              .then((list) => {
+                if (requestRef.current === 0) return
+                setConversations(list)
+              })
+              .catch(() => {})
+              .finally(() => {
+                unknownRefetchRef.current = false
+              })
+          }
+          return prev
+        }
+
+        return next
+      })
+    }
+
+    socket.on(PROPERTY_MESSAGE_NEW_EVENT, handleNewMessage)
+
+    return () => {
+      socket.off(PROPERTY_MESSAGE_NEW_EVENT, handleNewMessage)
+    }
+  }, [realtime, realtime?.isConnected, user?._id])
 
   // The sidebar badge re-reads itself when AgentLayout mounts, which every
   // navigation into this section already does — so nothing extra is needed

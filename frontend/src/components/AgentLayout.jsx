@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { useRealtime } from '../contexts/RealtimeContext'
 import {
   HUMAN_UNREAD_EVENT,
+  PROPERTY_MESSAGE_NEW_EVENT,
   getPropertyConversationUnreadCount,
 } from '../lib/propertyMessagingApi'
 
@@ -95,6 +97,7 @@ const Sidebar = ({ user, onNavigate, onLogout, humanUnread }) => (
 const AgentLayout = ({ children }) => {
   const { user, logout, refreshUser, isAgent } = useAuth()
   const navigate = useNavigate()
+  const realtime = useRealtime()
   const { language, setLanguage } = useLanguage()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [humanUnread, setHumanUnread] = useState(0)
@@ -117,6 +120,37 @@ const AgentLayout = ({ children }) => {
     window.addEventListener(HUMAN_UNREAD_EVENT, loadUnread)
     return () => window.removeEventListener(HUMAN_UNREAD_EVENT, loadUnread)
   }, [isAgent, loadUnread])
+
+  /*
+   * Keep the Messages badge live.
+   *
+   * ── Why this re-reads the server instead of doing local arithmetic ──────
+   * The badge is a TOTAL across every conversation, and the same event also
+   * causes the open thread to PATCH itself read — so a local +1 would race the
+   * clearing PATCH and could settle on the wrong number. Re-reading
+   * /unread-count keeps ONE authoritative source (the same one this badge has
+   * always used) instead of inventing a second that can drift from it.
+   *
+   * The cost is one small request per incoming message, which is the right
+   * trade for a counter that must not lie. Sitting in AgentLayout rather than
+   * in the Messages page means the badge also updates while the agent is on
+   * Dashboard, Properties or Profile — the pages where a badge actually earns
+   * its place.
+   *
+   * The listener is added only for agents, and removes only its own handler.
+   */
+  useEffect(() => {
+    if (!isAgent) return undefined
+
+    const socket = realtime?.socket?.current
+    if (!socket) return undefined
+
+    socket.on(PROPERTY_MESSAGE_NEW_EVENT, loadUnread)
+
+    return () => {
+      socket.off(PROPERTY_MESSAGE_NEW_EVENT, loadUnread)
+    }
+  }, [isAgent, realtime, realtime?.isConnected, loadUnread])
 
   const handleLogout = async () => {
     await logout()
