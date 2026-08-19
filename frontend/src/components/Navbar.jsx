@@ -32,12 +32,20 @@ const LANGS = [
   { code: 'ar', label: 'AR' },
 ]
 
+const MORE_LANGS = [
+  { code: 'de', label: 'DE' },
+  { code: 'ru', label: 'RU' },
+  { code: 'ur', label: 'UR' },
+]
+
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [servicesOpen, setServicesOpen] = useState(false)
   const [mobileServicesOpen, setMobileServicesOpen] = useState(false)
+  const [moreLangOpen, setMoreLangOpen] = useState(false)
+  const [mobileMoreLangOpen, setMobileMoreLangOpen] = useState(false)
   // `portal` is derived once in AuthContext — { to, label } for staff, null
   // for a normal user — so the desktop dropdown and the mobile drawer below
   // cannot drift apart, and neither repeats a role check.
@@ -47,6 +55,7 @@ const Navbar = () => {
   const location = useLocation()
   const userMenuRef = useRef(null)
   const servicesRef = useRef(null)
+  const moreLangRef = useRef(null)
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 50)
@@ -63,6 +72,7 @@ const Navbar = () => {
     const handler = (e) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setUserMenuOpen(false)
       if (servicesRef.current && !servicesRef.current.contains(e.target)) setServicesOpen(false)
+      if (moreLangRef.current && !moreLangRef.current.contains(e.target)) setMoreLangOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -182,24 +192,69 @@ const Navbar = () => {
 
         {/* ── Desktop Auth + Language ── */}
         <div className="hidden items-center gap-4 lg:flex">
-          <div
-            className="flex items-center gap-0.5 rounded-full overflow-hidden"
-            style={{ border: '1px solid rgba(255,255,255,0.12)' }}
-          >
-            {LANGS.map((lang) => (
+          <div className="flex items-center gap-2">
+            <div
+              className="flex items-center gap-0.5 rounded-full overflow-hidden"
+              style={{ border: '1px solid rgba(255,255,255,0.12)' }}
+            >
+              {LANGS.map((lang) => (
+                <button
+                  key={lang.code}
+                  onClick={() => setLanguage(lang.code)}
+                  aria-label={`Switch to ${lang.label}`}
+                  className={`px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
+                    language === lang.code
+                      ? 'bg-[#4b6741] text-white'
+                      : isLight ? 'text-slate-500 hover:text-slate-800' : 'text-white/40 hover:text-white'
+                  }`}
+                >
+                  {lang.label}
+                </button>
+              ))}
+            </div>
+
+            {/* More languages dropdown — DE / RU / UR */}
+            <div className="relative" ref={moreLangRef}>
               <button
-                key={lang.code}
-                onClick={() => setLanguage(lang.code)}
-                aria-label={`Switch to ${lang.label}`}
-                className={`px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
-                  language === lang.code
+                onClick={() => setMoreLangOpen((v) => !v)}
+                aria-expanded={moreLangOpen}
+                aria-haspopup="true"
+                aria-label="More languages"
+                className={`flex items-center justify-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
+                  MORE_LANGS.some(l => l.code === language)
                     ? 'bg-[#4b6741] text-white'
                     : isLight ? 'text-slate-500 hover:text-slate-800' : 'text-white/40 hover:text-white'
                 }`}
+                style={{ border: '1px solid rgba(255,255,255,0.12)' }}
               >
-                {lang.label}
+                {MORE_LANGS.some(l => l.code === language) ? MORE_LANGS.find(l => l.code === language).label : '···'}
+                <ChevronIcon open={moreLangOpen} />
               </button>
-            ))}
+
+              <AnimatePresence>
+                {moreLangOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.18 }}
+                    className="absolute right-0 mt-3 w-32 rounded-xl py-2 shadow-2xl"
+                    style={{ backgroundColor: C.charcoal, border: `1px solid rgba(255,255,255,0.08)` }}
+                  >
+                    {MORE_LANGS.map((lang) => (
+                      <button
+                        key={lang.code}
+                        onClick={() => { setLanguage(lang.code); setMoreLangOpen(false) }}
+                        className="flex w-full items-center px-5 py-2.5 text-xs font-medium uppercase tracking-[0.12em] transition-colors cursor-pointer hover:bg-white/5"
+                        style={{ color: language === lang.code ? '#4b6741' : C.muted }}
+                      >
+                        {lang.label}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           {isLoggedIn ? (
@@ -425,7 +480,48 @@ const Navbar = () => {
                       {lang.label}
                     </button>
                   ))}
+                  <button
+                    onClick={() => setMobileMoreLangOpen(v => !v)}
+                    aria-expanded={mobileMoreLangOpen}
+                    className={`flex-1 flex items-center justify-center gap-1 rounded-lg py-2.5 text-xs font-semibold uppercase tracking-wider cursor-pointer transition-colors ${
+                      MORE_LANGS.some(l => l.code === language)
+                        ? 'bg-[#4b6741] text-white'
+                        : 'text-white/50 hover:text-white'
+                    }`}
+                    style={!MORE_LANGS.some(l => l.code === language) ? { border: '1px solid rgba(255,255,255,0.12)' } : {}}
+                  >
+                    {MORE_LANGS.some(l => l.code === language) ? MORE_LANGS.find(l => l.code === language).label : '···'}
+                    <ChevronIcon open={mobileMoreLangOpen} />
+                  </button>
                 </div>
+                <AnimatePresence>
+                  {mobileMoreLangOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="mt-2 flex gap-2">
+                        {MORE_LANGS.map((lang) => (
+                          <button
+                            key={lang.code}
+                            onClick={() => { setLanguage(lang.code); setMobileMoreLangOpen(false) }}
+                            className={`flex-1 rounded-lg py-2.5 text-xs font-semibold uppercase tracking-wider cursor-pointer transition-colors ${
+                              language === lang.code
+                                ? 'bg-[#4b6741] text-white'
+                                : 'text-white/50 hover:text-white'
+                            }`}
+                            style={language !== lang.code ? { border: '1px solid rgba(255,255,255,0.12)' } : {}}
+                          >
+                            {lang.label}
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Auth */}

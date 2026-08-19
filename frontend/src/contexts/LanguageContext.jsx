@@ -9,7 +9,7 @@ export const LanguageProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('vk_lang', language)
     document.documentElement.setAttribute('lang', language)
-    document.documentElement.setAttribute('dir', language === 'ar' ? 'rtl' : 'ltr')
+    document.documentElement.setAttribute('dir', ['ar', 'ur'].includes(language) ? 'rtl' : 'ltr')
   }, [language])
 
   const t = translations[language] || translations.en
