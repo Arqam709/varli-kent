@@ -28,6 +28,7 @@ import propertyAlertRoutes from './routes/propertyAlerts.js'
 import agentRoutes from './routes/agent.js'
 import propertyConversationRoutes from './routes/propertyConversations.js'
 import activityRoutes from './routes/activity.js'
+import studioPaletteRoutes from './routes/studioPalette.js'
 import activityLogger from './middleware/activityLogger.js'
 
 dotenv.config()
@@ -65,6 +66,7 @@ app.use('/api/notifications', notificationRoutes)
 app.use('/api/property-alerts', propertyAlertRoutes)
 app.use('/api/agent', agentRoutes)
 app.use('/api/activity', activityRoutes)
+app.use('/api/studio-palette', studioPaletteRoutes)
 // Human customer↔agent messaging. Separate from /api/chat (the AI assistant)
 // and from /api/agent (customers and agents share this API).
 app.use('/api/property-conversations', propertyConversationRoutes)
