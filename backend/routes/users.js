@@ -172,7 +172,7 @@ router.put('/me/password', protect, async (req, res, next) => {
 router.put('/me/theme', protect, async (req, res, next) => {
   try {
     const { theme } = req.body
-    const VALID = ['default', 'classic', 'dark', 'light', 'forest']
+    const VALID = ['default', 'forest', 'earth', 'navy', 'gold-white', 'sand-travertine', 'rosewood-blush', 'blush-ivory']
     if (!VALID.includes(theme)) return res.status(400).json({ success: false, message: 'Invalid theme' })
     const user = await User.findByIdAndUpdate(req.user._id, { themePreference: theme }, { new: true }).select('-password -resetPasswordToken -resetPasswordExpires')
     res.json({ success: true, user })

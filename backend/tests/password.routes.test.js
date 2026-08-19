@@ -151,6 +151,13 @@ const FakeUser = {
   findById(id) {
     return query(() => docs.find((doc) => doc._id === id) || null)
   },
+  findByIdAndUpdate(id, update) {
+    return query(() => {
+      const doc = docs.find((candidate) => candidate._id === id) || null
+      if (doc) Object.assign(doc, update)
+      return doc
+    })
+  },
   async create(fields) {
     const doc = makeDoc(fields)
     await doc.save()
@@ -209,6 +216,40 @@ const request = async (method, path, { body, token } = {}) => {
 test.beforeEach(() => {
   docs = []
   sentEmails.length = 0
+})
+
+// ── Website theme preference ─────────────────────────────────────────────
+test('all eight website themes persist and invalid themes are rejected', async () => {
+  const user = seedPasswordless({ _id: 'theme-user', name: 'Theme User', email: 'theme@example.com' })
+  const token = tokenFor('theme-user')
+  const validThemes = [
+    'default',
+    'forest',
+    'earth',
+    'navy',
+    'gold-white',
+    'sand-travertine',
+    'rosewood-blush',
+    'blush-ivory',
+  ]
+
+  for (const theme of validThemes) {
+    const response = await request('PUT', '/api/users/me/theme', { token, body: { theme } })
+    assert.equal(response.status, 200, `${theme} should be accepted`)
+    assert.equal(user.themePreference, theme)
+  }
+
+  const invalid = await request('PUT', '/api/users/me/theme', {
+    token,
+    body: { theme: 'not-a-real-theme' },
+  })
+  assert.equal(invalid.status, 400)
+  assert.equal(invalid.body.success, false)
+})
+
+test('theme preference endpoint rejects unauthenticated requests', async () => {
+  const response = await request('PUT', '/api/users/me/theme', { body: { theme: 'default' } })
+  assert.equal(response.status, 401)
 })
 
 // ── D. A passwordless account cannot password-log-in ─────────────────────

@@ -93,7 +93,7 @@ const Navbar = () => {
   }
 
   const { theme } = useTheme()
-  const isDarkNav = theme === 'dark' || theme === 'classic' || theme === 'forest'
+  const isDarkNav = theme === 'forest'
   const isLight = scrolled && !isDarkNav
 
   return (

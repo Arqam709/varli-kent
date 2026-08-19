@@ -10,7 +10,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════════
-   VK DESIGN TOKEN SYSTEM  — 5 luxury themes
+   VK DESIGN TOKEN SYSTEM  — 8 luxury themes
    ══════════════════════════════════════════════════════════════ */
 
 /* ── 1. VarliKent Signature (default) ─────────────────────── */
@@ -30,6 +30,7 @@ html[data-theme="default"] {
   /* Gold */
   --vk-gold:        #C9A35A;
   --vk-gold-hover:  #B88D3B;
+  --vk-gold-text:   #000000;
 
   /* Navigation */
   --vk-nav-bg:      #ffffff;
@@ -64,160 +65,44 @@ html[data-theme="default"] {
   --t-nav-bg:       var(--vk-nav-bg);
 }
 
-/* ── 2. Heritage Navy ─────────────────────────────────────── */
-html[data-theme="classic"] {
-  --vk-section-dark:      #101B2D;
-  --vk-section-dark-alt:  #07111F;
-  --vk-section-light:     #F6F0E6;
-  --vk-section-light-alt: #EEE8DC;
-
-  --vk-green:       #4D6B45;
-  --vk-green-deep:  #3A5030;
-  --vk-green-brand: #4D6B45;
-
-  --vk-gold:        #C9A35A;
-  --vk-gold-hover:  #B48A35;
-
-  --vk-nav-bg:      #101B2D;
-
-  --vk-text:         #111111;
-  --vk-text-muted:   #9CA3AF;
-  --vk-text-on-dark: #F7F3EA;
-
-  --vk-card-bg:      #ffffff;
-  --vk-border:       rgba(16,27,45,0.12);
-  --vk-input-bg:     #ffffff;
-  --vk-shadow:       0 2px 16px rgba(0,0,0,0.10);
-
-  --vk-gold-rgb:    201, 163, 90;
-  --vk-green-rgb:   77, 107, 69;
-  --vk-dark-rgb:    16, 27, 45;
-
-  --t-accent:       var(--vk-green-brand);
-  --t-accent-h:     var(--vk-green-deep);
-  --t-bg:           var(--vk-section-light-alt);
-  --t-surface:      var(--vk-card-bg);
-  --t-text:         var(--vk-text);
-  --t-muted:        var(--vk-text-muted);
-  --t-border:       var(--vk-border);
-  --t-input-bg:     var(--vk-input-bg);
-  --t-input-border: var(--vk-border);
-  --t-shadow:       var(--vk-shadow);
-  --t-nav-bg:       var(--vk-nav-bg);
-}
-
-/* ── 3. Dark Luxury ───────────────────────────────────────── */
-html[data-theme="dark"] {
-  --vk-section-dark:      #0E1110;
-  --vk-section-dark-alt:  #181C1A;
-  --vk-section-light:     #202622;
-  --vk-section-light-alt: #181C1A;
-
-  --vk-green:       #5E7F52;
-  --vk-green-deep:  #2F4733;
-  --vk-green-brand: #4D6B45;
-
-  --vk-gold:        #D1A85B;
-  --vk-gold-hover:  #B88D40;
-
-  --vk-nav-bg:      #0E1110;
-
-  --vk-text:         #F6F1E8;
-  --vk-text-muted:   #B6B0A6;
-  --vk-text-on-dark: #F6F1E8;
-
-  --vk-card-bg:      #202622;
-  --vk-border:       rgba(209,168,91,0.18);
-  --vk-input-bg:     #181C1A;
-  --vk-shadow:       0 2px 20px rgba(0,0,0,0.40);
-
-  --vk-gold-rgb:    209, 168, 91;
-  --vk-green-rgb:   94, 127, 82;
-  --vk-dark-rgb:    14, 17, 16;
-
-  --t-accent:       var(--vk-green-brand);
-  --t-accent-h:     var(--vk-green-deep);
-  --t-bg:           var(--vk-section-dark-alt);
-  --t-surface:      var(--vk-card-bg);
-  --t-text:         var(--vk-text);
-  --t-muted:        var(--vk-text-muted);
-  --t-border:       var(--vk-border);
-  --t-input-bg:     var(--vk-input-bg);
-  --t-input-border: var(--vk-border);
-  --t-shadow:       var(--vk-shadow);
-  --t-nav-bg:       var(--vk-nav-bg);
-}
-
-/* ── 4. Light Luxury ──────────────────────────────────────── */
-html[data-theme="light"] {
-  --vk-section-dark:      #314B35;
-  --vk-section-dark-alt:  #243825;
-  --vk-section-light:     #FBF8F1;
-  --vk-section-light-alt: #F3EEE4;
-
-  --vk-green:       #4D6B45;
-  --vk-green-deep:  #314B35;
-  --vk-green-brand: #4D6B45;
-
-  --vk-gold:        #C4A15A;
-  --vk-gold-hover:  #A8882E;
-
-  --vk-nav-bg:      #ffffff;
-
-  --vk-text:         #111827;
-  --vk-text-muted:   #6E746C;
-  --vk-text-on-dark: #F7F3EA;
-
-  --vk-card-bg:      #ffffff;
-  --vk-border:       #E5DED2;
-  --vk-input-bg:     #ffffff;
-  --vk-shadow:       0 2px 12px rgba(0,0,0,0.06);
-
-  --vk-gold-rgb:    196, 161, 90;
-  --vk-green-rgb:   77, 107, 69;
-  --vk-dark-rgb:    49, 75, 53;
-
-  --t-accent:       var(--vk-green-brand);
-  --t-accent-h:     var(--vk-green-deep);
-  --t-bg:           var(--vk-section-light-alt);
-  --t-surface:      var(--vk-card-bg);
-  --t-text:         var(--vk-text);
-  --t-muted:        var(--vk-text-muted);
-  --t-border:       var(--vk-border);
-  --t-input-bg:     var(--vk-input-bg);
-  --t-input-border: var(--vk-border);
-  --t-shadow:       var(--vk-shadow);
-  --t-nav-bg:       var(--vk-nav-bg);
-}
-
-/* ── 5. Forest Green ──────────────────────────────────────── */
+/* ── 2. Forest — "Bosphorus Pine: Deep Forest & Aged Brass" ── */
+/* Three distinct dark greens (near-black pine / hunter green / muted
+   deep sage) give dark sections real tonal depth instead of one flat
+   "alien goo" green wash; two warm off-whites (ivory / parchment)
+   alternate the light sections. Aged brass is a rare accent (CTAs,
+   numerals, dividers) — never a background fill. A quiet sage plays
+   the secondary-accent role so brass stays special. */
 html[data-theme="forest"] {
-  --vk-section-dark:      #263D2C;
-  --vk-section-dark-alt:  #1A2E1E;
-  --vk-section-light:     #EEF3EA;
-  --vk-section-light-alt: #E4ECDF;
+  --vk-section-dark:      #0E1912;  /* primaryDark — near-black pine */
+  --vk-section-dark-alt:  #1B3327;  /* primaryDarkAlt — hunter green */
+  --vk-section-dark-deep: #33503E;  /* primaryDarkAlt2 — muted deep sage */
+  --vk-section-light:     #F6F1E7;  /* lightBg — ivory */
+  --vk-section-light-alt: #ECE2CD;  /* lightBgAlt — parchment */
 
-  --vk-green:       #3F5A3D;
-  --vk-green-deep:  #263D2C;
-  --vk-green-brand: #4D6B45;
+  --vk-green:       #8EA286;  /* secondary accent, light step — icons/hairlines on light bg */
+  --vk-green-deep:  #4A5B43;  /* secondary accent, dark step — hover/pressed */
+  --vk-green-brand: #698160;  /* secondary accent, mid step — balanced for text-on-dark & fills-under-white-text */
 
-  --vk-gold:        #C9A35A;
-  --vk-gold-hover:  #B48A35;
+  --vk-gold:        #B08D57;  /* accent — aged brass */
+  --vk-gold-hover:  #907447;  /* aged brass, hover/pressed (darker) */
+  --vk-gold-text:   #000000;
 
-  --vk-nav-bg:      #263D2C;
+  --vk-nav-bg:      #F6F1E7;
 
-  --vk-text:         #142018;
-  --vk-text-muted:   #4A6050;
-  --vk-text-on-dark: #F7F3EA;
+  --vk-text:         #14261C;
+  --vk-text-muted:   #5B6656;
+  --vk-text-on-dark: #F2ECDD;
+  --vk-text-muted-on-dark: #B9B7AA;  /* muted body text on a DARK band — solid tone pre-blended against this theme's own --vk-section-dark, so it reads as ivory-gray, never a muddy cross-theme hue */
+  --vk-text-faint-on-dark:  #8B8D82;  /* faint/secondary text on a DARK band — same idea, lower emphasis but still ≥4.5:1 */
 
-  --vk-card-bg:      #F8F4EA;
-  --vk-border:       rgba(38,61,44,0.15);
-  --vk-input-bg:     #EEF3EA;
-  --vk-shadow:       0 2px 16px rgba(38,61,44,0.12);
+  --vk-card-bg:      #F6F1E7;
+  --vk-border:       rgba(20,38,28,0.12);
+  --vk-input-bg:     #F6F1E7;
+  --vk-shadow:       0 2px 16px rgba(20,38,28,0.10);
 
-  --vk-gold-rgb:    201, 163, 90;
-  --vk-green-rgb:   63, 90, 61;
-  --vk-dark-rgb:    38, 61, 44;
+  --vk-gold-rgb:    176, 141, 87;
+  --vk-green-rgb:   105, 129, 96;
+  --vk-dark-rgb:    14, 25, 18;
 
   --t-accent:       var(--vk-green-brand);
   --t-accent-h:     var(--vk-green-deep);
@@ -232,28 +117,339 @@ html[data-theme="forest"] {
   --t-nav-bg:       var(--vk-nav-bg);
 }
 
-/* Forest section green glow */
-html[data-theme="forest"] section {
-  position: relative;
-}
-html[data-theme="forest"] section::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background: radial-gradient(ellipse at 50% 0%, rgba(63,90,61,0.15) 0%, transparent 65%);
-}
-html[data-theme="forest"] section > * {
-  position: relative;
-  z-index: 1;
+/* ── 3. Earth — "Espresso & Terracotta: Bosphorus Estate" ──── */
+/* Three espresso depths (near-black roast / mid coffee-bean / warm
+   walnut) give dark sections tonal architecture instead of one flat
+   brown; two cream/parchment values do the same on the light side.
+   Terracotta is the singular hero accent (CTAs, dividers); antique
+   bronze is the quiet secondary (icon strokes, tags). */
+html[data-theme="earth"] {
+  --vk-section-dark:      #2A1D15;  /* primaryDark — near-black roast */
+  --vk-section-dark-alt:  #4A3423;  /* primaryDarkAlt — mid coffee-bean */
+  --vk-section-dark-deep: #6E4E36;  /* primaryDarkAlt2 — warm walnut */
+  --vk-section-light:     #F6EFE4;  /* lightBg — cream */
+  --vk-section-light-alt: #EDE1D0;  /* lightBgAlt — parchment */
+
+  --vk-green:       #C69662;  /* secondary accent, light step */
+  --vk-green-deep:  #785126;  /* secondary accent, dark step */
+  --vk-green-brand: #AB7336;  /* secondary accent, mid step (antique bronze family) */
+
+  --vk-gold:        #C1652E;  /* accent — terracotta */
+  --vk-gold-hover:  #B85C29;  /* terracotta button fill, hover/pressed */
+  --vk-gold-text:   #000000;
+
+  --vk-nav-bg:      #F6EFE4;
+
+  --vk-text:         #2A1D15;
+  --vk-text-muted:   #7A6754;
+  --vk-text-on-dark: #F1E6D6;
+  --vk-text-muted-on-dark: #BFB4A6;  /* muted body text on a DARK band — solid tone pre-blended against this theme's own --vk-section-dark, so it reads as cream-gray, never a muddy cross-theme hue */
+  --vk-text-faint-on-dark:  #978C7F;  /* faint/secondary text on a DARK band — same idea, lower emphasis but still ≥4.5:1 */
+
+  --vk-card-bg:      #F6EFE4;
+  --vk-border:       rgba(42,29,21,0.12);
+  --vk-input-bg:     #F6EFE4;
+  --vk-shadow:       0 2px 16px rgba(42,29,21,0.10);
+
+  --vk-gold-rgb:    193, 101, 46;
+  --vk-green-rgb:   171, 115, 54;
+  --vk-dark-rgb:    42, 29, 21;
+
+  --t-accent:       var(--vk-green-brand);
+  --t-accent-h:     var(--vk-green-deep);
+  --t-bg:           var(--vk-section-light-alt);
+  --t-surface:      var(--vk-card-bg);
+  --t-text:         var(--vk-text);
+  --t-muted:        var(--vk-text-muted);
+  --t-border:       var(--vk-border);
+  --t-input-bg:     var(--vk-input-bg);
+  --t-input-border: var(--vk-border);
+  --t-shadow:       var(--vk-shadow);
+  --t-nav-bg:       var(--vk-nav-bg);
 }
 
-/* ── Dark Luxury body background ──────────────────────────── */
-html[data-theme="dark"] body,
-html[data-theme="dark"] #root {
-  background-color: var(--vk-section-dark);
-  color: var(--vk-text);
+/* ── 4. Navy — "Bosphorus Midnight" ──────────────────────────── */
+/* Three blue depths (Abyssal Navy / Slate Fjord / Denim Dusk) build a
+   tonal staircase instead of one flat navy; two cool whites alternate
+   the light side. Vintage gold is the sole warm CTA accent; a pale
+   ice-blue is the quiet secondary (hover, outlines, hairlines). */
+html[data-theme="navy"] {
+  --vk-section-dark:      #0B1421;  /* primaryDark — Abyssal Navy */
+  --vk-section-dark-alt:  #2C4A66;  /* primaryDarkAlt — Slate Fjord */
+  --vk-section-dark-deep: #5779A0;  /* primaryDarkAlt2 — Denim Dusk */
+  --vk-section-light:     #FAFBFC;  /* lightBg — Cloud Marble */
+  --vk-section-light-alt: #E9EEF3;  /* lightBgAlt — Pearl Mist */
+
+  --vk-green:       #64A2C9;  /* secondary accent, light step (ice-blue family) */
+  --vk-green-deep:  #255C7E;  /* secondary accent, dark step */
+  --vk-green-brand: #3581B1;  /* secondary accent, mid step — balanced for text-on-dark & fills-under-white-text */
+
+  --vk-gold:        #C3A46B;  /* accent — Vintage Gold */
+  --vk-gold-hover:  #A08658;  /* Vintage Gold, hover/pressed (darker) */
+  --vk-gold-text:   #000000;
+
+  --vk-nav-bg:      #FAFBFC;
+
+  --vk-text:         #101E2E;
+  --vk-text-muted:   #5C6B7C;
+  --vk-text-on-dark: #EEF2F6;
+  --vk-text-muted-on-dark: #B5BBC1;  /* muted body text on a DARK band — solid tone pre-blended against this theme's own --vk-section-dark, so it reads as cloud-gray, never a muddy cross-theme hue */
+  --vk-text-faint-on-dark:  #888E96;  /* faint/secondary text on a DARK band — same idea, lower emphasis but still ≥4.5:1 */
+
+  --vk-card-bg:      #FAFBFC;
+  --vk-border:       rgba(16,30,46,0.12);
+  --vk-input-bg:     #FAFBFC;
+  --vk-shadow:       0 2px 16px rgba(16,30,46,0.10);
+
+  --vk-gold-rgb:    195, 164, 107;
+  --vk-green-rgb:   53, 129, 177;
+  --vk-dark-rgb:    11, 20, 33;
+
+  --t-accent:       var(--vk-green-brand);
+  --t-accent-h:     var(--vk-green-deep);
+  --t-bg:           var(--vk-section-light-alt);
+  --t-surface:      var(--vk-card-bg);
+  --t-text:         var(--vk-text);
+  --t-muted:        var(--vk-text-muted);
+  --t-border:       var(--vk-border);
+  --t-input-bg:     var(--vk-input-bg);
+  --t-input-border: var(--vk-border);
+  --t-shadow:       var(--vk-shadow);
+  --t-nav-bg:       var(--vk-nav-bg);
+}
+
+/* ── 5. Gold — "Bosphorus Ivory & Antique Brass" ─────────────
+   ROOT-CAUSE FIX (previous "gold-white" theme):
+   (1) --vk-section-dark / --vk-section-dark-alt used to be literal
+       solid gold (#C9A35A / #B88D3B) — a saturated MID-LIGHT color,
+       not a real dark tone. Every "dark section" across the site
+       (hero bands, PinnedHero backgroundColor, Footer, page-top
+       bands) is painted with --vk-section-dark, so the whole hero
+       rendered as one overpowering gold/orange wash instead of a
+       small accent. FIX: --vk-section-dark/-alt/-deep are now genuine
+       near-black espresso tones (L below ~10%); gold/brass is moved
+       exclusively onto --vk-gold (buttons, dividers, numerals).
+   (2) --vk-green / --vk-green-deep / --vk-green-brand / --vk-green-rgb
+       were still literal FOREST GREEN (~#4C6943) inside this gold
+       theme. Every DarkGlow/Glow/"fog" radial-gradient overlay in
+       AboutPage/ArchitecturePage/ConstructionPage/InteriorDesignPage/
+       HomePage/Navbar/TeamPage/ContactPage renders
+       `radial-gradient(..., rgba(var(--vk-green-rgb), 0.22-0.35) ...)`
+       — a colored bloom that is theme-agnostic by construction, so it
+       rendered actual green on top of the gold hero. FIX: this theme
+       now defines zero green tokens; --vk-green* holds a warm
+       copper/antique-bronze family instead, so the same shared Glow
+       components render a low-saturation warm-bronze ambient tint
+       (thematically correct depth/lighting) instead of a mismatched
+       green wash.
+   (3) Nav/footer contrast: Navbar/Footer text assumed a genuinely
+       dark --vk-section-dark for white/near-white overlay text; once
+       (1) is fixed this is automatically correct (white text on a
+       near-black espresso band, ~15:1 contrast) instead of white text
+       on light gold (~2:1, the "poor contrast" bug).
+   (4) Distinctiveness fix: the dark tones above were a near-black
+       ORANGE-brown (H≈22-23°, matching Earth's own dark-brown hue to
+       within half a degree) so the two themes' dark nav/CTA bands
+       read as the same color once gold/green were tamed out of them.
+       FIX: dark/-alt/-deep now sit on an AUBERGINE-espresso hue
+       (H≈335-350°, following the same direction the old -deep step
+       already leaned) instead of Earth's orange-brown (H≈23-26°) — a
+       ~30-45° hue separation that keeps both themes dark/warm/moody
+       but reads as two different colors. -deep is also now correctly
+       the *lightest* of the three steps (a proper tonal staircase,
+       matching how forest/earth/navy build theirs) instead of sitting
+       darker than -alt. Contrast against --vk-text-on-dark actually
+       improved slightly (14.78:1 vs the old 14.21:1). */
+html[data-theme="gold-white"] {
+  --vk-section-dark:      #211214;  /* primaryDark — aubergine-espresso base (was near-identical to Earth's orange-brown) */
+  --vk-section-dark-alt:  #391D24;  /* primaryDarkAlt — deeper wine-espresso */
+  --vk-section-dark-deep: #5D3244;  /* primaryDarkAlt2 — lightest step, dusty aubergine */
+  --vk-section-light:     #FBF7EF;  /* lightBg — porcelain ivory */
+  --vk-section-light-alt: #F3E9D8;  /* lightBgAlt — champagne parchment */
+
+  --vk-green:       #C59172;  /* secondary accent, light step (copper/bronze family — NOT green) */
+  --vk-green-deep:  #7F4D2F;  /* secondary accent, dark step */
+  --vk-green-brand: #AF6A41;  /* secondary accent, mid step — balanced for text-on-dark & fills-under-white-text */
+
+  --vk-gold:        #B8863B;  /* accent — antique brass */
+  --vk-gold-hover:  #976E30;  /* antique brass, hover/pressed (darker) */
+  --vk-gold-text:   #000000;
+
+  --vk-nav-bg:      #FBF7EF;
+
+  --vk-text:         #241B12;
+  --vk-text-muted:   #6B5C42;
+  --vk-text-on-dark: #F3E7D1;
+  --vk-text-muted-on-dark: #BFB2A2;  /* muted body text on a DARK band — solid tone pre-blended against this theme's own (new) --vk-section-dark, so it reads as warm ivory-gray, never a muddy cross-theme hue */
+  --vk-text-faint-on-dark:  #95877C;  /* faint/secondary text on a DARK band — same idea, lower emphasis but still ≥4.5:1 */
+
+  --vk-card-bg:      #FBF7EF;
+  --vk-border:       rgba(36,27,18,0.12);
+  --vk-input-bg:     #FBF7EF;
+  --vk-shadow:       0 2px 16px rgba(36,27,18,0.10);
+
+  --vk-gold-rgb:    184, 134, 59;
+  --vk-green-rgb:   175, 106, 65;
+  --vk-dark-rgb:    33, 18, 20;
+
+  --t-accent:       var(--vk-green-brand);
+  --t-accent-h:     var(--vk-green-deep);
+  --t-bg:           var(--vk-section-light-alt);
+  --t-surface:      var(--vk-card-bg);
+  --t-text:         var(--vk-text);
+  --t-muted:        var(--vk-text-muted);
+  --t-border:       var(--vk-border);
+  --t-input-bg:     var(--vk-input-bg);
+  --t-input-border: var(--vk-border);
+  --t-shadow:       var(--vk-shadow);
+  --t-nav-bg:       var(--vk-nav-bg);
+}
+
+/* ── 6. Sand & Travertine ────────────────────────────────────── */
+html[data-theme="sand-travertine"] {
+  --vk-section-dark:      #2B2420;
+  --vk-section-dark-alt:  #453A31;
+  --vk-section-dark-deep: #665748;
+  --vk-section-light:     #F7F1E6;
+  --vk-section-light-alt: #EEE3D2;
+
+  --vk-green:       #C7B49E;
+  --vk-green-deep:  #6B5843;
+  --vk-green-brand: #8E7458;
+
+  --vk-gold:        #B76E54;
+  --vk-gold-hover:  #A15E45;
+  --vk-gold-text:   #000000;
+
+  --vk-nav-bg:      #F7F1E6;
+
+  --vk-text:         #2B2117;
+  --vk-text-muted:   #736452;
+  --vk-text-on-dark: #F2E8DA;
+  --vk-text-muted-on-dark: #C4B8A8;
+  --vk-text-faint-on-dark:  #9C9082;
+
+  --vk-card-bg:      #F7F1E6;
+  --vk-border:       rgba(43,33,23,0.12);
+  --vk-input-bg:     #F7F1E6;
+  --vk-shadow:       0 2px 16px rgba(43,33,23,0.10);
+
+  --vk-gold-rgb:    183, 110, 84;
+  --vk-green-rgb:   142, 116, 88;
+  --vk-dark-rgb:    43, 36, 32;
+
+  --t-accent:       var(--vk-green-brand);
+  --t-accent-h:     var(--vk-green-deep);
+  --t-bg:           var(--vk-section-light-alt);
+  --t-surface:      var(--vk-card-bg);
+  --t-text:         var(--vk-text);
+  --t-muted:        var(--vk-text-muted);
+  --t-border:       var(--vk-border);
+  --t-input-bg:     var(--vk-input-bg);
+  --t-input-border: var(--vk-border);
+  --t-shadow:       var(--vk-shadow);
+  --t-nav-bg:       var(--vk-nav-bg);
+}
+
+/* ── 7. Blush & Rosewood ─────────────────────────────────────── */
+html[data-theme="rosewood-blush"] {
+  --vk-section-dark:      #1E1418;
+  --vk-section-dark-alt:  #2E1F26;
+  --vk-section-dark-deep: #4A3540;
+  --vk-section-light:     #F7ECE8;
+  --vk-section-light-alt: #EFDDD5;
+
+  --vk-green:       #D9DEC9;
+  --vk-green-deep:  #8B9678;
+  --vk-green-brand: #5C6449;
+
+  --vk-gold:        #B08968;
+  --vk-gold-hover:  #8F6D4E;
+  /* Gold is a mid-value color here — white/light text fails contrast on it
+     (~2.3:1). Use this theme's dark anchor color for gold-button labels. */
+  --vk-gold-text:   #1E1418;
+
+  --vk-nav-bg:      #FBF4F1;
+
+  --vk-text:         #2B1F22;
+  --vk-text-muted:   #6E5A5D;
+  --vk-text-on-dark: #F7ECE7;
+  --vk-text-muted-on-dark: #C7ACAE;
+  --vk-text-faint-on-dark:  #8A7377;
+
+  --vk-card-bg:      #FBF4F1;
+  --vk-border:       #E3D2CB;
+  --vk-input-bg:     #F4E8E3;
+  --vk-shadow:       0 2px 16px rgba(30,20,24,0.22);
+
+  --vk-gold-rgb:    176, 137, 104;
+  --vk-green-rgb:   92, 100, 73;
+  --vk-dark-rgb:    30, 20, 24;
+
+  --t-accent:       var(--vk-green-brand);
+  --t-accent-h:     var(--vk-green-deep);
+  --t-bg:           var(--vk-section-light-alt);
+  --t-surface:      var(--vk-card-bg);
+  --t-text:         var(--vk-text);
+  --t-muted:        var(--vk-text-muted);
+  --t-border:       var(--vk-border);
+  --t-input-bg:     var(--vk-input-bg);
+  --t-input-border: var(--vk-border);
+  --t-shadow:       var(--vk-shadow);
+  --t-nav-bg:       var(--vk-nav-bg);
+}
+
+/* ── 8. Blush & Ivory ────────────────────────────────────────── */
+/* Deliberately the light/bright sibling to Blush & Rosewood (which is
+   dark-dominant and moody) — this one is white-dominant with genuine baby-pink
+   alternating panels, so "pink against white" reads immediately rather than
+   pink-against-pink. Rose gold is the sole metallic accent. */
+html[data-theme="blush-ivory"] {
+  --vk-section-dark:      #2B1E22;
+  --vk-section-dark-alt:  #402C33;
+  --vk-section-dark-deep: #5E404A;
+  --vk-section-light:     #FFFBFC;
+  --vk-section-light-alt: #FADCE4;
+
+  --vk-green:       #F3C6D3;
+  --vk-green-deep:  #B97690;
+  --vk-green-brand: #9C5770;
+
+  --vk-gold:        #B76E79;
+  --vk-gold-hover:  #9C5763;
+  /* Same mid-value-gold situation as Blush & Rosewood — rose gold here reads
+     as a warm pinkish copper, not a pale/bright gold, so white text on it
+     fails contrast (~2.6:1). Dark anchor color for gold-button labels. */
+  --vk-gold-text:   #2B1E22;
+
+  --vk-nav-bg:      #FFFBFC;
+
+  --vk-text:         #2B1E22;
+  --vk-text-muted:   #7C6067;
+  --vk-text-on-dark: #FFF6F8;
+  --vk-text-muted-on-dark: #D9B7BE;
+  --vk-text-faint-on-dark:  #A98890;
+
+  --vk-card-bg:      #FFFFFF;
+  --vk-border:       #F3D9DF;
+  --vk-input-bg:     #FFF3F5;
+  --vk-shadow:       0 2px 16px rgba(43,30,34,0.10);
+
+  --vk-gold-rgb:    183, 110, 121;
+  --vk-green-rgb:   156, 87, 112;
+  --vk-dark-rgb:    43, 30, 34;
+
+  --t-accent:       var(--vk-green-brand);
+  --t-accent-h:     var(--vk-green-deep);
+  --t-bg:           var(--vk-section-light-alt);
+  --t-surface:      var(--vk-card-bg);
+  --t-text:         var(--vk-text);
+  --t-muted:        var(--vk-text-muted);
+  --t-border:       var(--vk-border);
+  --t-input-bg:     var(--vk-input-bg);
+  --t-input-border: var(--vk-border);
+  --t-shadow:       var(--vk-shadow);
+  --t-nav-bg:       var(--vk-nav-bg);
 }
 
 /* ══════════════════════════════════════════════════════════════
