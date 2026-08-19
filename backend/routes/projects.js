@@ -1,7 +1,7 @@
 import express from 'express'
 import Project from '../models/Project.js'
 import { protect } from '../middleware/auth.js'
-import { requireRole } from '../middleware/checkPermission.js'
+import { requireRole, requirePermission } from '../middleware/checkPermission.js'
 
 const router = express.Router()
 
@@ -28,7 +28,7 @@ router.get('/featured', async (req, res, next) => {
 })
 
 // GET /api/projects/all — admin
-router.get('/all', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.get('/all', protect, requireRole('owner', 'admin'), requirePermission('manage_projects'), async (req, res, next) => {
   try {
     const projects = await Project.find().sort({ order: 1, createdAt: -1 })
     res.json({ success: true, projects })
@@ -49,7 +49,7 @@ router.get('/:id', async (req, res, next) => {
 })
 
 // POST /api/projects — admin create
-router.post('/', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.post('/', protect, requireRole('owner', 'admin'), requirePermission('manage_projects'), async (req, res, next) => {
   try {
     const project = await Project.create(req.body)
     res.status(201).json({ success: true, project })
@@ -59,7 +59,7 @@ router.post('/', protect, requireRole('owner', 'admin'), async (req, res, next) 
 })
 
 // PUT /api/projects/:id — admin update
-router.put('/:id', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.put('/:id', protect, requireRole('owner', 'admin'), requirePermission('manage_projects'), async (req, res, next) => {
   try {
     const project = await Project.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
     if (!project) return res.status(404).json({ success: false, message: 'Not found' })
@@ -70,7 +70,7 @@ router.put('/:id', protect, requireRole('owner', 'admin'), async (req, res, next
 })
 
 // DELETE /api/projects/:id — admin delete
-router.delete('/:id', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.delete('/:id', protect, requireRole('owner', 'admin'), requirePermission('manage_projects'), async (req, res, next) => {
   try {
     const project = await Project.findByIdAndDelete(req.params.id)
     if (!project) return res.status(404).json({ success: false, message: 'Not found' })

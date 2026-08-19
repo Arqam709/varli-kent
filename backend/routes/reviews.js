@@ -1,7 +1,7 @@
 import express from 'express'
 import Review from '../models/Review.js'
 import { protect } from '../middleware/auth.js'
-import { requireRole } from '../middleware/checkPermission.js'
+import { requireRole, requirePermission } from '../middleware/checkPermission.js'
 
 const router = express.Router()
 
@@ -16,7 +16,7 @@ router.get('/', async (req, res, next) => {
 })
 
 // GET /api/reviews/all — admin, all reviews
-router.get('/all', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.get('/all', protect, requireRole('owner', 'admin'), requirePermission('manage_reviews'), async (req, res, next) => {
   try {
     const reviews = await Review.find().sort({ order: 1, createdAt: -1 })
     res.json({ success: true, reviews })
@@ -26,7 +26,7 @@ router.get('/all', protect, requireRole('owner', 'admin'), async (req, res, next
 })
 
 // POST /api/reviews — admin create
-router.post('/', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.post('/', protect, requireRole('owner', 'admin'), requirePermission('manage_reviews'), async (req, res, next) => {
   try {
     const { name, role, text, rating, avatar, visible, order } = req.body
     const review = await Review.create({ name, role, text, rating, avatar, visible, order })
@@ -37,7 +37,7 @@ router.post('/', protect, requireRole('owner', 'admin'), async (req, res, next) 
 })
 
 // PUT /api/reviews/:id — admin update
-router.put('/:id', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.put('/:id', protect, requireRole('owner', 'admin'), requirePermission('manage_reviews'), async (req, res, next) => {
   try {
     const review = await Review.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
     if (!review) return res.status(404).json({ success: false, message: 'Review not found' })
@@ -48,7 +48,7 @@ router.put('/:id', protect, requireRole('owner', 'admin'), async (req, res, next
 })
 
 // DELETE /api/reviews/:id — admin delete
-router.delete('/:id', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.delete('/:id', protect, requireRole('owner', 'admin'), requirePermission('manage_reviews'), async (req, res, next) => {
   try {
     const review = await Review.findByIdAndDelete(req.params.id)
     if (!review) return res.status(404).json({ success: false, message: 'Review not found' })

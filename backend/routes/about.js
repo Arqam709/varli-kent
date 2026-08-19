@@ -1,7 +1,7 @@
 import express from 'express'
 import AboutContent from '../models/AboutContent.js'
 import { protect } from '../middleware/auth.js'
-import { requireRole } from '../middleware/checkPermission.js'
+import { requireRole, requirePermission } from '../middleware/checkPermission.js'
 
 const router = express.Router()
 
@@ -37,7 +37,7 @@ router.get('/', async (req, res, next) => {
 })
 
 // PUT /api/about — admin update entire document
-router.put('/', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.put('/', protect, requireRole('owner', 'admin'), requirePermission('manage_about'), async (req, res, next) => {
   try {
     let doc = await AboutContent.findOne()
     if (!doc) {

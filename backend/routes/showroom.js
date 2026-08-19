@@ -1,7 +1,7 @@
 import express from 'express'
 import ShowroomImage from '../models/ShowroomImage.js'
 import { protect } from '../middleware/auth.js'
-import { requireRole } from '../middleware/checkPermission.js'
+import { requireRole, requirePermission } from '../middleware/checkPermission.js'
 
 const router = express.Router()
 
@@ -18,7 +18,7 @@ router.get('/:service', async (req, res, next) => {
 })
 
 // GET /api/showroom/:service/all — admin
-router.get('/:service/all', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.get('/:service/all', protect, requireRole('owner', 'admin'), requirePermission('manage_showroom'), async (req, res, next) => {
   try {
     const images = await ShowroomImage.find({ serviceType: req.params.service }).sort({ order: 1, createdAt: 1 })
     res.json({ success: true, images })
@@ -28,7 +28,7 @@ router.get('/:service/all', protect, requireRole('owner', 'admin'), async (req, 
 })
 
 // POST /api/showroom — create
-router.post('/', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.post('/', protect, requireRole('owner', 'admin'), requirePermission('manage_showroom'), async (req, res, next) => {
   try {
     const image = await ShowroomImage.create(req.body)
     res.status(201).json({ success: true, image })
@@ -38,7 +38,7 @@ router.post('/', protect, requireRole('owner', 'admin'), async (req, res, next) 
 })
 
 // PUT /api/showroom/:id — update
-router.put('/:id', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.put('/:id', protect, requireRole('owner', 'admin'), requirePermission('manage_showroom'), async (req, res, next) => {
   try {
     const image = await ShowroomImage.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
     if (!image) return res.status(404).json({ success: false, message: 'Image not found' })
@@ -49,7 +49,7 @@ router.put('/:id', protect, requireRole('owner', 'admin'), async (req, res, next
 })
 
 // DELETE /api/showroom/:id
-router.delete('/:id', protect, requireRole('owner', 'admin'), async (req, res, next) => {
+router.delete('/:id', protect, requireRole('owner', 'admin'), requirePermission('manage_showroom'), async (req, res, next) => {
   try {
     const image = await ShowroomImage.findByIdAndDelete(req.params.id)
     if (!image) return res.status(404).json({ success: false, message: 'Image not found' })
