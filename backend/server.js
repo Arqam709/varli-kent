@@ -15,6 +15,7 @@ import reviewRoutes from './routes/reviews.js'
 import aboutRoutes from './routes/about.js'
 import projectRoutes from './routes/projects.js'
 import teamRoutes from './routes/team.js'
+import partnerRoutes from './routes/partners.js'
 import showroomRoutes from './routes/showroom.js'
 import settingsRoutes from './routes/settings.js'
 import leadRoutingRoutes from './routes/leadRouting.js'
@@ -49,6 +50,7 @@ app.use('/api/reviews', reviewRoutes)
 app.use('/api/about', aboutRoutes)
 app.use('/api/projects', projectRoutes)
 app.use('/api/team', teamRoutes)
+app.use('/api/partners', partnerRoutes)
 app.use('/api/showroom', showroomRoutes)
 app.use('/api/settings', settingsRoutes)
 app.use('/api/lead-routing', leadRoutingRoutes)

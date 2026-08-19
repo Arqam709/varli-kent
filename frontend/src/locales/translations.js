@@ -1,5 +1,8 @@
 const translations = {
   en: {
+    partners: {
+      label: 'Trusted By Leading Companies',
+    },
     nav: {
       home: 'Home', properties: 'Properties', team: 'Our Team',
       services: 'Services', about: 'About', contact: 'Contact',
@@ -440,6 +443,7 @@ const translations = {
       projects: 'Projects',
       aboutPage: 'About Page',
       team: 'Team',
+      partners: 'Partners',
       reviews: 'Reviews',
       showroom: 'Showroom',
       leadRouting: 'Lead Routing',
@@ -452,6 +456,7 @@ const translations = {
         save: 'Save Changes', saving: 'Saving...', cancel: 'Cancel', delete: 'Delete', edit: 'Edit',
         visible: 'Visible', hidden: 'Hidden', order: 'Display Order', saveAll: 'Save All',
         creating: 'Creating...', uploading: 'Uploading...', ownerOnly: 'Owner access required',
+        saveFailed: 'Failed to save', uploadFailed: 'Upload failed', failed: 'Failed',
       },
       dashboard: {
         title: 'Dashboard', signedIn: 'Signed in as',
@@ -520,6 +525,22 @@ const translations = {
         addMemberTitle: 'Add Team Member', editMemberTitle: 'Edit Member',
         fullName: 'Full Name', roleTitle: 'Title / Role', bio: 'Bio', photoUrl: 'Photo URL',
         showOnPage: 'Show on team page', addMemberBtn: 'Add Member', saveChanges: 'Save Changes',
+      },
+      partners: {
+        title: 'Partner Companies', subtitle: 'Manage the scrolling logo strip shown on the homepage before "What Our Clients Say."',
+        addPartner: 'Add Partner', empty: 'No partner companies yet. Add your first logo.',
+        addPartnerTitle: 'Add Partner Company', editPartnerTitle: 'Edit Partner',
+        companyName: 'Company Name', logoImage: 'Logo Image', uploadLogo: 'Click to upload logo',
+        logoHint: 'Transparent PNG or SVG logos look best in the scrolling strip.',
+        noLogoYet: 'No logo yet', websiteLink: 'Website Link (optional)',
+        linkHint: 'Leave blank to make this logo not clickable on the homepage.',
+        showOnHomepage: 'Show in the homepage strip', addPartnerBtn: 'Add Partner', saveChanges: 'Save Changes',
+        linksTo: 'Links to', noLink: 'No link — logo is not clickable',
+        nameRequired: 'Company name is required', logoRequired: 'A logo image is required',
+        added: 'Partner added', updated: 'Partner updated', deleted: 'Partner deleted',
+        deleteConfirm: 'Delete', deleteConfirmSub: 'This cannot be undone.', logoUploaded: 'Logo uploaded',
+        adjustCrop: 'Adjust crop position & zoom', recropNeedsFile: 'Re-upload the logo to reposition the crop.',
+        cropTitle: 'Position Your Logo', cropHint: 'Drag to move, scroll or use the slider to zoom.', cropApply: 'Apply Crop',
       },
       reviews: {
         title: 'Reviews', subtitle: 'Manage testimonials displayed on the homepage',
@@ -686,6 +707,9 @@ const translations = {
   },
 
   tr: {
+    partners: {
+      label: 'Lider Şirketler Tarafından Tercih Edildi',
+    },
     nav: {
       home: 'Ana Sayfa', properties: 'Mülkler', team: 'Ekibimiz',
       services: 'Hizmetler', about: 'Hakkında', contact: 'İletişim',
@@ -1147,6 +1171,7 @@ forgotPasswordPage: {
       projects: 'Projeler',
       aboutPage: 'Hakkında Sayfası',
       team: 'Ekip',
+      partners: 'İş Ortakları',
       reviews: 'Yorumlar',
       showroom: 'Showroom',
       leadRouting: 'Müşteri Yönlendirme',
@@ -1159,6 +1184,7 @@ forgotPasswordPage: {
         save: 'Değişiklikleri Kaydet', saving: 'Kaydediliyor...', cancel: 'İptal', delete: 'Sil', edit: 'Düzenle',
         visible: 'Görünür', hidden: 'Gizli', order: 'Sıra', saveAll: 'Tümünü Kaydet',
         creating: 'Oluşturuluyor...', uploading: 'Yükleniyor...', ownerOnly: 'Sahip erişimi gerekli',
+        saveFailed: 'Kaydetme başarısız', uploadFailed: 'Yükleme başarısız', failed: 'Başarısız',
       },
       dashboard: {
         title: 'Panel', signedIn: 'Oturum açık',
@@ -1227,6 +1253,22 @@ forgotPasswordPage: {
         addMemberTitle: 'Ekip Üyesi Ekle', editMemberTitle: 'Üyeyi Düzenle',
         fullName: 'Ad Soyad', roleTitle: 'Unvan / Görev', bio: 'Biyografi', photoUrl: 'Fotoğraf URL',
         showOnPage: 'Ekip sayfasında göster', addMemberBtn: 'Üye Ekle', saveChanges: 'Değişiklikleri Kaydet',
+      },
+      partners: {
+        title: 'Partner Şirketler', subtitle: 'Ana sayfada "Müşterilerimiz Ne Diyor" bölümünden önce gösterilen kayan logo şeridini yönetin.',
+        addPartner: 'Partner Ekle', empty: 'Henüz partner şirket yok. İlk logonuzu ekleyin.',
+        addPartnerTitle: 'Partner Şirket Ekle', editPartnerTitle: 'Partneri Düzenle',
+        companyName: 'Şirket Adı', logoImage: 'Logo Görseli', uploadLogo: 'Logo yüklemek için tıklayın',
+        logoHint: 'Şeffaf PNG veya SVG logolar kayan şeritte en iyi görünür.',
+        noLogoYet: 'Henüz logo yok', websiteLink: 'Web Sitesi Bağlantısı (isteğe bağlı)',
+        linkHint: 'Bu logonun ana sayfada tıklanabilir olmasını istemiyorsanız boş bırakın.',
+        showOnHomepage: 'Ana sayfa şeridinde göster', addPartnerBtn: 'Partner Ekle', saveChanges: 'Değişiklikleri Kaydet',
+        linksTo: 'Bağlantı', noLink: 'Bağlantı yok — logo tıklanamaz',
+        nameRequired: 'Şirket adı gereklidir', logoRequired: 'Bir logo görseli gereklidir',
+        added: 'Partner eklendi', updated: 'Partner güncellendi', deleted: 'Partner silindi',
+        deleteConfirm: 'Sil', deleteConfirmSub: 'Bu işlem geri alınamaz.', logoUploaded: 'Logo yüklendi',
+        adjustCrop: 'Kırpma konumunu ve yakınlaştırmayı ayarlayın', recropNeedsFile: 'Kırpmayı yeniden konumlandırmak için logoyu yeniden yükleyin.',
+        cropTitle: 'Logonuzu Konumlandırın', cropHint: 'Taşımak için sürükleyin, yakınlaştırmak için kaydırın veya kaydırıcıyı kullanın.', cropApply: 'Kırpmayı Uygula',
       },
       reviews: {
         title: 'Yorumlar', subtitle: 'Ana sayfada gösterilen referansları yönetin',
@@ -1393,6 +1435,9 @@ forgotPasswordPage: {
   },
 
   ar: {
+    partners: {
+      label: 'موثوق به من كبرى الشركات',
+    },
     nav: {
       home: 'الرئيسية', properties: 'العقارات', team: 'فريقنا',
       services: 'الخدمات', about: 'عن الشركة', contact: 'اتصل بنا',
@@ -1855,6 +1900,7 @@ forgotPasswordPage: {
       projects: 'المشاريع',
       aboutPage: 'صفحة من نحن',
       team: 'الفريق',
+      partners: 'الشركاء',
       reviews: 'التقييمات',
       showroom: 'المعرض',
       leadRouting: 'توجيه العملاء',
@@ -1867,6 +1913,7 @@ forgotPasswordPage: {
         save: 'حفظ التغييرات', saving: 'جارٍ الحفظ...', cancel: 'إلغاء', delete: 'حذف', edit: 'تعديل',
         visible: 'مرئي', hidden: 'مخفي', order: 'ترتيب العرض', saveAll: 'حفظ الكل',
         creating: 'جارٍ الإنشاء...', uploading: 'جارٍ الرفع...', ownerOnly: 'مطلوب صلاحية المالك',
+        saveFailed: 'فشل الحفظ', uploadFailed: 'فشل الرفع', failed: 'فشل',
       },
       dashboard: {
         title: 'لوحة التحكم', signedIn: 'مسجّل دخول بصفة',
@@ -1935,6 +1982,22 @@ forgotPasswordPage: {
         addMemberTitle: 'إضافة عضو للفريق', editMemberTitle: 'تعديل العضو',
         fullName: 'الاسم الكامل', roleTitle: 'اللقب / الدور', bio: 'نبذة', photoUrl: 'رابط الصورة',
         showOnPage: 'إظهار في صفحة الفريق', addMemberBtn: 'إضافة عضو', saveChanges: 'حفظ التغييرات',
+      },
+      partners: {
+        title: 'الشركات الشريكة', subtitle: 'إدارة شريط الشعارات المتحرك المعروض في الصفحة الرئيسية قبل "ماذا يقول عملاؤنا."',
+        addPartner: 'إضافة شريك', empty: 'لا توجد شركات شريكة بعد. أضف أول شعار.',
+        addPartnerTitle: 'إضافة شركة شريكة', editPartnerTitle: 'تعديل الشريك',
+        companyName: 'اسم الشركة', logoImage: 'صورة الشعار', uploadLogo: 'اضغط لتحميل الشعار',
+        logoHint: 'الشعارات الشفافة بصيغة PNG أو SVG تظهر بأفضل شكل في الشريط المتحرك.',
+        noLogoYet: 'لا يوجد شعار بعد', websiteLink: 'رابط الموقع الإلكتروني (اختياري)',
+        linkHint: 'اتركه فارغاً إذا لا تريد أن يكون هذا الشعار قابلاً للنقر في الصفحة الرئيسية.',
+        showOnHomepage: 'إظهار في شريط الصفحة الرئيسية', addPartnerBtn: 'إضافة شريك', saveChanges: 'حفظ التغييرات',
+        linksTo: 'يرتبط بـ', noLink: 'بلا رابط — الشعار غير قابل للنقر',
+        nameRequired: 'اسم الشركة مطلوب', logoRequired: 'صورة الشعار مطلوبة',
+        added: 'تمت إضافة الشريك', updated: 'تم تحديث الشريك', deleted: 'تم حذف الشريك',
+        deleteConfirm: 'حذف', deleteConfirmSub: 'لا يمكن التراجع عن هذا الإجراء.', logoUploaded: 'تم تحميل الشعار',
+        adjustCrop: 'ضبط موضع القص والتكبير', recropNeedsFile: 'أعد تحميل الشعار لإعادة ضبط القص.',
+        cropTitle: 'حدد موضع شعارك', cropHint: 'اسحب للتحريك، مرّر أو استخدم شريط التمرير للتكبير.', cropApply: 'تطبيق القص',
       },
       reviews: {
         title: 'التقييمات', subtitle: 'إدارة الشهادات المعروضة في الصفحة الرئيسية',

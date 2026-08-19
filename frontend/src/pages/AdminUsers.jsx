@@ -24,6 +24,7 @@ const ALL_PERMISSIONS = [
   { key: 'manage_projects', group: 'Content',          label: 'Manage Projects' },
   { key: 'manage_showroom', group: 'Content',          label: 'Manage Showroom' },
   { key: 'manage_about',    group: 'Content',          label: 'Manage About Page' },
+  { key: 'manage_partners', group: 'Content',          label: 'Partners' },
   // Users & Security
   { key: 'user_management', group: 'Users & Security', label: 'User Management' },
   { key: 'manage_passwords',group: 'Users & Security', label: 'Change User Passwords' },

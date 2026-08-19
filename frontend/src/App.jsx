@@ -27,6 +27,7 @@ import AdminReviews from './pages/AdminReviews'
 import AdminAbout from './pages/AdminAbout'
 import AdminProjects from './pages/AdminProjects'
 import AdminTeam from './pages/AdminTeam'
+import AdminPartners from './pages/AdminPartners'
 import AdminShowroom from './pages/AdminShowroom'
 import AdminSiteSettings from './pages/AdminSiteSettings'
 import AdminLeadRouting from './pages/AdminLeadRouting'
@@ -86,6 +87,7 @@ const App = ({ ready }) => (
           <Route path="/admin/about" element={<ProtectedRoute requiredRole="admin"><AdminAbout /></ProtectedRoute>} />
           <Route path="/admin/projects" element={<ProtectedRoute requiredRole="admin"><AdminProjects /></ProtectedRoute>} />
           <Route path="/admin/team" element={<ProtectedRoute requiredRole="admin"><AdminTeam /></ProtectedRoute>} />
+          <Route path="/admin/partners" element={<ProtectedRoute requiredRole="admin"><AdminPartners /></ProtectedRoute>} />
           <Route path="/admin/showroom" element={<ProtectedRoute requiredRole="admin"><AdminShowroom /></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute requiredRole="owner"><AdminSiteSettings /></ProtectedRoute>} />
           {/*

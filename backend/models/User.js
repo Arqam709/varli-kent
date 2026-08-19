@@ -42,6 +42,7 @@ const userSchema = new mongoose.Schema({
       'manage_projects',
       'manage_showroom',
       'manage_about',
+      'manage_partners',
       // Users & Security
       'user_management',
       'manage_passwords',

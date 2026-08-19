@@ -311,3 +311,10 @@ html {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Partner logos strip: seamless infinite marquee — the track is the list
+   duplicated once, so translating exactly -50% loops with no visible seam. */
+@keyframes vk-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}

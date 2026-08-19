@@ -359,6 +359,56 @@ function FeaturedCarousel({ loading, featured, t, navigate, C, mv, vp, SectionLa
   )
 }
 
+function PartnersMarquee({ nameColor }) {
+  const [partners, setPartners] = useState([])
+  useEffect(() => { api.get('/partners').then(r => setPartners(r.data.partners || [])).catch(() => {}) }, [])
+  if (!partners.length) return null
+
+  const LOOP_THRESHOLD = 5
+  const shouldLoop = partners.length > LOOP_THRESHOLD
+  const track = shouldLoop ? [...partners, ...partners] : partners
+  const duration = Math.max(partners.length * 4, 18)
+  // Fewer logos get much more room to breathe; the strip only shrinks once
+  // there are enough companies that it actually needs to loop.
+  const boxSize = partners.length <= 3 ? 152 : partners.length <= 5 ? 128 : partners.length <= 9 ? 104 : 84
+
+  const Logo = ({ pr }) => {
+    const inner = (
+      <div className="flex flex-col items-center gap-5 px-10 shrink-0">
+        <div className="flex items-center justify-center transition-transform duration-300 hover:scale-105" style={{ height: boxSize, width: boxSize * (pr.circular ? 1 : 1.7) }}>
+          <img
+            src={pr.logo}
+            alt={pr.name}
+            className={pr.circular ? 'h-full w-full rounded-full object-cover ring-1 ring-black/10' : 'max-h-full max-w-full object-contain'}
+          />
+        </div>
+        <span className="text-sm md:text-base font-semibold tracking-wide" style={{ color: nameColor }}>{pr.name}</span>
+      </div>
+    )
+    return pr.link ? (
+      <a href={pr.link} target="_blank" rel="noopener noreferrer" className="cursor-pointer">{inner}</a>
+    ) : inner
+  }
+
+  // The scroll/fan-out motion is a visual device, not text — it must always
+  // run left-to-right and lay out in source order, even on the Arabic (RTL)
+  // site, otherwise the RTL flex-direction flip fights the translateX
+  // keyframes and the whole strip ends up rendering off-screen.
+  return (
+    <div dir="ltr" className="relative overflow-hidden">
+      {shouldLoop && (
+        <>
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 md:w-28" style={{ background: `linear-gradient(to right, ${C.softWhite}, transparent)` }} />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 md:w-28" style={{ background: `linear-gradient(to left, ${C.softWhite}, transparent)` }} />
+        </>
+      )}
+      <div className={shouldLoop ? 'flex w-max' : 'flex flex-wrap items-center justify-center gap-y-10'} style={shouldLoop ? { animation: `vk-marquee ${duration}s linear infinite` } : undefined}>
+        {track.map((pr, i) => <Logo key={`${pr._id}-${i}`} pr={pr} />)}
+      </div>
+    </div>
+  )
+}
+
 export default function HomePage() {
   const navigate = useNavigate()
   const { t }    = useLanguage()
@@ -762,6 +812,18 @@ export default function HomePage() {
               ))}
             </div>
           </div>
+        </section>
+
+        {/* ── PARTNERS — scrolling logo strip, white bg bracketed by gold lines ── */}
+        <section aria-label="Partner Companies" style={{ backgroundColor: C.softWhite }} className="relative">
+          <div style={{ height: 2, boxShadow: '0 0 12px rgba(var(--vk-gold-rgb), 0.6)', background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 1), transparent)' }} />
+          <div className="mx-auto max-w-6xl px-6 py-20">
+            <p className="mb-12 text-center text-sm md:text-base font-semibold uppercase tracking-[0.32em]" style={{ color: C.gold }}>
+              {t.partners?.label || 'Trusted By Leading Companies'}
+            </p>
+            <PartnersMarquee dark={false} nameColor={C.gold} />
+          </div>
+          <div style={{ height: 2, boxShadow: '0 0 12px rgba(var(--vk-gold-rgb), 0.6)', background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 1), transparent)' }} />
         </section>
 
         {/* ── CTA — charcoal bg ── */}
