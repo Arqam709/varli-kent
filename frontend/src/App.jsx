@@ -5,6 +5,7 @@ import { SiteSettingsProvider } from './contexts/SiteSettingsContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import PublicLayout from './components/PublicLayout'
 import ProtectedRoute from './components/ProtectedRoute'
+import ScrollToTop from './components/ScrollToTop'
 import HomePage from './pages/HomePage'
 import PropertiesPage from './pages/PropertiesPage'
 import PropertyDetailsPage from './pages/PropertyDetailsPage'
@@ -49,6 +50,7 @@ const App = () => (
   <BrowserRouter>
     <ThemeProvider>
     <SiteSettingsProvider>
+      <ScrollToTop />
       <ToastContainer position="top-right" theme="dark" />
       <Suspense fallback={<PageLoader />}>
         <Routes>
