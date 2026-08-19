@@ -29,7 +29,7 @@ function Root() {
       {!ready && <LoadingScreen onComplete={() => setReady(true)} />}
 
       <div style={{ opacity: ready ? 1 : 0, transition: 'opacity 0.4s ease' }}>
-        <App />
+        <App ready={ready} />
       </div>
     </>
   )

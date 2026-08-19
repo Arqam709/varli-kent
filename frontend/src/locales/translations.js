@@ -351,6 +351,66 @@ const translations = {
       noResults: 'No properties found',
       noResultsHint: 'Try adjusting your filters.',
     },
+    privacyBanner: {
+      message: 'We use cookies and local storage to improve your experience on this site. By continuing to browse, you agree to our use of these technologies.',
+      accept: 'Accept',
+      learnMore: 'Privacy Policy',
+    },
+    privacyPolicy: {
+      title: 'Privacy Policy',
+      lastUpdated: 'Last updated: August 2026',
+      close: 'Close',
+      sections: [
+        {
+          heading: '1. Introduction',
+          body: "Varlikent (\"we\", \"us\", \"our\") operates this website and the services offered on it, including property listings, our AI chat assistant, and lead-routing to our agents and partners. This Privacy Policy explains what information we collect, why we collect it, how we use and protect it, and the choices you have. By using this site, you agree to the practices described here.",
+        },
+        {
+          heading: '2. Information We Collect',
+          body: "We collect information you provide directly — such as your name, email, phone number, and message content when you register an account, contact us, submit a property inquiry, or chat with our assistant. We also collect information automatically, including your device type, browser, approximate location (from IP address), pages visited, and how you interact with the site. If you create an account, we store your profile details, saved favourites, and chosen language and theme preferences.",
+        },
+        {
+          heading: '3. Cookies & Local Storage',
+          body: "We use cookies, browser local storage, and session storage to keep you signed in, remember your language and theme preference, remember that you've seen our intro animation and this privacy notice, and to understand overall site usage. These are not used to sell your data to advertisers. You can clear cookies and local storage at any time through your browser settings, though doing so may reset your saved preferences.",
+        },
+        {
+          heading: '4. How We Use Your Information',
+          body: 'We use your information to: operate and improve the site; respond to inquiries and route leads to the right agent or department; personalize content (language, theme, saved favourites); operate our AI chat assistant and improve its accuracy; send account-related and, where you have opted in, marketing communications; and detect, prevent, and address fraud, abuse, or security issues.',
+        },
+        {
+          heading: '5. Sharing Your Information',
+          body: "We do not sell your personal information. We may share it with: our real estate agents and internal team members to follow up on your inquiry; service providers who host our infrastructure, send emails, or process uploads and images on our behalf, under confidentiality obligations; and legal or governmental authorities where required by law or to protect our rights, users, or the public. Any such providers are only given the minimum information needed to perform their function.",
+        },
+        {
+          heading: '6. Data Retention',
+          body: 'We retain your information for as long as your account is active or as needed to provide you services, respond to your inquiries, and comply with our legal obligations. Chat conversations and lead records are kept to maintain service continuity and for quality/training purposes, and may be anonymized or deleted after they are no longer needed.',
+        },
+        {
+          heading: '7. Your Rights',
+          body: 'Depending on your location, you may have the right to access, correct, export, or delete the personal information we hold about you, and to object to or restrict certain processing. You can update your profile and delete your account from the Settings page, or contact us directly using the details below to exercise any of these rights.',
+        },
+        {
+          heading: '8. Data Security',
+          body: 'We use industry-standard measures — including encrypted connections (HTTPS), hashed passwords, and access-controlled systems — to protect your information. No method of transmission or storage is 100% secure, and we cannot guarantee absolute security, but we work to continuously improve our safeguards.',
+        },
+        {
+          heading: "9. Children's Privacy",
+          body: 'Our services are not directed to individuals under 18. We do not knowingly collect personal information from children. If you believe a child has provided us with personal information, please contact us so we can delete it.',
+        },
+        {
+          heading: '10. International Users',
+          body: 'Our servers and service providers may be located outside your country of residence. By using this site, you consent to your information being processed and stored in these locations, which may have different data protection laws than your home jurisdiction.',
+        },
+        {
+          heading: '11. Changes to This Policy',
+          body: 'We may update this Privacy Policy from time to time to reflect changes in our practices or for legal, operational, or regulatory reasons. We will update the "Last updated" date above whenever we make changes, and material changes will be highlighted on the site.',
+        },
+        {
+          heading: '12. Contact Us',
+          body: 'If you have questions about this Privacy Policy or how we handle your information, please contact us at info@varlikent.com or through the Contact page on this site.',
+        },
+      ],
+    },
     contactPage: {
       label: 'Get in Touch',
       heading: 'Contact VarliKent',
@@ -997,6 +1057,66 @@ forgotPasswordPage: {
       clearFilters: 'Filtreleri Temizle',
       noResults: 'Mülk bulunamadı',
       noResultsHint: 'Filtrelerinizi ayarlamayı deneyin.',
+    },
+    privacyBanner: {
+      message: 'Bu sitedeki deneyiminizi iyileştirmek için çerezler ve yerel depolama kullanıyoruz. Taramaya devam ederek bu teknolojileri kullanmamızı kabul edersiniz.',
+      accept: 'Kabul Et',
+      learnMore: 'Gizlilik Politikası',
+    },
+    privacyPolicy: {
+      title: 'Gizlilik Politikası',
+      lastUpdated: 'Son güncelleme: Ağustos 2026',
+      close: 'Kapat',
+      sections: [
+        {
+          heading: '1. Giriş',
+          body: 'Varlikent ("biz", "bize", "bizim") bu web sitesini ve site üzerinden sunulan hizmetleri işletir; bunlar arasında mülk ilanları, yapay zeka sohbet asistanımız ve talepleri acentelerimize ve iş ortaklarımıza yönlendirme bulunur. Bu Gizlilik Politikası, hangi bilgileri topladığımızı, neden topladığımızı, bunları nasıl kullanıp koruduğumuzu ve sahip olduğunuz seçenekleri açıklar. Bu siteyi kullanarak burada açıklanan uygulamaları kabul edersiniz.',
+        },
+        {
+          heading: '2. Topladığımız Bilgiler',
+          body: 'Hesap oluşturma, bize ulaşma, mülk talebinde bulunma veya asistanımızla sohbet etme sırasında doğrudan sağladığınız ad, e-posta, telefon numarası ve mesaj içeriği gibi bilgileri toplarız. Ayrıca cihaz türü, tarayıcı, yaklaşık konum (IP adresinden), ziyaret edilen sayfalar ve siteyle etkileşiminiz gibi bilgileri otomatik olarak topluyoruz. Hesap oluşturursanız profil bilgilerinizi, kaydedilen favorilerinizi ve seçtiğiniz dil/tema tercihlerinizi saklarız.',
+        },
+        {
+          heading: '3. Çerezler ve Yerel Depolama',
+          body: 'Oturumunuzu açık tutmak, dil ve tema tercihinizi hatırlamak, giriş animasyonumuzu ve bu gizlilik bildirimini gördüğünüzü hatırlamak ve genel site kullanımını anlamak için çerezler, tarayıcı yerel depolaması ve oturum depolaması kullanıyoruz. Bunlar verilerinizi reklamcılara satmak için kullanılmaz. Tarayıcı ayarlarınızdan çerezleri ve yerel depolamayı istediğiniz zaman temizleyebilirsiniz; bu, kaydedilmiş tercihlerinizi sıfırlayabilir.',
+        },
+        {
+          heading: '4. Bilgilerinizi Nasıl Kullanıyoruz',
+          body: 'Bilgilerinizi şu amaçlarla kullanırız: siteyi işletmek ve iyileştirmek; taleplere yanıt vermek ve bunları doğru acenteye veya departmana yönlendirmek; içeriği kişiselleştirmek (dil, tema, kaydedilen favoriler); yapay zeka sohbet asistanımızı işletmek ve doğruluğunu artırmak; hesapla ilgili ve onay verdiğiniz durumlarda pazarlama iletişimleri göndermek; ve dolandırıcılık, kötüye kullanım veya güvenlik sorunlarını tespit etmek, önlemek ve ele almak.',
+        },
+        {
+          heading: '5. Bilgilerinizin Paylaşılması',
+          body: 'Kişisel bilgilerinizi satmıyoruz. Bunları şu taraflarla paylaşabiliriz: talebinizi takip etmek için emlak danışmanlarımız ve iç ekip üyelerimiz; gizlilik yükümlülükleri altında altyapımızı barındıran, e-posta gönderen veya yüklemeleri/görselleri bizim adımıza işleyen hizmet sağlayıcılar; ve yasaların gerektirdiği veya haklarımızı, kullanıcılarımızı ya da kamuyu korumak için yasal/devlet makamları. Bu sağlayıcılara yalnızca işlevlerini yerine getirmek için gereken minimum bilgi verilir.',
+        },
+        {
+          heading: '6. Veri Saklama',
+          body: 'Bilgilerinizi hesabınız aktif olduğu sürece veya size hizmet sağlamak, taleplerinize yanıt vermek ve yasal yükümlülüklerimizi karşılamak için gerektiği sürece saklarız. Sohbet kayıtları ve talep kayıtları, hizmet sürekliliğini korumak ve kalite/eğitim amaçları için tutulur; artık gerekli olmadıklarında anonimleştirilebilir veya silinebilir.',
+        },
+        {
+          heading: '7. Haklarınız',
+          body: 'Bulunduğunuz yere bağlı olarak, hakkınızda tuttuğumuz kişisel bilgilere erişme, düzeltme, dışa aktarma veya silme ve belirli işlemlere itiraz etme veya bunları kısıtlama hakkına sahip olabilirsiniz. Profilinizi Ayarlar sayfasından güncelleyebilir, hesabınızı silebilir veya bu haklardan herhangi birini kullanmak için aşağıdaki bilgilerle bizimle doğrudan iletişime geçebilirsiniz.',
+        },
+        {
+          heading: '8. Veri Güvenliği',
+          body: 'Bilgilerinizi korumak için şifreli bağlantılar (HTTPS), karma (hash) şifreler ve erişim kontrollü sistemler gibi sektör standardı önlemler kullanıyoruz. Hiçbir iletim veya depolama yöntemi %100 güvenli değildir ve mutlak güvenliği garanti edemeyiz, ancak önlemlerimizi sürekli olarak iyileştirmeye çalışıyoruz.',
+        },
+        {
+          heading: '9. Çocukların Gizliliği',
+          body: 'Hizmetlerimiz 18 yaş altındaki kişilere yönelik değildir. Çocuklardan bilerek kişisel bilgi toplamıyoruz. Bir çocuğun bize kişisel bilgi verdiğini düşünüyorsanız, bunu silebilmemiz için lütfen bizimle iletişime geçin.',
+        },
+        {
+          heading: '10. Uluslararası Kullanıcılar',
+          body: 'Sunucularımız ve hizmet sağlayıcılarımız ikamet ettiğiniz ülkenin dışında bulunabilir. Bu siteyi kullanarak, bilgilerinizin bu konumlarda işlenmesine ve saklanmasına onay verirsiniz; buralar kendi ülkenizden farklı veri koruma yasalarına sahip olabilir.',
+        },
+        {
+          heading: '11. Bu Politikadaki Değişiklikler',
+          body: 'Uygulamalarımızdaki değişiklikleri yansıtmak veya yasal, operasyonel ya da düzenleyici nedenlerle bu Gizlilik Politikasını zaman zaman güncelleyebiliriz. Değişiklik yaptığımızda yukarıdaki "Son güncelleme" tarihini güncelleyeceğiz ve önemli değişiklikler sitede vurgulanacaktır.',
+        },
+        {
+          heading: '12. Bize Ulaşın',
+          body: 'Bu Gizlilik Politikası veya bilgilerinizi nasıl işlediğimiz hakkında sorularınız varsa, lütfen info@varlikent.com adresinden veya bu sitedeki İletişim sayfası üzerinden bizimle iletişime geçin.',
+        },
+      ],
     },
     contactPage: {
       label: 'İletişime Geçin',
@@ -1645,6 +1765,66 @@ forgotPasswordPage: {
       clearFilters: 'مسح الفلاتر',
       noResults: 'لم يتم العثور على عقارات',
       noResultsHint: 'حاول تعديل الفلاتر.',
+    },
+    privacyBanner: {
+      message: 'نستخدم ملفات تعريف الارتباط والتخزين المحلي لتحسين تجربتك على هذا الموقع. من خلال الاستمرار في التصفح، فإنك توافق على استخدامنا لهذه التقنيات.',
+      accept: 'موافق',
+      learnMore: 'سياسة الخصوصية',
+    },
+    privacyPolicy: {
+      title: 'سياسة الخصوصية',
+      lastUpdated: 'آخر تحديث: أغسطس 2026',
+      close: 'إغلاق',
+      sections: [
+        {
+          heading: '1. المقدمة',
+          body: 'تدير فارلي كنت ("نحن"، "لنا") هذا الموقع والخدمات المقدمة عليه، بما في ذلك قوائم العقارات، ومساعد الدردشة بالذكاء الاصطناعي، وتوجيه العملاء المحتملين إلى وكلائنا وشركائنا. توضح سياسة الخصوصية هذه المعلومات التي نجمعها، وسبب جمعها، وكيفية استخدامها وحمايتها، والخيارات المتاحة لك. باستخدامك لهذا الموقع، فإنك توافق على الممارسات الموضحة هنا.',
+        },
+        {
+          heading: '2. المعلومات التي نجمعها',
+          body: 'نجمع المعلومات التي تقدمها مباشرة — مثل اسمك وبريدك الإلكتروني ورقم هاتفك ومحتوى رسائلك — عند إنشاء حساب أو التواصل معنا أو تقديم استفسار عن عقار أو الدردشة مع مساعدنا. كما نجمع معلومات تلقائياً، تشمل نوع جهازك ومتصفحك وموقعك التقريبي (من عنوان IP) والصفحات التي تزورها وكيفية تفاعلك مع الموقع. إذا أنشأت حساباً، نخزّن تفاصيل ملفك الشخصي والعقارات المفضّلة المحفوظة وتفضيلات اللغة والمظهر التي اخترتها.',
+        },
+        {
+          heading: '3. ملفات تعريف الارتباط والتخزين المحلي',
+          body: 'نستخدم ملفات تعريف الارتباط والتخزين المحلي وتخزين الجلسة للمتصفح للحفاظ على تسجيل دخولك، وتذكر تفضيلات اللغة والمظهر، وتذكر أنك شاهدت رسوم الافتتاح التعريفية وهذا الإشعار بالخصوصية، وفهم استخدام الموقع بشكل عام. لا تُستخدم هذه لبيع بياناتك للمعلنين. يمكنك حذف ملفات تعريف الارتباط والتخزين المحلي في أي وقت من إعدادات متصفحك، وإن كان ذلك قد يعيد ضبط تفضيلاتك المحفوظة.',
+        },
+        {
+          heading: '4. كيف نستخدم معلوماتك',
+          body: 'نستخدم معلوماتك في: تشغيل الموقع وتحسينه؛ الرد على الاستفسارات وتوجيهها إلى الوكيل أو القسم المناسب؛ تخصيص المحتوى (اللغة، المظهر، المفضلات المحفوظة)؛ تشغيل مساعد الدردشة بالذكاء الاصطناعي وتحسين دقته؛ إرسال رسائل متعلقة بالحساب، وعند موافقتك، رسائل تسويقية؛ واكتشاف ومنع ومعالجة الاحتيال أو سوء الاستخدام أو المشكلات الأمنية.',
+        },
+        {
+          heading: '5. مشاركة معلوماتك',
+          body: 'لا نبيع معلوماتك الشخصية. قد نشاركها مع: وكلائنا العقاريين وأعضاء فريقنا الداخلي لمتابعة استفسارك؛ ومزودي الخدمات الذين يستضيفون بنيتنا التحتية أو يرسلون البريد الإلكتروني أو يعالجون التحميلات/الصور بالنيابة عنا، وذلك بموجب التزامات السرية؛ والسلطات القانونية أو الحكومية عند الاقتضاء بموجب القانون أو لحماية حقوقنا أو مستخدمينا أو الجمهور. لا يُمنح مزودو الخدمات هؤلاء إلا الحد الأدنى من المعلومات اللازمة لأداء وظيفتهم.',
+        },
+        {
+          heading: '6. الاحتفاظ بالبيانات',
+          body: 'نحتفظ بمعلوماتك طالما كان حسابك نشطاً أو حسب الحاجة لتقديم الخدمات والرد على استفساراتك والامتثال لالتزاماتنا القانونية. تُحفظ محادثات الدردشة وسجلات العملاء المحتملين للحفاظ على استمرارية الخدمة ولأغراض الجودة/التدريب، ويمكن إخفاء هويتها أو حذفها عندما لا تعود ضرورية.',
+        },
+        {
+          heading: '7. حقوقك',
+          body: 'اعتماداً على مكان وجودك، قد يكون لديك الحق في الوصول إلى المعلومات الشخصية التي نحتفظ بها عنك أو تصحيحها أو تصديرها أو حذفها، وفي معارضة أو تقييد بعض عمليات المعالجة. يمكنك تحديث ملفك الشخصي وحذف حسابك من صفحة الإعدادات، أو التواصل معنا مباشرة عبر البيانات أدناه لممارسة أي من هذه الحقوق.',
+        },
+        {
+          heading: '8. أمن البيانات',
+          body: 'نستخدم تدابير معيارية في الصناعة — تشمل الاتصالات المشفرة (HTTPS) وكلمات المرور المشفرة (hashed) وأنظمة يتم التحكم بالوصول إليها — لحماية معلوماتك. لا توجد طريقة نقل أو تخزين آمنة بنسبة 100%، ولا يمكننا ضمان الأمان المطلق، لكننا نعمل على تحسين ضماناتنا باستمرار.',
+        },
+        {
+          heading: '9. خصوصية الأطفال',
+          body: 'خدماتنا غير موجهة للأفراد دون سن 18 عاماً. لا نجمع معلومات شخصية من الأطفال عن علم. إذا كنت تعتقد أن طفلاً قد قدّم لنا معلومات شخصية، يرجى التواصل معنا لنتمكن من حذفها.',
+        },
+        {
+          heading: '10. المستخدمون الدوليون',
+          body: 'قد تقع خوادمنا ومزودو خدماتنا خارج بلد إقامتك. باستخدامك لهذا الموقع، فإنك توافق على معالجة معلوماتك وتخزينها في هذه المواقع، والتي قد تخضع لقوانين حماية بيانات مختلفة عن بلدك.',
+        },
+        {
+          heading: '11. التغييرات على هذه السياسة',
+          body: 'قد نحدّث سياسة الخصوصية هذه من وقت لآخر لتعكس تغييرات في ممارساتنا أو لأسباب قانونية أو تشغيلية أو تنظيمية. سنقوم بتحديث تاريخ "آخر تحديث" أعلاه عند إجراء أي تغييرات، وسيتم تسليط الضوء على التغييرات الجوهرية على الموقع.',
+        },
+        {
+          heading: '12. تواصل معنا',
+          body: 'إذا كانت لديك أسئلة حول سياسة الخصوصية هذه أو كيفية تعاملنا مع معلوماتك، يرجى التواصل معنا عبر info@varlikent.com أو من خلال صفحة الاتصال على هذا الموقع.',
+        },
+      ],
     },
     contactPage: {
       label: 'تواصل معنا',

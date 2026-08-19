@@ -6,6 +6,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import PublicLayout from './components/PublicLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 import ScrollToTop from './components/ScrollToTop'
+import PrivacyBanner from './components/PrivacyBanner'
 import HomePage from './pages/HomePage'
 import PropertiesPage from './pages/PropertiesPage'
 import PropertyDetailsPage from './pages/PropertyDetailsPage'
@@ -34,6 +35,7 @@ import AgentProperties from './pages/AgentProperties'
 import AgentMessages from './pages/AgentMessages'
 import AgentProfile from './pages/AgentProfile'
 import TeamPage from './pages/TeamPage'
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 
 const ArchitecturePage = lazy(() => import('./pages/ArchitecturePage'))
 const ConstructionPage = lazy(() => import('./pages/ConstructionPage'))
@@ -46,12 +48,13 @@ const PageLoader = () => (
   </div>
 )
 
-const App = () => (
+const App = ({ ready }) => (
   <BrowserRouter>
     <ThemeProvider>
     <SiteSettingsProvider>
       <ScrollToTop />
       <ToastContainer position="top-right" theme="dark" />
+      {ready && <PrivacyBanner />}
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<PublicLayout><HomePage /></PublicLayout>} />
@@ -62,6 +65,7 @@ const App = () => (
           <Route path="/team" element={<PublicLayout><TeamPage /></PublicLayout>} />
           <Route path="/about" element={<PublicLayout><AboutPage /></PublicLayout>} />
           <Route path="/contact" element={<PublicLayout><ContactPage /></PublicLayout>} />
+          <Route path="/privacy" element={<PublicLayout><PrivacyPolicyPage /></PublicLayout>} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
