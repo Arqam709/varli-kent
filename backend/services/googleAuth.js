@@ -222,6 +222,227 @@ export const verifyGoogleAccessToken = async (
   }
 }
 
+// ── The mobile credential ────────────────────────────────────────────────
+// Everything below verifies the OTHER kind of Google credential, the one a
+// native mobile sign-in produces. It exists as a sibling of
+// verifyGoogleAccessToken rather than a branch inside it because the two share
+// no verification machinery at all: an access token is opaque and can only be
+// described by asking Google over the network, whereas an ID token is a signed
+// JWT the library checks locally against Google's published keys.
+//
+// What they DO share is their output. Both return the same identity object, so
+// resolveGoogleUser() below cannot tell — and must never be able to tell —
+// which kind of credential produced the person it is resolving.
+
+/**
+ * A second client for the ID-token path.
+ *
+ * A separate instance rather than reusing tokenInfoClient purely so the names
+ * keep saying what each one is for; OAuth2Client holds no state across either
+ * of these calls, so this costs nothing.
+ */
+const idTokenClient = new OAuth2Client()
+
+/**
+ * The audience is passed INTO verification, not compared afterwards.
+ *
+ * This matters more than it looks. google-auth-library checks `aud` as part of
+ * validating the token — alongside the signature, the issuer and the expiry —
+ * and refuses to return a ticket at all if it does not match. Verifying first
+ * and comparing `payload.aud` afterwards would be a different and much weaker
+ * thing, because by then the code has already decided the token was acceptable.
+ *
+ * `audience` accepts an array, so the whole allowlist goes in and any one of
+ * the trusted clients satisfies it.
+ */
+const defaultVerifyIdToken = (idToken, audience) =>
+  idTokenClient.verifyIdToken({ idToken, audience })
+
+/**
+ * Node/gaxios error codes meaning the request never completed, as opposed to
+ * completing with an answer we did not like.
+ */
+const TRANSPORT_ERROR_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+])
+
+/**
+ * Separates "Google is unreachable" from "this token is bad".
+ *
+ * verifyIdToken has to fetch Google's signing certificates the first time it
+ * runs (they are cached afterwards), so it has exactly the same two failure
+ * modes as the tokeninfo call above, and the same reason to keep them apart: a
+ * user whose sign-in failed because Google's CDN was down must not be told
+ * their credential is invalid and sent off to fix an account that is fine.
+ *
+ * A token that fails validation throws a plain Error carrying no transport
+ * information; a certificate fetch that failed carries either a socket error
+ * code or a 5xx from gaxios.
+ */
+const isTransportFailure = (error) => {
+  if (TRANSPORT_ERROR_CODES.has(error?.code)) return true
+
+  const status = error?.status ?? error?.response?.status
+
+  return typeof status === 'number' && status >= 500
+}
+
+/**
+ * Establishes who the holder of a Google ID token is, and that Google issued
+ * that token to a client Varlikent owns.
+ *
+ * ── Why there is no userinfo call here ──────────────────────────────────
+ * The access-token path has to make a second request to Google for the display
+ * name and avatar, because tokeninfo does not return them. An ID token does:
+ * `name` and `picture` are claims inside the signed payload. So a profile fetch
+ * would not merely be unnecessary here, it would be strictly worse — it would
+ * replace claims Google has cryptographically signed with the response to a
+ * second, separately-failable request.
+ *
+ * ── Every claim below comes from the VERIFIED payload ───────────────────
+ * Nothing is read from the raw token, and nothing is read from the request
+ * body. The mobile app cannot assert who it is; it can only present a
+ * credential and let Google's signature speak for it.
+ *
+ * @param {string} idToken The `idToken` from a native Google sign-in.
+ * @param {object} [deps] Seams for tests, so the suite can exercise every
+ *   verification branch without touching the network.
+ * @returns {Promise<{email: string, name: string, picture: string, googleId: string, audience: string}>}
+ * @throws {GoogleAuthError}
+ */
+export const verifyGoogleIdToken = async (
+  idToken,
+  {
+    verifyIdToken = defaultVerifyIdToken,
+    trustedClientIds = getTrustedGoogleClientIds(),
+  } = {}
+) => {
+  if (!idToken || typeof idToken !== 'string') {
+    throw new GoogleAuthError('missing_token', 400, 'Google ID token is required')
+  }
+
+  // Checked before verification rather than after, because an empty allowlist
+  // would otherwise be handed to verifyIdToken as `audience: []`. Same
+  // operator-error distinction as the access-token path: this is a
+  // misconfiguration, not a bad credential.
+  if (trustedClientIds.length === 0) {
+    throw new GoogleAuthError(
+      'not_configured',
+      500,
+      'Google login is not available',
+      'no trusted Google client IDs configured — set GOOGLE_CLIENT_ID'
+    )
+  }
+
+  let ticket
+
+  try {
+    ticket = await verifyIdToken(idToken, trustedClientIds)
+  } catch (error) {
+    if (isTransportFailure(error)) {
+      throw new GoogleAuthError(
+        'google_unavailable',
+        503,
+        'Google authentication is temporarily unavailable',
+        `could not reach Google to verify an ID token: ${error?.message || 'unknown error'}`
+      )
+    }
+
+    // Deliberately one code for every validation failure. Bad signature,
+    // expired, wrong issuer and wrong audience are all just "this credential
+    // does not authenticate anyone", and telling a caller which one it was
+    // hands them a free oracle for probing what this endpoint accepts.
+    throw new GoogleAuthError(
+      'invalid_id_token',
+      401,
+      'Google authentication failed',
+      'Google rejected the ID token (signature, issuer, expiry or audience)'
+    )
+  }
+
+  const payload = ticket?.getPayload?.()
+
+  if (!payload) {
+    throw new GoogleAuthError(
+      'invalid_id_token',
+      401,
+      'Google authentication failed',
+      'Google returned no payload for an ID token it accepted'
+    )
+  }
+
+  // ── Defence in depth ──────────────────────────────────────────────────
+  // verifyIdToken has already enforced this; the token could not have been
+  // accepted carrying a foreign `aud`. Repeating it costs one array lookup and
+  // means the audience rule still holds if the call above is ever refactored or
+  // re-stubbed. The one thing this check must never become is the ONLY place
+  // the audience is enforced.
+  const audience = payload.aud
+
+  if (!audience || !trustedClientIds.includes(audience)) {
+    throw new GoogleAuthError(
+      'untrusted_client',
+      401,
+      'Google authentication failed',
+      'ID token audience is not in the Varlikent allowlist'
+    )
+  }
+
+  const email = payload.email
+
+  if (!email) {
+    throw new GoogleAuthError(
+      'missing_email',
+      401,
+      'Google authentication failed',
+      'Google returned no email address in the ID token'
+    )
+  }
+
+  // The same policy as the access-token path, through the same helper. An
+  // unverified address is a route to claiming an account at an address the
+  // signer-in does not control, and that is no less true on a phone.
+  if (!isVerified(payload.email_verified)) {
+    throw new GoogleAuthError(
+      'unverified_email',
+      403,
+      'Your Google email address is not verified',
+      'Google did not report this email address as verified'
+    )
+  }
+
+  // Fails closed for the same reason as the access-token path: a falsy
+  // googleId reaching resolveGoogleUser's query would match every unlinked
+  // user in the collection.
+  const googleId = payload.sub
+
+  if (!googleId) {
+    throw new GoogleAuthError(
+      'missing_google_id',
+      401,
+      'Google authentication failed',
+      'Google returned no subject identifier (sub) in the ID token'
+    )
+  }
+
+  const normalisedEmail = String(email).toLowerCase()
+
+  return {
+    email: normalisedEmail,
+    // Same fallback as the access-token path, so a Google account with no
+    // display name produces the same Varlikent name whichever client signed in.
+    name: payload.name || normalisedEmail.split('@')[0],
+    picture: payload.picture || '',
+    googleId: String(googleId),
+    audience,
+  }
+}
+
 /** Mongo's duplicate-key error, however the driver happens to surface it. */
 const isDuplicateKey = (error) => error?.code === 11000 || error?.code === 11001
 

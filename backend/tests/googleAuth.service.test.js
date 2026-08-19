@@ -12,6 +12,7 @@ import {
   GoogleAuthError,
   resolveGoogleUser,
   verifyGoogleAccessToken,
+  verifyGoogleIdToken,
 } from '../services/googleAuth.js'
 import { getTrustedGoogleClientIds } from '../config/googleAuth.js'
 
@@ -286,6 +287,332 @@ test('F. does not let the truthy string "false" pass as verified', async () => {
     })),
     { code: 'unverified_email', status: 403 }
   )
+})
+
+// ══ ID-token verification — the mobile credential ════════════════════════
+// The same decisions as above, made about the other kind of Google credential.
+// These run entirely through the injected verifier, so no network call and no
+// real signed token is involved; what is under test is which verified payloads
+// are turned into an identity and which are refused.
+
+/** A payload as Google's verifier returns it, for a good mobile sign-in. */
+const validIdPayload = (overrides = {}) => ({
+  iss: 'https://accounts.google.com',
+  aud: TRUSTED_WEB_CLIENT,
+  sub: 'G123',
+  email: 'User@Example.com',
+  // The ID-token spelling is a real boolean, unlike tokeninfo's string.
+  email_verified: true,
+  name: 'Google Person',
+  picture: 'https://lh3.googleusercontent.com/a/mobile',
+  exp: Math.floor(Date.now() / 1000) + 3600,
+  ...overrides,
+})
+
+/**
+ * Stands in for the LoginTicket google-auth-library returns. Only getPayload()
+ * matters to the service, and the service reads nothing else off it.
+ */
+const ticketFor = (payload) => ({ getPayload: () => payload })
+
+/** Builds the injected dependency set for the ID-token path. */
+const idDeps = ({ payload = validIdPayload(), ...rest } = {}) => ({
+  verifyIdToken: async () => ticketFor(payload),
+  trustedClientIds: [TRUSTED_WEB_CLIENT],
+  ...rest,
+})
+
+// ── A. A valid ID token ──────────────────────────────────────────────────
+test('ID-A. turns a verified ID-token payload into the identity resolveGoogleUser expects', async () => {
+  const identity = await verifyGoogleIdToken('a.signed.jwt', idDeps())
+
+  assert.equal(identity.googleId, 'G123', 'sub is the stable identifier, not email')
+  assert.equal(identity.email, 'user@example.com', 'normalised the same way as the access-token path')
+  assert.equal(identity.name, 'Google Person')
+  assert.equal(identity.picture, 'https://lh3.googleusercontent.com/a/mobile')
+  assert.equal(identity.audience, TRUSTED_WEB_CLIENT)
+})
+
+test('ID-A. returns exactly the same identity shape as the access-token path', async () => {
+  // The invariant the whole phase rests on: resolveGoogleUser must not be able
+  // to tell which client signed in. If these key sets ever diverge, one of the
+  // two flows is feeding it something it was not written to handle.
+  const fromIdToken = await verifyGoogleIdToken('a.signed.jwt', idDeps())
+  const fromAccessToken = await verifyGoogleAccessToken('good-token', deps())
+
+  assert.deepEqual(Object.keys(fromIdToken).sort(), Object.keys(fromAccessToken).sort())
+})
+
+test('ID-A. never calls the userinfo endpoint, since the payload is already signed', async () => {
+  // A second request to Google would replace cryptographically signed claims
+  // with the answer to a separately-failable call.
+  let profileFetched = false
+
+  await verifyGoogleIdToken('a.signed.jwt', idDeps({
+    fetchProfile: async () => {
+      profileFetched = true
+      return validProfile()
+    },
+  }))
+
+  assert.equal(profileFetched, false)
+})
+
+// ── B. The allowlist reaches the verifier ────────────────────────────────
+test('ID-B. passes the trusted client allowlist INTO Google verification', async () => {
+  // The load-bearing test for audience enforcement. verifyIdToken checks `aud`
+  // as part of validating the token, so the allowlist has to arrive as an
+  // argument — checking payload.aud afterwards would be a strictly weaker
+  // thing. Deleting the audience from the call must fail here.
+  let seenToken = null
+  let seenAudience = null
+
+  await verifyGoogleIdToken('the-exact-token', idDeps({
+    verifyIdToken: async (idToken, audience) => {
+      seenToken = idToken
+      seenAudience = audience
+      return ticketFor(validIdPayload())
+    },
+  }))
+
+  assert.equal(seenToken, 'the-exact-token', 'the token is passed through unmodified')
+  assert.deepEqual(seenAudience, [TRUSTED_WEB_CLIENT], 'the allowlist must reach the verifier')
+})
+
+test('ID-B. passes the whole allowlist, so a second trusted client also works', async () => {
+  let seenAudience = null
+
+  const identity = await verifyGoogleIdToken('token', idDeps({
+    payload: validIdPayload({ aud: TRUSTED_FUTURE_MOBILE_CLIENT }),
+    trustedClientIds: [TRUSTED_WEB_CLIENT, TRUSTED_FUTURE_MOBILE_CLIENT],
+    verifyIdToken: async (idToken, audience) => {
+      seenAudience = audience
+      return ticketFor(validIdPayload({ aud: TRUSTED_FUTURE_MOBILE_CLIENT }))
+    },
+  }))
+
+  assert.deepEqual(seenAudience, [TRUSTED_WEB_CLIENT, TRUSTED_FUTURE_MOBILE_CLIENT])
+  assert.equal(identity.audience, TRUSTED_FUTURE_MOBILE_CLIENT)
+})
+
+test('ID-B. refuses to verify at all when the allowlist is empty', async () => {
+  // Never call Google with `audience: []`. This is the operator's mistake, and
+  // it is reported as one rather than as a bad credential.
+  let verifierCalled = false
+
+  await expectRejection(
+    verifyGoogleIdToken('token', idDeps({
+      trustedClientIds: [],
+      verifyIdToken: async () => {
+        verifierCalled = true
+        return ticketFor(validIdPayload())
+      },
+    })),
+    { code: 'not_configured', status: 500 }
+  )
+
+  assert.equal(verifierCalled, false, 'an unconfigured server must not ask Google anything')
+})
+
+// ── C. Untrusted audience ────────────────────────────────────────────────
+test('ID-C. maps Google rejecting a foreign audience to a controlled failure', async () => {
+  // How the real library behaves: a token whose `aud` is not in the allowlist
+  // never yields a ticket, it throws during verification.
+  const error = await expectRejection(
+    verifyGoogleIdToken('foreign.id.token', idDeps({
+      verifyIdToken: async () => {
+        throw new Error(`Wrong recipient, payload audience != requiredAudience`)
+      },
+    })),
+    { code: 'invalid_id_token', status: 401 }
+  )
+
+  assert.equal(error.publicMessage, 'Google authentication failed')
+})
+
+test('ID-C. also refuses a payload whose aud is foreign, if verification let it through', async () => {
+  // Defence in depth. A stubbed or refactored verifier that forgot the
+  // audience must still not produce an identity.
+  await expectRejection(
+    verifyGoogleIdToken('token', idDeps({
+      payload: validIdPayload({ aud: ATTACKER_CLIENT }),
+    })),
+    { code: 'untrusted_client', status: 401 }
+  )
+})
+
+test('ID-C. refuses a payload carrying no audience at all', async () => {
+  await expectRejection(
+    verifyGoogleIdToken('token', idDeps({ payload: validIdPayload({ aud: undefined }) })),
+    { code: 'untrusted_client', status: 401 }
+  )
+})
+
+test('ID-C. does not disclose the audience or the token in the public message', async () => {
+  const error = await expectRejection(
+    verifyGoogleIdToken('super-secret.id.token', idDeps({
+      payload: validIdPayload({ aud: ATTACKER_CLIENT }),
+    })),
+    { code: 'untrusted_client', status: 401 }
+  )
+
+  assert.equal(error.publicMessage.includes(ATTACKER_CLIENT), false)
+  assert.equal(error.publicMessage.includes('super-secret'), false)
+  assert.equal(error.publicMessage.toLowerCase().includes('audience'), false)
+})
+
+// ── D. Invalid signature / malformed token ───────────────────────────────
+test('ID-D. maps a signature failure to a controlled 401 without leaking the reason', async () => {
+  const error = await expectRejection(
+    verifyGoogleIdToken('tampered.id.token', idDeps({
+      verifyIdToken: async () => {
+        throw new Error('Invalid token signature: abc.def.ghi')
+      },
+    })),
+    { code: 'invalid_id_token', status: 401 }
+  )
+
+  assert.equal(error.publicMessage, 'Google authentication failed')
+  assert.equal(error.publicMessage.includes('signature'), false)
+  assert.equal(error.publicMessage.includes('abc.def.ghi'), false)
+})
+
+test('ID-D. rejects a missing or non-string token before asking Google', async () => {
+  for (const bad of [undefined, '', null, { evil: true }, 12345]) {
+    await expectRejection(verifyGoogleIdToken(bad, idDeps()), {
+      code: 'missing_token',
+      status: 400,
+    })
+  }
+})
+
+test('ID-D. rejects a verifier that returns no payload', async () => {
+  await expectRejection(
+    verifyGoogleIdToken('token', idDeps({ verifyIdToken: async () => ticketFor(undefined) })),
+    { code: 'invalid_id_token', status: 401 }
+  )
+})
+
+// ── E. Expired token ─────────────────────────────────────────────────────
+test('ID-E. maps an expiry rejection from Google to the same controlled failure', async () => {
+  // Expiry is the library's job — it is checked during verification, so this
+  // asserts the mapping rather than reimplementing a clock comparison.
+  await expectRejection(
+    verifyGoogleIdToken('stale.id.token', idDeps({
+      verifyIdToken: async () => {
+        throw new Error('Token used too late, 1700000000 > 1699999999')
+      },
+    })),
+    { code: 'invalid_id_token', status: 401 }
+  )
+})
+
+test('ID-E. distinguishes Google being unreachable from the token being bad', async () => {
+  // verifyIdToken fetches Google's signing certificates on first use, so it has
+  // the same two failure modes as tokeninfo — and the same reason not to blame
+  // the user's credential for Google's outage.
+  const error = await expectRejection(
+    verifyGoogleIdToken('perfectly-fine.id.token', idDeps({
+      verifyIdToken: async () => {
+        throw Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })
+      },
+    })),
+    { code: 'google_unavailable', status: 503 }
+  )
+
+  assert.notEqual(error.status, 401)
+})
+
+test('ID-E. treats a 5xx from the certificate fetch as Google being unavailable', async () => {
+  await expectRejection(
+    verifyGoogleIdToken('token', idDeps({
+      verifyIdToken: async () => {
+        throw Object.assign(new Error('backend error'), { response: { status: 503 } })
+      },
+    })),
+    { code: 'google_unavailable', status: 503 }
+  )
+})
+
+// ── F. Missing email ─────────────────────────────────────────────────────
+test('ID-F. rejects a verified payload with no email claim', async () => {
+  await expectRejection(
+    verifyGoogleIdToken('token', idDeps({
+      payload: validIdPayload({ email: undefined, email_verified: undefined }),
+    })),
+    { code: 'missing_email', status: 401 }
+  )
+})
+
+// ── G. Unverified email ──────────────────────────────────────────────────
+test('ID-G. applies the same email_verified policy as the access-token path', async () => {
+  await expectRejection(
+    verifyGoogleIdToken('token', idDeps({
+      payload: validIdPayload({ email_verified: false }),
+    })),
+    { code: 'unverified_email', status: 403 }
+  )
+})
+
+test('ID-G. treats a missing verification claim as unverified, not as verified', async () => {
+  await expectRejection(
+    verifyGoogleIdToken('token', idDeps({
+      payload: validIdPayload({ email_verified: undefined }),
+    })),
+    { code: 'unverified_email', status: 403 }
+  )
+})
+
+test('ID-G. does not let the truthy string "false" pass as verified', async () => {
+  await expectRejection(
+    verifyGoogleIdToken('token', idDeps({
+      payload: validIdPayload({ email_verified: 'false' }),
+    })),
+    { code: 'unverified_email', status: 403 }
+  )
+})
+
+test('ID-G. accepts the string "true", since isVerified is shared with tokeninfo', async () => {
+  const identity = await verifyGoogleIdToken('token', idDeps({
+    payload: validIdPayload({ email_verified: 'true' }),
+  }))
+
+  assert.equal(identity.email, 'user@example.com')
+})
+
+// ── H. Missing sub ───────────────────────────────────────────────────────
+test('ID-H. rejects a verified payload with no sub, before any account lookup', async () => {
+  // Step 2's fail-closed rule. A falsy googleId reaching resolveGoogleUser's
+  // query would match every unlinked user in the collection.
+  await expectRejection(
+    verifyGoogleIdToken('token', idDeps({ payload: validIdPayload({ sub: undefined }) })),
+    { code: 'missing_google_id', status: 401 }
+  )
+
+  await expectRejection(
+    verifyGoogleIdToken('token', idDeps({ payload: validIdPayload({ sub: '' }) })),
+    { code: 'missing_google_id', status: 401 }
+  )
+})
+
+test('ID-H. never derives the Google identifier from the email address', async () => {
+  const identity = await verifyGoogleIdToken('token', idDeps({
+    payload: validIdPayload({ sub: 'G-stable-subject', email: 'someone@example.com' }),
+  }))
+
+  assert.equal(identity.googleId, 'G-stable-subject')
+  assert.notEqual(identity.googleId, identity.email)
+})
+
+// ── I. Profile optionality ───────────────────────────────────────────────
+test('ID-I. falls back to the local part of the email when the payload has no name', async () => {
+  const identity = await verifyGoogleIdToken('token', idDeps({
+    payload: validIdPayload({ name: undefined, picture: undefined }),
+  }))
+
+  assert.equal(identity.name, 'user', 'same convention as the access-token path')
+  assert.equal(identity.picture, '')
+  assert.equal(identity.googleId, 'G123', 'and a bare payload is still a valid identity')
 })
 
 // ══ Account linking ══════════════════════════════════════════════════════

@@ -8,6 +8,7 @@ import {
   GoogleAuthError,
   resolveGoogleUser,
   verifyGoogleAccessToken,
+  verifyGoogleIdToken,
 } from '../services/googleAuth.js'
 import { sendPasswordResetEmail } from '../utils/email.js'
 import jwksClient from 'jwks-rsa'
@@ -215,16 +216,69 @@ router.post('/reset-password', async (req, res, next) => {
 
 // POST /api/auth/google
 //
-// The request body is unchanged — the website still sends { accessToken } from
-// useGoogleLogin(). What changed is that the token is now checked against
-// Varlikent's own OAuth client allowlist before it is believed; see
-// services/googleAuth.js for why that is the check that matters.
+// ONE endpoint, two kinds of Google credential:
+//
+//   { accessToken }  the website. @react-oauth/google's useGoogleLogin() runs
+//                    Google's implicit flow and hands back an opaque access
+//                    token, which only Google can describe.
+//   { idToken }      the mobile app. A native Google sign-in produces a signed
+//                    JWT, which is verified locally against Google's keys.
+//
+// They deliberately share this route rather than getting one each. The thing a
+// second endpoint would duplicate is not the verification — that genuinely
+// differs — but everything after it: resolving which Varlikent account the
+// identity belongs to, linking it, and issuing the session. That logic is the
+// part where a divergence between web and mobile would be a security bug, so
+// there is exactly one copy of it and both credentials are funnelled into it.
 //
 // Google's credential only ever establishes identity. The session handed back
-// is still a Varlikent JWT from signToken(), exactly as before.
+// is a Varlikent JWT from signToken(), the same one /login issues.
 router.post('/google', async (req, res) => {
   try {
-    const identity = await verifyGoogleAccessToken(req.body?.accessToken)
+    const { accessToken, idToken } = req.body || {}
+
+    // Presence is decided on a usable string, so that `{ accessToken: '' }` and
+    // `{ idToken: null }` count as absent rather than as a credential that then
+    // fails verification for a confusing reason.
+    const hasAccessToken = typeof accessToken === 'string' && accessToken.trim() !== ''
+    const hasIdToken = typeof idToken === 'string' && idToken.trim() !== ''
+
+    // ── Fail closed on ambiguity ─────────────────────────────────────────
+    // Picking one when both are present would create a precedence rule, and a
+    // precedence rule is something an attacker can aim at: send a valid token
+    // of the preferred kind alongside a forged one of the other, and whichever
+    // gets ignored is a credential the server was willing to receive but never
+    // checked. There is no legitimate caller that sends both.
+    if (hasAccessToken && hasIdToken) {
+      throw new GoogleAuthError(
+        'ambiguous_credential',
+        400,
+        'Send exactly one Google credential',
+        'request carried both an access token and an ID token'
+      )
+    }
+
+    if (!hasAccessToken && !hasIdToken) {
+      throw new GoogleAuthError(
+        'missing_credential',
+        400,
+        'Google credential is required',
+        'request carried neither an access token nor an ID token'
+      )
+    }
+
+    // ── The credential TYPE is chosen from the request shape, once ───────
+    // and then that credential must pass its own verifier. There is
+    // deliberately no fallback in either direction: a failed ID-token
+    // verification never gets reinterpreted as an access token, and vice
+    // versa. A verifier that can be retried as a different verifier is a
+    // verifier that can be downgraded.
+    const identity = hasIdToken
+      ? await verifyGoogleIdToken(idToken)
+      : await verifyGoogleAccessToken(accessToken)
+
+    // From here on the two paths are literally the same code. resolveGoogleUser
+    // receives an identity and has no way to know which client produced it.
     const user = await resolveGoogleUser({ identity, User })
     const token = signToken(user._id)
 
@@ -235,9 +289,10 @@ router.post('/google', async (req, res) => {
     })
   } catch (error) {
     // Every expected rejection arrives as a GoogleAuthError carrying both the
-    // status and the deliberately vague message the browser is allowed to see.
+    // status and the deliberately vague message the client is allowed to see.
     // The specific reason goes to the log only. Nothing logged here contains
-    // the access token, the Varlikent JWT, or any other credential.
+    // either Google credential, the token payload, the Google subject, the
+    // email, or the Varlikent JWT.
     if (error instanceof GoogleAuthError) {
       console.log(`Google auth rejected [${error.code}]: ${error.message}`)
 

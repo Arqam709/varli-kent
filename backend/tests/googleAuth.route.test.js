@@ -23,10 +23,17 @@ process.env.GOOGLE_CLIENT_ID = TRUSTED_WEB_CLIENT
 delete process.env.GOOGLE_CLIENT_IDS
 
 // ── The scripted Google ──────────────────────────────────────────────────
-// Each test sets these before making its request.
+// Each test sets these before making its request. Both credential types are
+// scripted here, along with a record of which verifier was actually reached —
+// several tests below assert that the OTHER one was never called.
 let tokenInfoResponse = null
 let tokenInfoError = null
 let profileResponse = null
+
+let idTokenPayload = null
+let idTokenError = null
+
+const verifierCalls = { getTokenInfo: [], verifyIdToken: [] }
 
 const resetGoogle = () => {
   tokenInfoResponse = {
@@ -44,6 +51,23 @@ const resetGoogle = () => {
     email_verified: true,
     picture: 'https://lh3.googleusercontent.com/a/example',
   }
+
+  // The mobile credential resolves to the SAME Google account as the website
+  // one above — same sub, same email — so the route tests can prove both
+  // clients land on a single Varlikent user.
+  idTokenPayload = {
+    iss: 'https://accounts.google.com',
+    aud: TRUSTED_WEB_CLIENT,
+    sub: '1098765432100',
+    email: 'buyer@example.com',
+    email_verified: true,
+    name: 'Test Buyer',
+    picture: 'https://lh3.googleusercontent.com/a/example',
+  }
+  idTokenError = null
+
+  verifierCalls.getTokenInfo.length = 0
+  verifierCalls.verifyIdToken.length = 0
 }
 
 resetGoogle()
@@ -117,15 +141,22 @@ const FakeUser = {
 
 mock.module('../models/User.js', { defaultExport: FakeUser })
 
-// google-auth-library is replaced wholesale so getTokenInfo never leaves the
-// process. The service constructs its OAuth2Client at import time, which is
+// google-auth-library is replaced wholesale so neither verifier ever leaves the
+// process. The service constructs its OAuth2Clients at import time, which is
 // why this registration has to happen before the dynamic import below.
 mock.module('google-auth-library', {
   namedExports: {
     OAuth2Client: class {
-      async getTokenInfo() {
+      async getTokenInfo(accessToken) {
+        verifierCalls.getTokenInfo.push(accessToken)
         if (tokenInfoError) throw tokenInfoError
         return tokenInfoResponse
+      }
+
+      async verifyIdToken({ idToken, audience }) {
+        verifierCalls.verifyIdToken.push({ idToken, audience })
+        if (idTokenError) throw idTokenError
+        return { getPayload: () => idTokenPayload }
       }
     },
   },
@@ -189,18 +220,32 @@ test.beforeEach(() => {
 })
 
 // ── A. Missing token ─────────────────────────────────────────────────────
-test('A. POST with no accessToken is a 400', async () => {
+// ── A. Missing credential ────────────────────────────────────────────────
+test('A. POST with no credential at all is a 400', async () => {
   const { status, body } = await postGoogle({})
 
   assert.equal(status, 400)
   assert.equal(body.success, false)
-  assert.equal(body.message, 'Google access token is required')
+  assert.equal(body.message, 'Google credential is required')
 })
 
-test('A. POST with an empty body object is a 400, not a 500', async () => {
+test('A. POST with an empty accessToken is a 400, not a 500', async () => {
   const { status } = await postGoogle({ accessToken: '' })
 
   assert.equal(status, 400)
+})
+
+test('A. POST with an empty idToken is a 400, not a 500', async () => {
+  const { status } = await postGoogle({ idToken: '   ' })
+
+  assert.equal(status, 400)
+})
+
+test('A. no credential means neither verifier is ever reached', async () => {
+  await postGoogle({})
+
+  assert.deepEqual(verifierCalls.getTokenInfo, [])
+  assert.deepEqual(verifierCalls.verifyIdToken, [])
 })
 
 // ── B. Invalid token ─────────────────────────────────────────────────────
@@ -422,8 +467,217 @@ test('the website request shape { accessToken } is still the accepted contract',
   assert.deepEqual(Object.keys(body).sort(), ['success', 'token', 'user'])
 })
 
-test('an idToken-shaped body is still rejected, since the site does not send one', async () => {
-  const { status } = await postGoogle({ idToken: 'something.else.entirely' })
+test('an idToken-shaped body is now ACCEPTED, which is the Phase-3 change', async () => {
+  // This assertion is deliberately the inverse of what it was before Phase 3,
+  // when the endpoint understood only { accessToken } and a { idToken } body
+  // was indistinguishable from sending nothing. The website contract above is
+  // unchanged; this is purely a new shape being understood alongside it.
+  const { status, body } = await postGoogle({ idToken: 'a-real-mobile-id-token' })
+
+  assert.equal(status, 200)
+  assert.deepEqual(Object.keys(body).sort(), ['success', 'token', 'user'])
+})
+
+// ══ Phase 3: the mobile credential, through the same endpoint ════════════
+
+// ── J. The website path is untouched ─────────────────────────────────────
+test('J. { accessToken } still reaches the access-token verifier, and only that one', async () => {
+  const { status, body } = await postGoogle({ accessToken: 'website-token' })
+
+  assert.equal(status, 200)
+  assert.equal(body.success, true)
+  assert.deepEqual(Object.keys(body).sort(), ['success', 'token', 'user'])
+
+  assert.deepEqual(verifierCalls.getTokenInfo, ['website-token'])
+  assert.deepEqual(verifierCalls.verifyIdToken, [], 'the ID-token verifier must not run')
+})
+
+// ── K. The mobile path works ─────────────────────────────────────────────
+test('K. { idToken } reaches the ID-token verifier, and only that one', async () => {
+  const { status, body } = await postGoogle({ idToken: 'mobile-id-token' })
+
+  assert.equal(status, 200)
+  assert.equal(body.success, true)
+
+  assert.equal(verifierCalls.verifyIdToken.length, 1)
+  assert.equal(verifierCalls.verifyIdToken[0].idToken, 'mobile-id-token')
+  assert.deepEqual(verifierCalls.getTokenInfo, [], 'the access-token verifier must not run')
+})
+
+test('K. the mobile path is handed the trusted audience for verification', async () => {
+  await postGoogle({ idToken: 'mobile-id-token' })
+
+  assert.deepEqual(verifierCalls.verifyIdToken[0].audience, [TRUSTED_WEB_CLIENT])
+})
+
+test('K. a mobile sign-in returns a Varlikent JWT, not anything of Google\'s', async () => {
+  const { body } = await postGoogle({ idToken: 'mobile-id-token' })
+
+  const decoded = jwt.verify(body.token, TEST_JWT_SECRET)
+  assert.equal(decoded.id, 'created-user-id')
+
+  assert.equal(body.user.email, 'buyer@example.com')
+  assert.equal(body.user.provider, 'google')
+  assert.equal(body.user.password, undefined, 'safeUser still strips the password')
+  assert.equal(createdDocs[0].googleId, '1098765432100')
+})
+
+test('K. the Google ID token is never echoed back to the client', async () => {
+  const { body } = await postGoogle({ idToken: 'super-secret-mobile-id-token' })
+
+  assert.equal(JSON.stringify(body).includes('super-secret-mobile-id-token'), false)
+})
+
+test('K. a mobile sign-in with an untrusted audience is refused and creates nothing', async () => {
+  idTokenPayload = { ...idTokenPayload, aud: ATTACKER_CLIENT }
+
+  const { status, body } = await postGoogle({ idToken: 'foreign-id-token' })
+
+  assert.equal(status, 401)
+  assert.equal(body.success, false)
+  assert.equal(body.message, 'Google authentication failed')
+  assert.equal(body.token, undefined)
+  assert.equal(createdDocs.length, 0)
+})
+
+test('K. an unverified Google email is refused on mobile too', async () => {
+  idTokenPayload = { ...idTokenPayload, email_verified: false }
+
+  const { status } = await postGoogle({ idToken: 'unverified-id-token' })
+
+  assert.equal(status, 403)
+  assert.equal(createdDocs.length, 0)
+})
+
+// ── L. Both credentials — fail closed ────────────────────────────────────
+test('L. sending both credentials is a 400', async () => {
+  const { status, body } = await postGoogle({
+    accessToken: 'website-token',
+    idToken: 'mobile-id-token',
+  })
 
   assert.equal(status, 400)
+  assert.equal(body.success, false)
+  assert.equal(body.token, undefined)
+})
+
+test('L. and NEITHER verifier runs, so no credential is silently ignored', async () => {
+  // The reason ambiguity is refused rather than resolved: whichever token a
+  // precedence rule ignored would be one the server accepted but never checked.
+  await postGoogle({ accessToken: 'website-token', idToken: 'mobile-id-token' })
+
+  assert.deepEqual(verifierCalls.getTokenInfo, [])
+  assert.deepEqual(verifierCalls.verifyIdToken, [])
+  assert.equal(createdDocs.length, 0)
+})
+
+// ── N. No downgrade after a failed verification ──────────────────────────
+test('N. a rejected idToken is NOT retried as an access token', async () => {
+  idTokenError = new Error('Invalid token signature')
+
+  const { status, body } = await postGoogle({ idToken: 'tampered-id-token' })
+
+  assert.equal(status, 401)
+  assert.equal(body.token, undefined)
+  assert.equal(verifierCalls.verifyIdToken.length, 1)
+  assert.deepEqual(
+    verifierCalls.getTokenInfo,
+    [],
+    'falling back to the other verifier would be a downgrade attack'
+  )
+  assert.equal(createdDocs.length, 0)
+})
+
+test('N. a rejected accessToken is NOT retried as an ID token', async () => {
+  tokenInfoError = Object.assign(new Error('invalid_token'), { status: 400 })
+
+  const { status } = await postGoogle({ accessToken: 'expired-website-token' })
+
+  assert.equal(status, 401)
+  assert.equal(verifierCalls.getTokenInfo.length, 1)
+  assert.deepEqual(verifierCalls.verifyIdToken, [])
+})
+
+// ── O. One account resolution for both clients ───────────────────────────
+test('O. website and mobile sign-ins resolve to the SAME existing Varlikent user', async () => {
+  // The invariant the whole architecture rests on: the same Google account
+  // must not become two Varlikent accounts depending on which app was used.
+  storedUser = asDocument({
+    _id: 'shared-user-id',
+    name: 'Returning Buyer',
+    email: 'buyer@example.com',
+    role: 'agent',
+    provider: 'local',
+    isActive: true,
+    password: 'hashed-secret',
+  })
+
+  const web = await postGoogle({ accessToken: 'website-token' })
+  assert.equal(jwt.verify(web.body.token, TEST_JWT_SECRET).id, 'shared-user-id')
+
+  // Second sign-in, same person, different client. The account is already
+  // linked by now, so this one is matched on googleId.
+  const mobile = await postGoogle({ idToken: 'mobile-id-token' })
+  assert.equal(jwt.verify(mobile.body.token, TEST_JWT_SECRET).id, 'shared-user-id')
+
+  assert.equal(createdDocs.length, 0, 'mobile must not create a parallel account')
+  assert.deepEqual(updatedFields, [['googleId']], 'and linking happened exactly once')
+})
+
+test('O. a first-time mobile user goes through the same creation path as the web', async () => {
+  const { status, body } = await postGoogle({ idToken: 'mobile-id-token' })
+
+  assert.equal(status, 200)
+  assert.equal(createdDocs.length, 1)
+
+  const [created] = createdDocs
+  assert.equal(created.provider, 'google', 'not some mobile-specific provider')
+  assert.equal(created.role, 'user')
+  assert.equal(created.googleId, '1098765432100')
+
+  // Step 3: still no invented password, whichever client created the account.
+  assert.equal('password' in created, false)
+  assert.equal(body.user.password, undefined)
+})
+
+test('O. a deactivated account is refused on mobile exactly as on the web', async () => {
+  storedUser = asDocument({ _id: 'banned-user-id', email: 'buyer@example.com', isActive: false })
+
+  const { status, body } = await postGoogle({ idToken: 'mobile-id-token' })
+
+  assert.equal(status, 403)
+  assert.equal(body.message, 'Your account is deactivated')
+  assert.equal(body.token, undefined)
+  assert.deepEqual(updatedFields, [])
+})
+
+test('O. an account linked to a different Google identity is refused on mobile too', async () => {
+  storedUser = asDocument({
+    _id: 'someone-elses-account',
+    email: 'buyer@example.com',
+    googleId: 'G-a-completely-different-subject',
+    isActive: true,
+  })
+
+  const { status, body } = await postGoogle({ idToken: 'mobile-id-token' })
+
+  assert.equal(status, 401)
+  assert.equal(body.message, 'Google authentication failed')
+  assert.equal(storedUser.googleId, 'G-a-completely-different-subject')
+  assert.deepEqual(updatedFields, [])
+})
+
+test('O. a mobile rejection echoes no Google identifier back to the device', async () => {
+  storedUser = asDocument({
+    _id: 'someone-elses-account',
+    email: 'buyer@example.com',
+    googleId: 'G-a-completely-different-subject',
+    isActive: true,
+  })
+
+  const { body } = await postGoogle({ idToken: 'mobile-id-token' })
+
+  const serialised = JSON.stringify(body)
+  assert.equal(serialised.includes('G-a-completely-different-subject'), false)
+  assert.equal(serialised.includes('1098765432100'), false)
 })
