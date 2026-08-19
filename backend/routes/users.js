@@ -137,6 +137,25 @@ router.put('/me/password', protect, async (req, res, next) => {
     }
 
     const user = await User.findById(req.user._id)
+
+    // A Google-created account has no password at all, and bcrypt.compare()
+    // throws outright on an undefined hash rather than returning false — so
+    // without this guard the request dies as a 500 instead of an answer.
+    //
+    // This refuses rather than relaxes: changing a password still requires
+    // proving the current one, and an account that has none cannot satisfy
+    // that. The deliberate way to establish a first password is the emailed
+    // reset link, which proves control of the address. Naming that path is
+    // safe here because the request is already authenticated as this exact
+    // user — there is nothing to disclose that they do not already know.
+    if (!user?.password) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'This account has no password yet. Use "Forgot password" to set one.',
+      })
+    }
+
     const isMatch = await user.comparePassword(currentPassword)
     if (!isMatch) return res.status(401).json({ success: false, message: 'Current password is incorrect' })
 

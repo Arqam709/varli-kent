@@ -4,7 +4,11 @@ import crypto from 'crypto'
 import { body, validationResult } from 'express-validator'
 import User from '../models/User.js'
 import { protect } from '../middleware/auth.js'
-import { OAuth2Client } from 'google-auth-library'
+import {
+  GoogleAuthError,
+  resolveGoogleUser,
+  verifyGoogleAccessToken,
+} from '../services/googleAuth.js'
 import { sendPasswordResetEmail } from '../utils/email.js'
 import jwksClient from 'jwks-rsa'
 
@@ -20,10 +24,6 @@ const safeUser = (user) => {
   delete userObj.resetPasswordExpires
   return userObj
 }
-
-
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
-
 
 
 const microsoftJwksClient = jwksClient({
@@ -161,7 +161,18 @@ router.post('/forgot-password', async (req, res, next) => {
 
       const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${rawToken}`
       const emailSent = await sendPasswordResetEmail(user.email, resetUrl)
-      console.log('[forgot-password] email sent:', emailSent, '| to:', user.email, '| url:', resetUrl)
+
+      // Records whether the send succeeded, and deliberately nothing else.
+      //
+      // `resetUrl` embeds rawToken, which IS the credential that resets this
+      // account — that is exactly why only its SHA-256 hash goes to MongoDB,
+      // so that a database leak still cannot produce a working reset link.
+      // Printing the raw URL to the log would have handed that property back:
+      // anyone able to read server logs during the one-hour validity window
+      // could have taken over the account, without needing the inbox or the
+      // database. The email address is left out for the same reason it is
+      // left out of the HTTP response below.
+      console.log('[forgot-password] reset email processed:', emailSent)
     }
 
     res.json({ success: true, message: 'If that email is registered, a reset link has been sent.' })
@@ -203,53 +214,18 @@ router.post('/reset-password', async (req, res, next) => {
 })
 
 // POST /api/auth/google
-// POST /api/auth/google
+//
+// The request body is unchanged — the website still sends { accessToken } from
+// useGoogleLogin(). What changed is that the token is now checked against
+// Varlikent's own OAuth client allowlist before it is believed; see
+// services/googleAuth.js for why that is the check that matters.
+//
+// Google's credential only ever establishes identity. The session handed back
+// is still a Varlikent JWT from signToken(), exactly as before.
 router.post('/google', async (req, res) => {
   try {
-    const { accessToken } = req.body
-
-    if (!accessToken) {
-      return res.status(400).json({
-        success: false,
-        message: 'Google access token is required',
-      })
-    }
-
-    const googleRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    })
-
-    const googleUser = await googleRes.json()
-
-    if (!googleUser.email) {
-      return res.status(401).json({
-        success: false,
-        message: 'Google authentication failed',
-      })
-    }
-
-    let user = await User.findOne({ email: googleUser.email.toLowerCase() })
-
-    if (!user) {
-      user = await User.create({
-        name: googleUser.name,
-        email: googleUser.email.toLowerCase(),
-        avatar: googleUser.picture,
-        password: Math.random().toString(36).slice(-12),
-        provider: 'google',
-        role: 'user',
-      })
-    }
-
-    if (user.isActive === false) {
-      return res.status(403).json({
-        success: false,
-        message: 'Your account is deactivated',
-      })
-    }
-
+    const identity = await verifyGoogleAccessToken(req.body?.accessToken)
+    const user = await resolveGoogleUser({ identity, User })
     const token = signToken(user._id)
 
     res.json({
@@ -258,6 +234,19 @@ router.post('/google', async (req, res) => {
       user: safeUser(user),
     })
   } catch (error) {
+    // Every expected rejection arrives as a GoogleAuthError carrying both the
+    // status and the deliberately vague message the browser is allowed to see.
+    // The specific reason goes to the log only. Nothing logged here contains
+    // the access token, the Varlikent JWT, or any other credential.
+    if (error instanceof GoogleAuthError) {
+      console.log(`Google auth rejected [${error.code}]: ${error.message}`)
+
+      return res.status(error.status).json({
+        success: false,
+        message: error.publicMessage,
+      })
+    }
+
     console.log('Google auth error:', error)
     res.status(500).json({
       success: false,
