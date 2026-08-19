@@ -31,6 +31,7 @@ import AdminPartners from './pages/AdminPartners'
 import AdminShowroom from './pages/AdminShowroom'
 import AdminSiteSettings from './pages/AdminSiteSettings'
 import AdminLeadRouting from './pages/AdminLeadRouting'
+import AdminActivity from './pages/AdminActivity'
 import AgentDashboard from './pages/AgentDashboard'
 import AgentProperties from './pages/AgentProperties'
 import AgentMessages from './pages/AgentMessages'
@@ -90,6 +91,7 @@ const App = ({ ready }) => (
           <Route path="/admin/partners" element={<ProtectedRoute requiredRole="admin"><AdminPartners /></ProtectedRoute>} />
           <Route path="/admin/showroom" element={<ProtectedRoute requiredRole="admin"><AdminShowroom /></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute requiredRole="owner"><AdminSiteSettings /></ProtectedRoute>} />
+          <Route path="/admin/activity" element={<ProtectedRoute requiredRole="owner"><AdminActivity /></ProtectedRoute>} />
           {/*
             Agent Portal — strictly role === 'agent'. Admins and owners are
             refused here just as agents are refused /admin/*; the two portals

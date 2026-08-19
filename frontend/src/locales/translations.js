@@ -457,6 +457,7 @@ const translations = {
         visible: 'Visible', hidden: 'Hidden', order: 'Display Order', saveAll: 'Save All',
         creating: 'Creating...', uploading: 'Uploading...', ownerOnly: 'Owner access required',
         saveFailed: 'Failed to save', uploadFailed: 'Upload failed', failed: 'Failed',
+        refresh: 'Refresh', autoRefresh: 'Auto-refresh',
       },
       dashboard: {
         title: 'Dashboard', signedIn: 'Signed in as',
@@ -608,6 +609,17 @@ const translations = {
         active: 'Active', inactive: 'Inactive', deactivate: 'Deactivate', reactivate: 'Reactivate',
         you: '(you)', joined: 'Joined', fullName: 'Full Name', email: 'Email',
         password: 'Password', role: 'Role', creating: 'Creating...',
+      },
+      activity: {
+        title: 'Admin Activity', subtitle: 'Every change any admin or owner makes to the site, newest first.',
+        ownerOnly: 'Owner access required',
+        empty: 'No activity recorded yet. Actions will start appearing here as admins and owners make changes.',
+        justNow: 'just now', minutesAgo: 'm ago', hoursAgo: 'h ago',
+        resource: {
+          properties: 'a property', partners: 'a partner', showroom: 'a showroom item', team: 'a team member',
+          reviews: 'a review', projects: 'a project', about: 'the About page', pageContent: 'page content',
+          users: 'a user account', contact: 'a lead', settings: 'site settings', leadRouting: 'lead routing',
+        },
       },
     },
     chatbot: {
@@ -1185,6 +1197,7 @@ forgotPasswordPage: {
         visible: 'Görünür', hidden: 'Gizli', order: 'Sıra', saveAll: 'Tümünü Kaydet',
         creating: 'Oluşturuluyor...', uploading: 'Yükleniyor...', ownerOnly: 'Sahip erişimi gerekli',
         saveFailed: 'Kaydetme başarısız', uploadFailed: 'Yükleme başarısız', failed: 'Başarısız',
+        refresh: 'Yenile', autoRefresh: 'Otomatik yenile',
       },
       dashboard: {
         title: 'Panel', signedIn: 'Oturum açık',
@@ -1336,6 +1349,17 @@ forgotPasswordPage: {
         active: 'Aktif', inactive: 'Pasif', deactivate: 'Devre Dışı Bırak', reactivate: 'Yeniden Etkinleştir',
         you: '(siz)', joined: 'Katıldı', fullName: 'Ad Soyad', email: 'E-posta',
         password: 'Şifre', role: 'Rol', creating: 'Oluşturuluyor...',
+      },
+      activity: {
+        title: 'Yönetici Etkinliği', subtitle: 'Herhangi bir yönetici veya sahibin sitede yaptığı her değişiklik, en yeniden başlayarak.',
+        ownerOnly: 'Sahip erişimi gerekli',
+        empty: 'Henüz etkinlik kaydı yok. Yöneticiler ve sahipler değişiklik yaptıkça burada görünmeye başlayacak.',
+        justNow: 'az önce', minutesAgo: 'dk önce', hoursAgo: 'sa önce',
+        resource: {
+          properties: 'bir mülk', partners: 'bir partner', showroom: 'bir showroom öğesi', team: 'bir ekip üyesi',
+          reviews: 'bir yorum', projects: 'bir proje', about: 'Hakkımızda sayfası', pageContent: 'sayfa içeriği',
+          users: 'bir kullanıcı hesabı', contact: 'bir talep', settings: 'site ayarları', leadRouting: 'talep yönlendirme',
+        },
       },
     },
     chatbot: {
@@ -1914,6 +1938,7 @@ forgotPasswordPage: {
         visible: 'مرئي', hidden: 'مخفي', order: 'ترتيب العرض', saveAll: 'حفظ الكل',
         creating: 'جارٍ الإنشاء...', uploading: 'جارٍ الرفع...', ownerOnly: 'مطلوب صلاحية المالك',
         saveFailed: 'فشل الحفظ', uploadFailed: 'فشل الرفع', failed: 'فشل',
+        refresh: 'تحديث', autoRefresh: 'تحديث تلقائي',
       },
       dashboard: {
         title: 'لوحة التحكم', signedIn: 'مسجّل دخول بصفة',
@@ -2065,6 +2090,17 @@ forgotPasswordPage: {
         active: 'نشط', inactive: 'غير نشط', deactivate: 'تعطيل', reactivate: 'إعادة التفعيل',
         you: '(أنت)', joined: 'انضم', fullName: 'الاسم الكامل', email: 'البريد الإلكتروني',
         password: 'كلمة المرور', role: 'الدور', creating: 'جارٍ الإنشاء...',
+      },
+      activity: {
+        title: 'نشاط الإدارة', subtitle: 'كل تغيير يقوم به أي مشرف أو مالك على الموقع، الأحدث أولاً.',
+        ownerOnly: 'مطلوب صلاحية المالك',
+        empty: 'لا يوجد نشاط مسجل حتى الآن. ستبدأ الإجراءات بالظهور هنا عندما يقوم المشرفون والملاك بإجراء تغييرات.',
+        justNow: 'الآن', minutesAgo: 'د مضت', hoursAgo: 'س مضت',
+        resource: {
+          properties: 'عقار', partners: 'شريك', showroom: 'عنصر صالة عرض', team: 'عضو فريق',
+          reviews: 'تقييم', projects: 'مشروع', about: 'صفحة من نحن', pageContent: 'محتوى الصفحة',
+          users: 'حساب مستخدم', contact: 'عميل محتمل', settings: 'إعدادات الموقع', leadRouting: 'توجيه العملاء',
+        },
       },
     },
     chatbot: {
