@@ -17,7 +17,7 @@ const DESIGN_STYLES = [
   { id: 'classic', label: 'Classic', bg: '#221e18', materials: 'Velvet · Brass · Dark Wood' },
 ]
 
-const WALL_FINISHES = [
+const DEFAULT_WALL_FINISHES = [
   { label: 'Ivory', color: '#f5f0e8' },
   { label: 'Warm Sand', color: '#e8ddd0' },
   { label: 'Slate Blue', color: '#8fa3b1' },
@@ -26,14 +26,14 @@ const WALL_FINISHES = [
   { label: 'Navy', color: '#202a36' },
 ]
 
-const FLOOR_FINISHES = [
+const DEFAULT_FLOOR_FINISHES = [
   { label: 'Dark Oak', color: '#4a3728' },
   { label: 'Light Ash', color: '#c4a882' },
   { label: 'Concrete', color: '#8a8a8a' },
   { label: 'Marble', color: '#efe9e1' },
 ]
 
-const MATERIALS = [
+const DEFAULT_MATERIALS = [
   { name: 'Calacatta Marble', color: '#f2ede8' },
   { name: 'Raw Concrete', color: '#8a8a8a' },
   { name: 'Dark Walnut', color: '#3d2b1f' },
@@ -43,6 +43,58 @@ const MATERIALS = [
   { name: 'Forest Green', color: C.green },
   { name: 'Midnight Navy', color: '#202a36' },
 ]
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+const sanitizedImage = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return ''
+  try {
+    const url = new URL(value.trim())
+    return url.protocol === 'http:' || url.protocol === 'https:' ? value.trim() : ''
+  } catch {
+    return ''
+  }
+}
+
+const sanitizedMaterials = (value) => {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 24) return null
+  if (!value.every(item => item && typeof item === 'object' && !Array.isArray(item)
+    && typeof item.name === 'string' && item.name.trim() && item.name.trim().length <= 80
+    && typeof item.color === 'string' && HEX_COLOR.test(item.color))) return null
+  return value.map(item => ({ name: item.name.trim(), color: item.color, image: sanitizedImage(item.image) }))
+}
+
+const sanitizedFinishes = (value, maximum) => {
+  if (!Array.isArray(value) || value.length < 1 || value.length > maximum) return null
+  if (!value.every(item => item && typeof item === 'object' && !Array.isArray(item)
+    && typeof item.label === 'string' && item.label.trim() && item.label.trim().length <= 80
+    && typeof item.color === 'string' && HEX_COLOR.test(item.color))) return null
+  return value.map(item => ({ label: item.label.trim(), color: item.color }))
+}
+
+const useStudioPalette = (pageKey) => {
+  const [overrides, setOverrides] = useState({ materials: null, wallFinishes: null, floorFinishes: null })
+  useEffect(() => {
+    let active = true
+    api.get(`/studio-palette/${pageKey}`)
+      .then(response => {
+        if (!active) return
+        const palette = response.data?.palette
+        setOverrides({
+          materials: sanitizedMaterials(palette?.materials),
+          wallFinishes: sanitizedFinishes(palette?.wallFinishes, 16),
+          floorFinishes: sanitizedFinishes(palette?.floorFinishes, 16),
+        })
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [pageKey])
+  return {
+    materials: overrides.materials || DEFAULT_MATERIALS,
+    wallFinishes: overrides.wallFinishes || DEFAULT_WALL_FINISHES,
+    floorFinishes: overrides.floorFinishes || DEFAULT_FLOOR_FINISHES,
+  }
+}
 
 const GoldDivider = () => (
   <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, var(--vk-gold) 25%, var(--vk-gold) 75%, transparent)', opacity: 0.5 }} />
@@ -61,6 +113,12 @@ export default function InteriorDesignPage() {
   const [selectedFloor, setSelectedFloor] = useState('#4a3728')
   const [allImages, setAllImages] = useState([])
   const [loadingImages, setLoadingImages] = useState(true)
+  const { materials, wallFinishes, floorFinishes } = useStudioPalette('interior-design')
+
+  useEffect(() => {
+    setSelectedWall(current => wallFinishes.some(item => item.color === current) ? current : (wallFinishes.at(1) || wallFinishes.at(0))?.color || '')
+    setSelectedFloor(current => floorFinishes.some(item => item.color === current) ? current : floorFinishes.at(0)?.color || '')
+  }, [wallFinishes, floorFinishes])
 
   useEffect(() => {
     api.get('/showroom/interior')
@@ -189,8 +247,8 @@ export default function InteriorDesignPage() {
             <div>
               <p className="text-xs tracking-[0.3em] uppercase mb-4" style={{ color: 'rgba(var(--vk-dark-rgb), 0.5)' }}>{p.wallLabel}</p>
               <div className="flex flex-wrap gap-3">
-                {WALL_FINISHES.map(f => (
-                  <button key={f.color} onClick={() => setSelectedWall(f.color)} title={f.label}
+                {wallFinishes.map((f, index) => (
+                  <button key={`wall-finish-${index}`} onClick={() => setSelectedWall(f.color)} title={f.label}
                     className="flex flex-col items-center gap-1.5 cursor-pointer group">
                     <div className="h-10 w-10 rounded-full transition-transform group-hover:scale-110"
                       style={{ backgroundColor: f.color, outline: selectedWall === f.color ? `2px solid ${C.gold}` : '1px solid rgba(30,30,28,0.15)', outlineOffset: 3, transform: selectedWall === f.color ? 'scale(1.1)' : '' }} />
@@ -202,8 +260,8 @@ export default function InteriorDesignPage() {
             <div>
               <p className="text-xs tracking-[0.3em] uppercase mb-4" style={{ color: 'rgba(var(--vk-dark-rgb), 0.5)' }}>{p.floorLabel}</p>
               <div className="flex flex-wrap gap-3">
-                {FLOOR_FINISHES.map(f => (
-                  <button key={f.color} onClick={() => setSelectedFloor(f.color)} title={f.label}
+                {floorFinishes.map((f, index) => (
+                  <button key={`floor-finish-${index}`} onClick={() => setSelectedFloor(f.color)} title={f.label}
                     className="flex flex-col items-center gap-1.5 cursor-pointer group">
                     <div className="h-10 w-10 rounded-full transition-transform group-hover:scale-110"
                       style={{ backgroundColor: f.color, outline: selectedFloor === f.color ? `2px solid ${C.gold}` : '1px solid rgba(30,30,28,0.15)', outlineOffset: 3, transform: selectedFloor === f.color ? 'scale(1.1)' : '' }} />
@@ -234,10 +292,10 @@ export default function InteriorDesignPage() {
             {p.paletteHeading}
           </motion.h2>
           <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
-            {MATERIALS.map((m, i) => (
-              <motion.div key={m.name} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+            {materials.map((m, i) => (
+              <motion.div key={`material-${i}`} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
                 transition={{ delay: i * 0.05 }} className="flex flex-col items-center gap-2">
-                <div className="w-full aspect-square rounded-lg" style={{ backgroundColor: m.color, border: '1px solid rgba(255,255,255,0.08)' }} />
+                <div className="w-full aspect-square rounded-lg bg-cover bg-center" style={{ backgroundColor: m.color, backgroundImage: m.image ? `url(${m.image})` : undefined, border: '1px solid rgba(255,255,255,0.08)' }} />
                 <span className="text-xs tracking-wider text-center uppercase leading-tight" style={{ color: 'rgba(246,243,237,0.35)' }}>{m.name}</span>
               </motion.div>
             ))}

@@ -8,7 +8,7 @@ import ShowroomCarousel from '../components/ShowroomCarousel'
 import api from '../lib/api'
 
 
-const MATERIALS = [
+const DEFAULT_MATERIALS = [
   { name: 'Calacatta Marble', color: '#f2ede8' },
   { name: 'Raw Concrete', color: '#8a8a8a' },
   { name: 'Dark Walnut', color: '#3d2b1f' },
@@ -19,7 +19,7 @@ const MATERIALS = [
   { name: 'Midnight Navy', color: '#202a36' },
 ]
 
-const WALL_FINISHES = [
+const DEFAULT_WALL_FINISHES = [
   { label: 'Ivory', color: '#f5f0e8' },
   { label: 'Warm Sand', color: '#e8ddd0' },
   { label: 'Slate Blue', color: '#8fa3b1' },
@@ -28,12 +28,64 @@ const WALL_FINISHES = [
   { label: 'Navy', color: '#202a36' },
 ]
 
-const FLOOR_FINISHES = [
+const DEFAULT_FLOOR_FINISHES = [
   { label: 'Dark Oak', color: '#4a3728' },
   { label: 'Light Ash', color: '#c4a882' },
   { label: 'Concrete', color: '#8a8a8a' },
   { label: 'Marble', color: '#efe9e1' },
 ]
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+const sanitizedImage = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return ''
+  try {
+    const url = new URL(value.trim())
+    return url.protocol === 'http:' || url.protocol === 'https:' ? value.trim() : ''
+  } catch {
+    return ''
+  }
+}
+
+const sanitizedMaterials = (value) => {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 24) return null
+  if (!value.every(item => item && typeof item === 'object' && !Array.isArray(item)
+    && typeof item.name === 'string' && item.name.trim() && item.name.trim().length <= 80
+    && typeof item.color === 'string' && HEX_COLOR.test(item.color))) return null
+  return value.map(item => ({ name: item.name.trim(), color: item.color, image: sanitizedImage(item.image) }))
+}
+
+const sanitizedFinishes = (value, maximum) => {
+  if (!Array.isArray(value) || value.length < 1 || value.length > maximum) return null
+  if (!value.every(item => item && typeof item === 'object' && !Array.isArray(item)
+    && typeof item.label === 'string' && item.label.trim() && item.label.trim().length <= 80
+    && typeof item.color === 'string' && HEX_COLOR.test(item.color))) return null
+  return value.map(item => ({ label: item.label.trim(), color: item.color }))
+}
+
+const useStudioPalette = (pageKey) => {
+  const [overrides, setOverrides] = useState({ materials: null, wallFinishes: null, floorFinishes: null })
+  useEffect(() => {
+    let active = true
+    api.get(`/studio-palette/${pageKey}`)
+      .then(response => {
+        if (!active) return
+        const palette = response.data?.palette
+        setOverrides({
+          materials: sanitizedMaterials(palette?.materials),
+          wallFinishes: sanitizedFinishes(palette?.wallFinishes, 16),
+          floorFinishes: sanitizedFinishes(palette?.floorFinishes, 16),
+        })
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [pageKey])
+  return {
+    materials: overrides.materials || DEFAULT_MATERIALS,
+    wallFinishes: overrides.wallFinishes || DEFAULT_WALL_FINISHES,
+    floorFinishes: overrides.floorFinishes || DEFAULT_FLOOR_FINISHES,
+  }
+}
 
 const LIGHTING_MOOD_CONFIGS = [
   { id: 'day', filter: 'brightness(1.08) saturate(1.05)', tint: 'rgba(245,240,232,0.06)' },
@@ -42,14 +94,20 @@ const LIGHTING_MOOD_CONFIGS = [
   { id: 'night', filter: 'brightness(0.7) saturate(1.1)', tint: 'rgba(32,42,54,0.35)' },
 ]
 
-const RenovationStudio = ({ p }) => {
+const RenovationStudio = ({ p, materials, wallFinishes, floorFinishes }) => {
   const [reveal, setReveal] = useState(50)
-  const [material, setMaterial] = useState(MATERIALS[0])
-  const [wall, setWall] = useState(WALL_FINISHES[1].color)
-  const [floor, setFloor] = useState(FLOOR_FINISHES[0].color)
+  const [material, setMaterial] = useState(() => materials.at(0) || null)
+  const [wall, setWall] = useState(() => (wallFinishes.at(1) || wallFinishes.at(0))?.color || '')
+  const [floor, setFloor] = useState(() => floorFinishes.at(0)?.color || '')
   const [moodIdx, setMoodIdx] = useState(0)
   const mood = LIGHTING_MOOD_CONFIGS[moodIdx]
   const moodLabels = p.lightingMoods
+
+  useEffect(() => {
+    setMaterial(current => materials.find(item => item.name === current?.name && item.color === current?.color) || materials.at(0) || null)
+    setWall(current => wallFinishes.some(item => item.color === current) ? current : (wallFinishes.at(1) || wallFinishes.at(0))?.color || '')
+    setFloor(current => floorFinishes.some(item => item.color === current) ? current : floorFinishes.at(0)?.color || '')
+  }, [materials, wallFinishes, floorFinishes])
 
   return (
     <div className="flex flex-col gap-10">
@@ -65,7 +123,7 @@ const RenovationStudio = ({ p }) => {
           <div className="absolute inset-0 transition-[clip-path] duration-150"
             style={{
               clipPath: `inset(0 ${100 - reveal}% 0 0)`,
-              background: `linear-gradient(135deg, ${material.color} 0%, ${wall} 55%, ${floor} 100%)`,
+              background: `linear-gradient(135deg, ${material?.color || C.gold} 0%, ${wall || C.softWhite} 55%, ${floor || C.charcoal} 100%)`,
               filter: mood.filter,
             }}>
             <div className="absolute inset-0" style={{ backgroundColor: mood.tint }} />
@@ -87,18 +145,18 @@ const RenovationStudio = ({ p }) => {
         <div>
           <p className="text-xs tracking-[0.3em] uppercase text-slate-500 mb-4">{p.materialLabel}</p>
           <div className="flex flex-wrap gap-2">
-            {MATERIALS.map(m => (
-              <button key={m.name} onClick={() => setMaterial(m)} title={m.name}
+            {materials.map((m, index) => (
+              <button key={`material-swatch-${index}`} onClick={() => setMaterial(m)} title={m.name}
                 className="h-9 w-9 rounded-full cursor-pointer transition-transform hover:scale-110"
-                style={{ backgroundColor: m.color, outline: material.name === m.name ? `2px solid ${C.gold}` : '1px solid rgba(255,255,255,0.15)', outlineOffset: 2 }} />
+                style={{ backgroundColor: m.color, outline: material?.name === m.name && material?.color === m.color ? `2px solid ${C.gold}` : '1px solid rgba(255,255,255,0.15)', outlineOffset: 2 }} />
             ))}
           </div>
         </div>
         <div>
           <p className="text-xs tracking-[0.3em] uppercase text-slate-500 mb-4">{p.wallLabel}</p>
           <div className="flex flex-wrap gap-2">
-            {WALL_FINISHES.map(f => (
-              <button key={f.color} onClick={() => setWall(f.color)} title={f.label}
+            {wallFinishes.map((f, index) => (
+              <button key={`wall-finish-${index}`} onClick={() => setWall(f.color)} title={f.label}
                 className="h-9 w-9 rounded-full cursor-pointer transition-transform hover:scale-110"
                 style={{ backgroundColor: f.color, outline: wall === f.color ? `2px solid ${C.gold}` : '1px solid rgba(255,255,255,0.15)', outlineOffset: 2 }} />
             ))}
@@ -107,8 +165,8 @@ const RenovationStudio = ({ p }) => {
         <div>
           <p className="text-xs tracking-[0.3em] uppercase text-slate-500 mb-4">{p.floorLabel}</p>
           <div className="flex flex-wrap gap-2">
-            {FLOOR_FINISHES.map(f => (
-              <button key={f.color} onClick={() => setFloor(f.color)} title={f.label}
+            {floorFinishes.map((f, index) => (
+              <button key={`floor-finish-${index}`} onClick={() => setFloor(f.color)} title={f.label}
                 className="h-9 w-9 rounded-full cursor-pointer transition-transform hover:scale-110"
                 style={{ backgroundColor: f.color, outline: floor === f.color ? `2px solid ${C.gold}` : '1px solid rgba(255,255,255,0.15)', outlineOffset: 2 }} />
             ))}
@@ -146,6 +204,7 @@ export default function RenovationPage() {
   const { settings } = useSiteSettings()
   const [images, setImages] = useState([])
   const [loadingImages, setLoadingImages] = useState(true)
+  const { materials, wallFinishes, floorFinishes } = useStudioPalette('renovation')
 
   useEffect(() => {
     api.get('/showroom/renovation')
@@ -242,7 +301,7 @@ export default function RenovationPage() {
           </motion.h2>
           <p className="text-center text-slate-500 text-sm mb-10">{p.studioDesc}</p>
           <motion.div initial={{ opacity: 0, scale: 0.98 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-            <RenovationStudio p={p} />
+            <RenovationStudio p={p} materials={materials} wallFinishes={wallFinishes} floorFinishes={floorFinishes} />
           </motion.div>
         </div>
       </section>
@@ -261,10 +320,10 @@ export default function RenovationPage() {
             {p.paletteHeading}
           </motion.h2>
           <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
-            {MATERIALS.map((m, i) => (
-              <motion.div key={m.name} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+            {materials.map((m, i) => (
+              <motion.div key={`material-${i}`} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
                 transition={{ delay: i * 0.05 }} className="flex flex-col items-center gap-2">
-                <div className="w-full aspect-square rounded-lg" style={{ backgroundColor: m.color, border: '1px solid rgba(30,30,28,0.12)' }} />
+                <div className="w-full aspect-square rounded-lg bg-cover bg-center" style={{ backgroundColor: m.color, backgroundImage: m.image ? `url(${m.image})` : undefined, border: '1px solid rgba(30,30,28,0.12)' }} />
                 <span className="text-xs tracking-wider text-center uppercase leading-tight" style={{ color: 'rgba(var(--vk-dark-rgb), 0.5)' }}>{m.name}</span>
               </motion.div>
             ))}
