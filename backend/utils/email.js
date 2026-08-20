@@ -1,14 +1,114 @@
-import nodemailer from 'nodemailer'
 import LeadRouting from '../models/LeadRouting.js'
 
-const makeTransporter = () => {
-  const port = Number(process.env.EMAIL_PORT) || 587
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port,
-    secure: port === 465,
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-  })
+// ── Why this file no longer speaks SMTP ──────────────────────────────────
+// Delivery used to go out through Nodemailer to smtp.gmail.com:587. That works
+// locally and fails in production for a reason no amount of credential-fixing
+// would have solved: Render's free web services block outbound SMTP on ports
+// 25, 465 and 587. The symptom was a bare "Connection timeout" in the logs,
+// with the password-reset route behaving perfectly and no email ever arriving.
+//
+// Resend's HTTPS API is reached over 443, which is not blocked, so the fix is
+// to change the TRANSPORT and nothing else. Every piece of password-reset
+// logic — token generation, hashing, expiry, the generic response — is
+// untouched, and both HTML templates below are byte-for-byte what they were.
+//
+// No SDK: Node 18+ ships a global fetch, and one POST to one endpoint does not
+// justify a dependency. That also keeps the failure modes visible in this file
+// rather than inside someone else's client.
+
+const RESEND_ENDPOINT = 'https://api.resend.com/emails'
+
+/**
+ * Pulls a short, safe description out of a Resend error response.
+ *
+ * Deliberately reads only `name` and `message` rather than dumping the body.
+ * The body is provider-controlled and could echo parts of the request back; the
+ * request contains the reset URL, which IS the credential. Truncated because a
+ * log line is for diagnosis, not for archiving provider prose.
+ */
+const safeErrorDetail = async (response) => {
+  try {
+    const body = await response.json()
+    const name = typeof body?.name === 'string' ? body.name : ''
+    const message = typeof body?.message === 'string' ? body.message.slice(0, 200) : ''
+    return [name, message].filter(Boolean).join(': ') || '(no detail)'
+  } catch {
+    return '(unparseable error body)'
+  }
+}
+
+/**
+ * Hands one finished email to Resend over HTTPS.
+ *
+ * The single delivery path for the whole backend. Callers build their own
+ * subject and HTML and know nothing about the provider, which is what makes
+ * swapping providers a change to this function alone.
+ *
+ * ── What is never logged ─────────────────────────────────────────────────
+ * Not the API key, not the HTML, not the request body, and not the recipient.
+ * The reset email's HTML embeds the raw reset token; anything that printed the
+ * body would hand a log reader the ability to take over an account, which is
+ * precisely the property that storing only the token's SHA-256 hash exists to
+ * protect. Recipients stay out for the same reason the HTTP response omits
+ * them: this endpoint must not become a way to learn who has an account.
+ *
+ * @param {{to: string|string[], subject: string, html: string}} message
+ * @returns {Promise<boolean>} true only when Resend accepted the message.
+ */
+const sendEmailViaResend = async ({ to, subject, html }) => {
+  const apiKey = process.env.RESEND_API_KEY
+  const from = process.env.EMAIL_FROM
+
+  // Named separately so a misconfigured deploy says which variable is missing.
+  // Under the old SMTP code this case returned false with no log line at all,
+  // which is exactly the kind of silence that makes an outage hard to explain.
+  if (!apiKey) {
+    console.error('[email] RESEND_API_KEY is not configured — no email sent')
+    return false
+  }
+  if (!from) {
+    console.error('[email] EMAIL_FROM is not configured — no email sent')
+    return false
+  }
+
+  // Resend accepts a string or an array; always sending an array keeps one
+  // shape for the single-recipient reset email and the multi-recipient lead
+  // notification. The API caps recipients at 50.
+  const recipients = Array.isArray(to) ? to.filter(Boolean) : [to].filter(Boolean)
+
+  if (recipients.length === 0) {
+    console.error('[email] no recipients resolved — no email sent')
+    return false
+  }
+
+  let response
+
+  try {
+    response = await fetch(RESEND_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        // Resend rejects direct API calls that do not identify themselves.
+        'User-Agent': 'varlikent-backend/1.0',
+      },
+      body: JSON.stringify({ from, to: recipients, subject, html }),
+    })
+  } catch (err) {
+    // The request never completed: DNS, TLS, socket. Distinct from Resend
+    // answering with a rejection, and worth telling apart in the logs.
+    console.error('[email] Resend request failed to complete:', err.message)
+    return false
+  }
+
+  if (!response.ok) {
+    console.error(
+      `[email] Resend rejected the message: status=${response.status} ${await safeErrorDetail(response)}`
+    )
+    return false
+  }
+
+  return true
 }
 
 const leadEmailHtml = (submission) => `
@@ -107,12 +207,14 @@ const passwordResetEmailHtml = (resetUrl) => `
 </html>
 `
 
+/**
+ * Notifies the sales recipients about a new lead.
+ *
+ * Routing is unchanged: OWNER_EMAIL plus whatever LeadRouting holds for this
+ * interest type, de-duplicated through a Set. Only the delivery call differs.
+ */
 export const sendContactNotification = async (submission) => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return false
-
   try {
-    const transporter = makeTransporter()
-
     const recipientSet = new Set()
     if (process.env.OWNER_EMAIL) recipientSet.add(process.env.OWNER_EMAIL)
 
@@ -126,34 +228,29 @@ export const sendContactNotification = async (submission) => {
     const toList = [...recipientSet]
     if (toList.length === 0) return false
 
-    await transporter.sendMail({
-      from: `"Varlikent Leads" <${process.env.EMAIL_USER}>`,
-      to: toList.join(', '),
+    return await sendEmailViaResend({
+      to: toList,
       subject: `New Lead: ${submission.interestType} — ${submission.name}`,
       html: leadEmailHtml(submission),
     })
-
-    return true
   } catch (err) {
-    console.error('Failed to send contact notification email:', err.message)
+    console.error('[email] Failed to prepare contact notification:', err.message)
     return false
   }
 }
 
-export const sendPasswordResetEmail = async (toEmail, resetUrl) => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return false
-
-  try {
-    const transporter = makeTransporter()
-    await transporter.sendMail({
-      from: `"Varlikent" <${process.env.EMAIL_USER}>`,
-      to: toEmail,
-      subject: 'Reset your Varlikent password',
-      html: passwordResetEmailHtml(resetUrl),
-    })
-    return true
-  } catch (err) {
-    console.error('Failed to send password reset email:', err.message, err.response || '')
-    return false
-  }
-}
+/**
+ * Emails a password-reset link.
+ *
+ * Signature and return contract are unchanged, so routes/auth.js needed no
+ * edit: it still awaits a boolean and still logs only that boolean.
+ *
+ * `resetUrl` embeds the raw reset token. It is passed straight into the
+ * template and is never logged here or anywhere below it.
+ */
+export const sendPasswordResetEmail = async (toEmail, resetUrl) =>
+  sendEmailViaResend({
+    to: toEmail,
+    subject: 'Reset your Varlikent password',
+    html: passwordResetEmailHtml(resetUrl),
+  })

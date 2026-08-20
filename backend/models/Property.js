@@ -1,6 +1,27 @@
 //property
 import mongoose from 'mongoose'
 
+// Optional geographic position for the property map.
+//
+// `_id: false` because this is a value object, not a document — a stored
+// location is a coordinate, not something worth addressing separately.
+//
+// None of the four keys carries a schema-level default ON PURPOSE. A default
+// here would make Mongoose materialise `location: { isApproximate: false,
+// approxRadiusKm: 5 }` on every property that has never had a location set,
+// which would turn "this listing has no location" into "this listing has a
+// location with no coordinates". The route layer supplies the defaults when
+// a real coordinate pair is written, so absent stays genuinely absent.
+const propertyLocationSchema = new mongoose.Schema(
+  {
+    lat: { type: Number },
+    lng: { type: Number },
+    isApproximate: { type: Boolean },
+    approxRadiusKm: { type: Number },
+  },
+  { _id: false }
+)
+
 const propertySchema = new mongoose.Schema({
   title: { type: String, required: true },
   listingType: { type: String, enum: ['Sale', 'Rent'], required: true },
@@ -8,6 +29,11 @@ const propertySchema = new mongoose.Schema({
   priceLabel: { type: String },
   district: { type: String, required: true },
   address: { type: String, required: true },
+  // Optional. Validated and normalised by routes/properties.js before it is
+  // ever written — the schema deliberately does not range-check, so that the
+  // one authority on what a valid coordinate is stays in the route layer
+  // alongside the public redaction rules that depend on the same definition.
+  location: { type: propertyLocationSchema, default: undefined },
   propertyType: {
     type: String,
     enum: ['Apartment', 'Villa', 'Penthouse', 'Duplex', 'Studio', 'Office', 'Commercial', 'Land', 'Shop', 'Warehouse', 'Hotel', 'Farm'],

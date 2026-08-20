@@ -13,6 +13,204 @@ const router = express.Router()
 
 const PUBLIC_PROPERTY_EXCLUDE = '-descriptionEmbedding -embeddingUpdatedAt'
 
+/* ───────────────────────── Property location ─────────────────────────
+ *
+ * Three functions, deliberately separate, because they answer three different
+ * questions about the same four numbers:
+ *
+ *   parsePropertyLocation  what may a client WRITE?
+ *   publicLocation         what may an anonymous visitor READ?
+ *   editableLocation       what may an authorised editor READ?
+ *
+ * Keeping them apart is what makes the privacy rule auditable: the public
+ * reader and the editor reader are different functions, so it is impossible to
+ * widen one by accident while editing the other.
+ */
+
+const LAT_MIN = -90
+const LAT_MAX = 90
+const LNG_MIN = -180
+const LNG_MAX = 180
+const RADIUS_MIN_KM = 1
+const RADIUS_MAX_KM = 20
+const RADIUS_DEFAULT_KM = 5
+
+/**
+ * Strict number test.
+ *
+ * `typeof x === 'number'` rather than Number(x), because a numeric STRING must
+ * be refused too. A JSON API that quietly coerces '41.0082' teaches clients to
+ * send strings, and the same coercion then has to be repeated in every reader
+ * below — including the two that run against historical documents nobody
+ * validated. Number.isFinite additionally rules out NaN and ±Infinity, the
+ * values that survive a hand-edited record.
+ */
+const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v)
+
+const isUsableLat = (v) => isFiniteNumber(v) && v >= LAT_MIN && v <= LAT_MAX
+const isUsableLng = (v) => isFiniteNumber(v) && v >= LNG_MIN && v <= LNG_MAX
+
+/** Radius is cosmetic, so a bad STORED value falls back instead of failing. */
+const readRadius = (v) =>
+  isFiniteNumber(v) && v >= RADIUS_MIN_KM && v <= RADIUS_MAX_KM ? v : RADIUS_DEFAULT_KM
+
+/**
+ * Validates a client-supplied `location` and returns what should be stored.
+ *
+ * The three write outcomes are distinguished by VALUE, not by a flag, so a
+ * caller cannot forget to handle one:
+ *
+ *   { ok: true, value: undefined }  key absent — leave any stored location alone
+ *   { ok: true, value: null }       clear      — remove the stored location
+ *   { ok: true, value: {...} }      replace    — write this normalised object
+ *   { ok: false, message }          reject     — 400, write nothing
+ *
+ * ── Why 0 must not be treated as missing ────────────────────────
+ * Latitude 0 and longitude 0 are real coordinates. Every truthiness check
+ * (`if (lat && lng)`) silently discards them, which is why the tests here go
+ * through isFiniteNumber and explicit === undefined / === null comparisons.
+ *
+ * ── Why only an explicit null clears ────────────────────────
+ * Removing a pin is destructive and irreversible from the client's point of
+ * view, so it is never INFERRED. `location: null` is the one signal, and Wave
+ * 9b's "Clear location" button is the one thing that sends it.
+ *
+ * Everything else that lacks a usable pair — {}, { isApproximate: true },
+ * { approxRadiusKm: 10 }, { lat: null, lng: null } — is a malformed payload
+ * rather than an instruction, and is refused. A form that failed to attach
+ * the coordinates must not be able to erase the coordinates already stored.
+ */
+export const parsePropertyLocation = (raw) => {
+  if (raw === undefined) return { ok: true, value: undefined }
+  if (raw === null) return { ok: true, value: null }
+
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, message: 'location must be an object, or null to clear it' }
+  }
+
+  const { lat, lng, isApproximate, approxRadiusKm } = raw
+  const hasLat = lat !== undefined && lat !== null
+  const hasLng = lng !== undefined && lng !== null
+
+  // Any object that does not carry BOTH coordinates is rejected — including
+  // one carrying none at all.
+  //
+  // A half pair is always a mistake: it cannot be drawn, and storing it would
+  // leave a record every reader below has to defend against.
+  //
+  // A coordinate-less object is refused for a different and stronger reason:
+  // erasing a pin is destructive, so it gets exactly one signal — the explicit
+  // `location: null` handled above. Inferring "delete the stored location"
+  // from { isApproximate: true, approxRadiusKm: 10 } would mean a frontend that
+  // merely forgot to attach the coordinates silently destroys data the admin
+  // never asked to remove.
+  if (!hasLat || !hasLng) {
+    return {
+      ok: false,
+      message: 'location requires both lat and lng; send location: null to clear it',
+    }
+  }
+
+  if (!isFiniteNumber(lat)) return { ok: false, message: 'location.lat must be a finite number' }
+  if (lat < LAT_MIN || lat > LAT_MAX) {
+    return { ok: false, message: `location.lat must be between ${LAT_MIN} and ${LAT_MAX}` }
+  }
+  if (!isFiniteNumber(lng)) return { ok: false, message: 'location.lng must be a finite number' }
+  if (lng < LNG_MIN || lng > LNG_MAX) {
+    return { ok: false, message: `location.lng must be between ${LNG_MIN} and ${LNG_MAX}` }
+  }
+
+  // Strict boolean. 'true' is not accepted: this project has no global string
+  // coercion rule, and inventing one here would make the privacy switch below
+  // depend on a convention nothing else in the codebase follows.
+  let approximate = false
+  if (isApproximate !== undefined && isApproximate !== null) {
+    if (typeof isApproximate !== 'boolean') {
+      return { ok: false, message: 'location.isApproximate must be a boolean' }
+    }
+    approximate = isApproximate
+  }
+
+  let radiusKm = RADIUS_DEFAULT_KM
+  if (approxRadiusKm !== undefined && approxRadiusKm !== null) {
+    if (!isFiniteNumber(approxRadiusKm)) {
+      return { ok: false, message: 'location.approxRadiusKm must be a finite number' }
+    }
+    if (approxRadiusKm < RADIUS_MIN_KM || approxRadiusKm > RADIUS_MAX_KM) {
+      return {
+        ok: false,
+        message: `location.approxRadiusKm must be between ${RADIUS_MIN_KM} and ${RADIUS_MAX_KM}`,
+      }
+    }
+    radiusKm = approxRadiusKm
+  }
+
+  return { ok: true, value: { lat, lng, isApproximate: approximate, approxRadiusKm: radiusKm } }
+}
+
+/**
+ * What an anonymous visitor is allowed to see.
+ *
+ * ── The rule that matters ────────────────────────────────
+ * When a listing is marked approximate the stored coordinate NEVER leaves this
+ * function. Not hidden by the client, not filtered out of a marker list, not
+ * handed to a third-party map embed — absent from the payload entirely.
+ * Anything less is defeated by opening the network tab.
+ *
+ * Returns null when there is nothing publishable; the caller then omits the key
+ * rather than emitting `location: null`, so "no location" looks the same on the
+ * wire as it does in the database.
+ *
+ * Validity is re-checked here rather than assumed. Documents written before
+ * this route existed, or edited by hand in Mongo, can hold a half pair or a
+ * numeric string; such a property must still list and open normally, just
+ * without usable coordinates.
+ */
+export const publicLocation = (raw) => {
+  if (!raw || typeof raw !== 'object') return null
+
+  const { lat, lng, isApproximate, approxRadiusKm } = raw
+  const approximate = isApproximate === true
+  const radiusKm = readRadius(approxRadiusKm)
+
+  if (approximate) return { isApproximate: true, approxRadiusKm: radiusKm }
+  if (!isUsableLat(lat) || !isUsableLng(lng)) return null
+
+  return { lat, lng, isApproximate: false, approxRadiusKm: radiusKm }
+}
+
+/** Reduces one property object to what the public may read. */
+const withPublicLocation = (obj) => {
+  const location = publicLocation(obj.location)
+  if (location === null) {
+    const { location: _omitted, ...rest } = obj
+    return rest
+  }
+  return { ...obj, location }
+}
+
+/**
+ * What an authorised editor is allowed to see — the exact stored coordinate,
+ * approximate or not, because they are the person who placed the pin and the
+ * only person who can move it.
+ *
+ * Unusable stored data reads back as null rather than passing through, so a
+ * malformed historical record cannot reach an editing form as a half pair.
+ */
+export const editableLocation = (raw) => {
+  if (!raw || typeof raw !== 'object') return null
+
+  const { lat, lng, isApproximate, approxRadiusKm } = raw
+  if (!isUsableLat(lat) || !isUsableLng(lng)) return null
+
+  return {
+    lat,
+    lng,
+    isApproximate: isApproximate === true,
+    approxRadiusKm: readRadius(approxRadiusKm),
+  }
+}
+
 /**
  * Builds the write payload with every agent-related field decided by the
  * server rather than the browser.
@@ -86,9 +284,14 @@ router.get('/', async (req, res, next) => {
       if (maxSqm) filter.sqm.$lte = Number(maxSqm)
     }
 
-    const properties = await Property.find(filter)
+    // .lean() because the payload is rewritten below rather than returned as
+    // documents; the schema declares no virtuals, getters or toJSON transform,
+    // so the serialised result is identical.
+    const found = await Property.find(filter)
       .select(PUBLIC_PROPERTY_EXCLUDE)
       .sort({ createdAt: -1 })
+      .lean()
+    const properties = found.map(withPublicLocation)
     res.json({ success: true, count: properties.length, properties })
   } catch (err) {
     next(err)
@@ -113,9 +316,11 @@ router.get('/areas', async (req, res, next) => {
 // GET /api/properties/sale - MUST be before /:id
 router.get('/sale', async (req, res, next) => {
   try {
-    const properties = await Property.find({ listingType: 'Sale' })
+    const found = await Property.find({ listingType: 'Sale' })
       .select(PUBLIC_PROPERTY_EXCLUDE)
       .sort({ createdAt: -1 })
+      .lean()
+    const properties = found.map(withPublicLocation)
     res.json({ success: true, count: properties.length, properties })
   } catch (err) {
     next(err)
@@ -125,14 +330,57 @@ router.get('/sale', async (req, res, next) => {
 // GET /api/properties/rent - MUST be before /:id
 router.get('/rent', async (req, res, next) => {
   try {
-    const properties = await Property.find({ listingType: 'Rent' })
+    const found = await Property.find({ listingType: 'Rent' })
       .select(PUBLIC_PROPERTY_EXCLUDE)
       .sort({ createdAt: -1 })
+      .lean()
+    const properties = found.map(withPublicLocation)
     res.json({ success: true, count: properties.length, properties })
   } catch (err) {
     next(err)
   }
 })
+
+// GET /api/properties/:id/admin-location — MUST be before /:id
+//
+// The one place the exact stored coordinate of an APPROXIMATE listing is
+// readable, and it is deliberately its own endpoint rather than a widening of
+// the property payload.
+//
+// ── Why not simply un-redact the property for admins ───────────────────
+// Because the person who may EDIT a pin is a narrower set than the people who
+// may see a listing in the admin UI. requirePermission('edit_listing') is the
+// permission that actually governs moving a pin, so an admin holding only
+// add_listing or delete_listing is refused here — they never receive the exact
+// coordinates of every private listing merely by opening the properties page.
+//
+// ── Why the route order is stated rather than assumed ──────────────────
+// Express matches in registration order, and '/:id' matches a SINGLE path
+// segment, so '/abc/admin-location' would not be swallowed even if this came
+// second. It is placed first anyway, matching the convention already used by
+// /areas, /sale and /rent above, so the ordering never has to be re-derived.
+//
+// The projection is narrowed to `location` at the database, so no embedding,
+// no agent pointer and no contact field is read, let alone returned.
+router.get(
+  '/:id/admin-location',
+  protect,
+  requireRole('owner', 'admin'),
+  requirePermission('edit_listing'),
+  async (req, res, next) => {
+    try {
+      const property = await Property.findById(req.params.id).select('location').lean()
+
+      if (!property) {
+        return res.status(404).json({ success: false, message: 'Property not found' })
+      }
+
+      res.json({ success: true, location: editableLocation(property.location) })
+    } catch (err) {
+      next(err)
+    }
+  }
+)
 
 // GET /api/properties/:id
 //
@@ -158,7 +406,10 @@ router.get('/:id', async (req, res, next) => {
     const propertyJson = property.toObject()
     propertyJson.agent = publicAgent(property.agent)
 
-    res.json({ success: true, property: propertyJson })
+    // Same redaction the list endpoints apply. Detail is the page a visitor
+    // reaches when they are interested in ONE listing, so it is exactly where
+    // an approximate coordinate would be worth harvesting.
+    res.json({ success: true, property: withPublicLocation(propertyJson) })
   } catch (err) {
     next(err)
   }
@@ -172,11 +423,26 @@ router.post(
   requirePermission('add_listing'),
   async (req, res, next) => {
     try {
+      // Location is checked first because it is the cheapest thing to reject:
+      // a bad coordinate costs no agent lookup and no embedding call.
+      const parsedLocation = parsePropertyLocation(req.body?.location)
+      if (!parsedLocation.ok) {
+        return res.status(400).json({ success: false, message: parsedLocation.message })
+      }
+
       // Validate the agent BEFORE any other work, so a bad assignment costs
       // nothing and never reaches the database. No existing property on
       // create, so there is no previous agent whose details could go stale.
       let propertyData = await applyAgentContact(req.body, res, null)
       if (!propertyData) return
+
+      // On create there is nothing to preserve and nothing to clear, so the
+      // only two outcomes are "store the normalised object" and "no location".
+      if (parsedLocation.value) {
+        propertyData.location = parsedLocation.value
+      } else {
+        delete propertyData.location
+      }
 
       try {
         const embeddingResult = await generatePropertyEmbedding(req.body)
@@ -203,6 +469,14 @@ router.put(
   requirePermission('edit_listing'),
   async (req, res, next) => {
     try {
+      // Before the read, before the agent resolution, before the embedding —
+      // an invalid location must not be able to cause ANY side effect. Nothing
+      // below this line runs unless the coordinate is already known to be good.
+      const parsedLocation = parsePropertyLocation(req.body?.location)
+      if (!parsedLocation.ok) {
+        return res.status(400).json({ success: false, message: parsedLocation.message })
+      }
+
       const existingProperty = await Property.findById(req.params.id)
       if (!existingProperty) {
         return res.status(404).json({ success: false, message: 'Property not found' })
@@ -232,7 +506,23 @@ router.put(
         }
       }
 
-      const property = await Property.findByIdAndUpdate(req.params.id, updateData, {
+      // Three-way location contract, resolved into Mongo operators:
+      //
+      //   key absent  -> touch nothing (the client was editing other fields)
+      //   null/empty  -> $unset, so the field goes away rather than becoming
+      //                  a null that every reader would have to special-case
+      //   object      -> $set the normalised value
+      delete updateData.location
+      const clearLocation = parsedLocation.value === null
+      if (parsedLocation.value) updateData.location = parsedLocation.value
+
+      const updateOps = {}
+      // $set with an empty object is rejected by MongoDB, which a location-only
+      // clear would otherwise produce.
+      if (Object.keys(updateData).length > 0) updateOps.$set = updateData
+      if (clearLocation) updateOps.$unset = { location: '' }
+
+      const property = await Property.findByIdAndUpdate(req.params.id, updateOps, {
         new: true,
         runValidators: true,
       })
