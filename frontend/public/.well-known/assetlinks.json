@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.varlikent.app",
+      "sha256_cert_fingerprints": [
+        "35:B9:4F:D0:9E:F8:F9:67:9B:A0:9F:91:A7:93:CB:A4:2A:56:87:5B:C3:7F:96:A8:B2:FF:B0:43:5B:E6:C1:26"
+      ]
+    }
+  }
+]
