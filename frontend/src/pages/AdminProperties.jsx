@@ -5,6 +5,7 @@ import AdminLayout from '../components/AdminLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { formatPrice } from '../lib/formatPrice'
+import PropertyLocationPicker from '../components/PropertyLocationPicker'
 
 // `agent` is the assigned agent's User id, or '' for Unassigned. There is no
 // agentName field: the name now comes from the selected account, so an admin
@@ -14,6 +15,41 @@ const emptyForm = { title:'', listingType:'Sale', price:'', priceLabel:'', distr
 
 /** The list endpoint returns a raw id; a populated response returns an object. */
 const agentIdOf = (agent) => (agent && typeof agent === 'object' ? agent._id : agent) || ''
+
+/*
+ * Location is held OUTSIDE `form` and as a small state machine rather than a
+ * plain object, because "this property has no location" and "we do not yet
+ * know this property's location" must never be confused.
+ *
+ *   { status: 'none' }              no location — nothing stored, or cleared
+ *   { status: 'set',     value }    a complete, validated coordinate
+ *   { status: 'loading' }           fetching the exact pin for an edit
+ *   { status: 'unknown' }           the fetch FAILED
+ *
+ * The 'unknown' state is the whole reason this is not a plain object. A public
+ * listing payload for an APPROXIMATE property legitimately contains no
+ * coordinates (Wave 9a redacts them), so an admin-location request that fails
+ * would otherwise look exactly like "there is no pin" — and the next save
+ * would quietly erase a location the admin never touched.
+ */
+const LOCATION_NONE = { status: 'none' }
+
+const isValidLat = (v) => Number.isFinite(v) && v >= -90 && v <= 90
+const isValidLng = (v) => Number.isFinite(v) && v >= -180 && v <= 180
+
+/** Normalises an /admin-location response into the state machine above. */
+const locationStateFromApi = (loc) =>
+  loc && isValidLat(loc.lat) && isValidLng(loc.lng)
+    ? {
+        status: 'set',
+        value: {
+          lat: loc.lat,
+          lng: loc.lng,
+          isApproximate: loc.isApproximate === true,
+          approxRadiusKm: Number.isFinite(loc.approxRadiusKm) ? loc.approxRadiusKm : 5,
+        },
+      }
+    : LOCATION_NONE
 
 const AdminProperties = () => {
   const { hasPermission } = useAuth()
@@ -29,6 +65,12 @@ const AdminProperties = () => {
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [agents, setAgents] = useState([])
+  const [location, setLocation] = useState(LOCATION_NONE)
+  // True only once the admin has actually touched the location controls, which
+  // is what lets an untouched edit OMIT `location` and leave the stored pin
+  // exactly as it is (Wave 9a: omitted means preserve).
+  const [locationDirty, setLocationDirty] = useState(false)
+  const [locationDraftError, setLocationDraftError] = useState(false)
 
   const fetchProperties = () => {
     setLoading(true)
@@ -72,9 +114,51 @@ const AdminProperties = () => {
     })
   }
 
-  const openAdd = () => { setEditingId(null); setForm(emptyForm); setImages([]); setFormOpen(true) }
+  const resetLocationState = (next) => {
+    setLocation(next)
+    setLocationDirty(false)
+    setLocationDraftError(false)
+  }
+
+  const openAdd = () => {
+    setEditingId(null)
+    setForm(emptyForm)
+    setImages([])
+    resetLocationState(LOCATION_NONE)
+    setFormOpen(true)
+  }
+
+  /**
+   * Loads the EXACT stored pin for editing.
+   *
+   * The public list object deliberately cannot be used here: for an approximate
+   * listing it carries no coordinates at all. This endpoint is gated on
+   * edit_listing, so an admin holding only add_listing never receives the
+   * private coordinate of an existing property — they simply edit without the
+   * location controls, which is the correct outcome rather than a bug.
+   */
+  const loadAdminLocation = async (propertyId) => {
+    if (!hasPermission('edit_listing')) {
+      resetLocationState({ status: 'unknown' })
+      return
+    }
+
+    resetLocationState({ status: 'loading' })
+
+    try {
+      const r = await api.get(`/properties/${propertyId}/admin-location`)
+      resetLocationState(locationStateFromApi(r.data?.location))
+    } catch {
+      // Deliberately NOT LOCATION_NONE. Treating a failed request as "no
+      // location" is how a stored pin gets silently destroyed on the next save.
+      resetLocationState({ status: 'unknown' })
+      toast.error(p.locationLoadError || 'Could not load the saved location. Location editing is disabled until it loads.')
+    }
+  }
+
   const openEdit = (prop) => {
     setEditingId(prop._id)
+    loadAdminLocation(prop._id)
     setForm({ title: prop.title, listingType: prop.listingType, price: prop.price, priceLabel: prop.priceLabel || '', district: prop.district, address: prop.address, propertyType: prop.propertyType, beds: prop.beds, baths: prop.baths, sqm: prop.sqm, description: prop.description || '', agent: agentIdOf(prop.agent), agentPhone: prop.agentPhone || '', agentEmail: prop.agentEmail || '', whatsappNumber: prop.whatsappNumber || '', featured: prop.featured, status: prop.status })
     setImages(prop.images || [])
     setFormOpen(true)
@@ -114,10 +198,39 @@ const AdminProperties = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    // A half-typed coordinate is a UI mistake, not something to hand to the
+    // server and hope. The backend is still the authority; this is usability.
+    if (locationDraftError) {
+      toast.error(p.locationIncomplete || 'Enter both latitude and longitude, or clear the location.')
+      return
+    }
+
     setSaving(true)
     // '' means Unassigned — sent as an explicit null so an edit that clears
     // the agent actually clears it, rather than being read as "unchanged".
     const payload = { ...form, agent: form.agent || null, price: Number(form.price), beds: Number(form.beds), baths: Number(form.baths), sqm: Number(form.sqm), images, mainImage: images[0] || '' }
+
+    /*
+     * Location is attached deliberately, never spread from form state.
+     *
+     *   untouched            -> omit the key   (backend preserves what is stored)
+     *   deliberately cleared -> location: null (the ONLY clear signal Wave 9a accepts)
+     *   set to a valid pin   -> a normalised object of real Numbers
+     *
+     * `unknown` always omits: if we could not read the stored pin we have no
+     * business rewriting it.
+     */
+    if (locationDirty && location.status === 'set') {
+      payload.location = {
+        lat: Number(location.value.lat),
+        lng: Number(location.value.lng),
+        isApproximate: location.value.isApproximate === true,
+        approxRadiusKm: Number(location.value.approxRadiusKm),
+      }
+    } else if (locationDirty && location.status === 'none') {
+      payload.location = null
+    }
     try {
       if (editingId) {
         await api.put(`/properties/${editingId}`, payload)
@@ -283,6 +396,48 @@ const AdminProperties = () => {
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.whatsapp || 'WhatsApp Number'}</label>
                   <input value={form.whatsappNumber} onChange={e => setForm(prev => ({...prev, whatsappNumber: e.target.value}))} className={inputCls} placeholder="+905301234567" />
                 </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.propertyLocation || 'Property Location'}</label>
+
+                  {location.status === 'loading' && (
+                    <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                      {p.locationLoading || 'Loading saved location…'}
+                    </p>
+                  )}
+
+                  {location.status === 'unknown' && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                      <p className="text-sm font-medium text-amber-800">
+                        {p.locationUnavailable || 'The saved location could not be loaded.'}
+                      </p>
+                      <p className="mt-1 text-xs text-amber-700">
+                        {p.locationUnavailableHint || 'Location editing is disabled so the stored location is not overwritten. Saving now leaves it unchanged.'}
+                      </p>
+                      {editingId && hasPermission('edit_listing') && (
+                        <button
+                          type="button"
+                          onClick={() => loadAdminLocation(editingId)}
+                          className="mt-2 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        >
+                          {p.locationRetry || 'Retry'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {(location.status === 'none' || location.status === 'set') && (
+                    <PropertyLocationPicker
+                      value={location.status === 'set' ? location.value : null}
+                      onChange={(next) => {
+                        setLocationDirty(true)
+                        setLocation(next ? { status: 'set', value: next } : LOCATION_NONE)
+                      }}
+                      onDraftErrorChange={setLocationDraftError}
+                      labels={p}
+                    />
+                  )}
+                </div>
+
                 <div className="flex items-center gap-3">
                   <input type="checkbox" id="featured" checked={form.featured} onChange={e => setForm(prev => ({...prev, featured: e.target.checked}))} className="h-4 w-4 accent-[#4b6741]" />
                   <label htmlFor="featured" className="text-sm font-medium text-slate-700 cursor-pointer">{p.featured || 'Mark as Featured'}</label>
