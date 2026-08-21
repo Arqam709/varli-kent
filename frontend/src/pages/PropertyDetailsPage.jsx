@@ -5,6 +5,8 @@ import api from '../lib/api'
 import { useFavourites } from '../contexts/FavouritesContext'
 import PropertyCard from '../components/PropertyCard'
 import { formatPrice } from '../lib/formatPrice'
+import { useLanguage } from '../contexts/LanguageContext'
+import { SinglePropertyMap, isPubliclyMappable, isApproximateLocation } from '../components/PropertyMapView'
 import useSeo from '../lib/useSeo'
 
 const PropertyDetailsPage = () => {
@@ -13,6 +15,10 @@ const PropertyDetailsPage = () => {
   const [similar, setSimilar] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeImg, setActiveImg] = useState(0)
+  const { t } = useLanguage()
+  // New namespace introduced by Wave 9c; this page had no translated strings
+  // before, so only the location block below reads from it.
+  const pd = t.propertyDetails || {}
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' })
   const [sending, setSending] = useState(false)
   const { isFavourite, toggleFavourite } = useFavourites()
@@ -210,6 +216,40 @@ const PropertyDetailsPage = () => {
                 ))}
               </div>
             </div>
+
+            {/*
+              Location. The order of these two branches is the privacy rule:
+              APPROXIMATE is tested first and wins outright, so a listing whose
+              owner asked to hide the exact spot can never fall through to the
+              map branch — not even if a future API regression attached
+              coordinates to it. Only then is an exact, valid pin considered.
+              A listing with no usable location renders nothing at all rather
+              than an empty 'no location' card.
+            */}
+            {isApproximateLocation(property) ? (
+              <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+                <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-2xl font-semibold text-[#202a36]">
+                  {pd.approximateLocation || 'Approximate Location'}
+                </h2>
+                <p className="mt-4 leading-7 text-slate-600">
+                  {pd.approximateLocationNotice || 'The exact location of this property is kept private. Contact the agent for more information.'}
+                </p>
+                {Number.isFinite(property.location?.approxRadiusKm) &&
+                  property.location.approxRadiusKm >= 1 &&
+                  property.location.approxRadiusKm <= 20 && (
+                  <p className="mt-3 text-sm text-slate-500">
+                    {pd.approximateRadius || 'Approximate radius'}: {property.location.approxRadiusKm} {pd.kilometres || 'km'}
+                  </p>
+                )}
+              </div>
+            ) : isPubliclyMappable(property) ? (
+              <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+                <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-2xl font-semibold text-[#202a36] mb-5">
+                  {pd.location || 'Location'}
+                </h2>
+                <SinglePropertyMap property={property} labels={pd} />
+              </div>
+            ) : null}
           </div>
 
           {/* Sidebar */}

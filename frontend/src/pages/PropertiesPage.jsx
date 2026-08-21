@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../lib/api'
 import PropertyCard from '../components/PropertyCard'
+import PropertyMapView from '../components/PropertyMapView'
 import { useLanguage } from '../contexts/LanguageContext'
 import useSeo from '../lib/useSeo'
 import { C } from '../contexts/ThemeContext'
@@ -58,6 +59,9 @@ const PropertiesPage = () => {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+  // Presentation only, and deliberately NOT in the URL: a shared filter
+  // link should carry the filters, not dictate how the recipient views them.
+  const [viewMode, setViewMode] = useState('grid')
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   const [listingType, setListingType] = useState(searchParams.get('listingType') || '')
@@ -269,6 +273,33 @@ const PropertiesPage = () => {
           <p className="text-xs uppercase tracking-[0.4em] mb-3" style={{ color: C.green }}>{t.propertiesPage?.locationLabel || 'Istanbul Real Estate'}</p>
           <h1 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.8rem, 4vw, 2.6rem)', color: C.marble, marginBottom: '0.5rem' }}>{t.propertiesPage?.heading || 'Properties in Istanbul'}</h1>
           <p className="text-slate-400 text-sm">{total} {total === 1 ? 'property' : 'properties'} {t.propertiesPage?.found || 'found'}</p>
+
+          {/* List stays the default and the accessible representation; the map
+              is an alternate view of the same result set, never a replacement. */}
+          <div
+            className="inline-flex items-center gap-1 rounded-full border p-1"
+            style={{ borderColor: 'var(--vk-border)' }}
+            role="group"
+            aria-label={t.propertiesPage?.viewToggleLabel || 'Choose how to view results'}
+          >
+            {[
+              ['grid', t.propertiesPage?.listView || 'List'],
+              ['map', t.propertiesPage?.mapView || 'Map'],
+            ].map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setViewMode(mode)}
+                aria-pressed={viewMode === mode}
+                className="rounded-full px-4 py-1.5 text-xs font-semibold transition cursor-pointer"
+                style={viewMode === mode
+                  ? { backgroundColor: C.accent, color: '#ffffff' }
+                  : { color: 'var(--vk-text-muted)' }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -303,6 +334,11 @@ const PropertiesPage = () => {
                 <p className="mt-2 text-slate-500">{t.propertiesPage?.noResultsHint || 'Try adjusting your filters.'}</p>
                 <button onClick={clearFilters} className="mt-4 rounded-full bg-[#5E7F52] px-6 py-2.5 text-sm font-semibold text-white cursor-pointer">{t.propertiesPage?.clearFilters || 'Clear Filters'}</button>
               </div>
+            ) : viewMode === 'map' ? (
+              /* The SAME array the grid renders. Filtering happens server-side
+                 in fetchProperties(), so both views see one result set and no
+                 second query or parallel filter logic can drift. */
+              <PropertyMapView properties={properties} labels={t.propertiesPage || {}} />
             ) : (
               <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {properties.map(p => <PropertyCard key={p._id} property={p} />)}
