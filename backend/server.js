@@ -30,6 +30,7 @@ import agentRoutes from './routes/agent.js'
 import propertyConversationRoutes from './routes/propertyConversations.js'
 import activityRoutes from './routes/activity.js'
 import studioPaletteRoutes from './routes/studioPalette.js'
+import propertyAssistantRoutes from './routes/propertyAssistant.js'
 import activityLogger from './middleware/activityLogger.js'
 
 dotenv.config()
@@ -69,6 +70,9 @@ app.use('/api/push', pushRoutes)
 app.use('/api/agent', agentRoutes)
 app.use('/api/activity', activityRoutes)
 app.use('/api/studio-palette', studioPaletteRoutes)
+// Admin-only AI listing assistant. Generates and extracts text; never writes a
+// property — POST/PUT /api/properties remain the only persistence path.
+app.use('/api/admin/property-assistant', propertyAssistantRoutes)
 // Human customer↔agent messaging. Separate from /api/chat (the AI assistant)
 // and from /api/agent (customers and agents share this API).
 app.use('/api/property-conversations', propertyConversationRoutes)
