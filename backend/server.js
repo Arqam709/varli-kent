@@ -25,6 +25,7 @@ import chatConversationRoutes from './routes/chatConversations.js'
 import adminChatRoutes from './routes/adminChats.js'
 import notificationRoutes from './routes/notifications.js'
 import propertyAlertRoutes from './routes/propertyAlerts.js'
+import pushRoutes from './routes/push.js'
 import agentRoutes from './routes/agent.js'
 import propertyConversationRoutes from './routes/propertyConversations.js'
 import activityRoutes from './routes/activity.js'
@@ -64,6 +65,7 @@ app.use('/api/chat/conversations', chatConversationRoutes)
 app.use('/api/admin/chats', adminChatRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/property-alerts', propertyAlertRoutes)
+app.use('/api/push', pushRoutes)
 app.use('/api/agent', agentRoutes)
 app.use('/api/activity', activityRoutes)
 app.use('/api/studio-palette', studioPaletteRoutes)
