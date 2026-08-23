@@ -211,6 +211,208 @@ export const editableLocation = (raw) => {
   }
 }
 
+
+/* ───────────────────── Extended listing detail ─────────────────────
+ *
+ * Validation for the donor-parity fields added in Wave 10B1. Deliberately a
+ * separate parser from parsePropertyLocation above, and deliberately NOT a
+ * rewrite of how the routes handle req.body — the existing spread stays, and
+ * this only inspects the handful of keys it owns.
+ *
+ * Same contract shape as the location parser, so both read alike at the call
+ * site: { ok: true, value } or { ok: false, message }. `value` holds ONLY the
+ * keys the caller actually supplied, so an untouched field is never written.
+ */
+
+const CURRENCIES = ['TL', 'USD', 'EUR', 'GBP']
+
+/**
+ * The one place a currency and its rendered symbol are related.
+ *
+ * `priceLabel` is what formatPrice() actually prints and predates `currency`,
+ * so the two could trivially end up disagreeing ("EUR" stored beside "$").
+ * The mapping below is what lets the route keep them consistent instead.
+ */
+const CURRENCY_TO_SYMBOL = { TL: '₺', USD: '$', EUR: '€', GBP: '£' }
+
+/** Reverse lookup, including the bare "TL" text the old label format allows. */
+const symbolToCurrency = (label) => {
+  const trimmed = String(label ?? '').trim()
+  if (!trimmed) return null
+  if (trimmed.toUpperCase() === 'TL') return 'TL'
+  const match = Object.entries(CURRENCY_TO_SYMBOL).find(([, symbol]) => symbol === trimmed)
+  return match ? match[0] : null
+}
+
+const FLOOR_LOCATIONS = ['Ground floor', 'High Entrance', 'Penthouse', 'Duplex', 'Triplex']
+const KITCHEN_TYPES = ['Open (American)', 'Closed']
+const USAGE_STATUSES = ['Empty', 'Tenant', 'Property Owner']
+const TITLE_DEED_STATUSES = [
+  'Shared Title Deed',
+  'Independent Title Deed',
+  'Land with Title Deed',
+  'Cooperative Share Title Deed',
+  'Established Usufruct Right',
+]
+const TRANSPORT_OPTIONS = ['Metro', 'Metrobus', 'Bus', 'Ferry', 'Train', 'Tram', 'Highway Access']
+
+const EXTENDED_ENUMS = {
+  currency: CURRENCIES,
+  floorLocation: FLOOR_LOCATIONS,
+  kitchenType: KITCHEN_TYPES,
+  usageStatus: USAGE_STATUSES,
+  titleDeedStatus: TITLE_DEED_STATUSES,
+}
+
+// [field, minimum]. `coefficient` has no minimum because the donor documents no
+// business meaning for it, and inventing a bound would be inventing a rule.
+const EXTENDED_NUMBERS = [['netSqm', 0], ['openAreaSqm', 0], ['coefficient', null]]
+
+const EXTENDED_BOOLEANS = [
+  'sauna', 'jacuzzi', 'steamRoom', 'turkishBath', 'basement',
+  'withinSite', 'eligibleForCredit', 'exchange', 'hasVirtualTour',
+]
+
+/**
+ * Hosts a virtual-tour link may point at.
+ *
+ * An allowlist rather than "any https URL" because this value is admin-entered
+ * and will eventually be rendered as a link. The donor stored it with no
+ * validation at all and never displayed it, which is exactly how an unchecked
+ * field survives until the day someone does display it.
+ *
+ * Subdomains are matched by suffix so my.matterport.com passes for
+ * matterport.com, while a lookalike like matterport.com.evil.test does not.
+ */
+const VIRTUAL_TOUR_HOSTS = ['matterport.com', 'kuula.co', 'youtube.com', 'youtu.be', 'vimeo.com']
+
+const isAllowedTourHost = (hostname) =>
+  VIRTUAL_TOUR_HOSTS.some((host) => hostname === host || hostname.endsWith('.' + host))
+
+/**
+ * Numbers may arrive as real numbers or as the numeric strings an HTML number
+ * input produces. Nothing else converts: `false`, `null`, `[]` and `{}` are all
+ * Number()-coercible to 0 or NaN, and letting any of them through would store a
+ * silent zero where the admin supplied nothing meaningful.
+ */
+const readExtendedNumber = (value) => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? { value } : { error: 'must be a finite number' }
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return { skip: true }
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? { value: parsed } : { error: 'must be a number' }
+  }
+  return { error: 'must be a number' }
+}
+
+/**
+ * Validates and normalises the extended fields present in a request body.
+ *
+ * ── Absence is never a value ────────────────────────────────────────────
+ * A key the caller did not send is not in the result, so an update that only
+ * changes the title cannot disturb an amenity. An empty string is treated the
+ * same as absence, because that is what a cleared optional form input sends.
+ */
+export const parseExtendedPropertyFields = (body) => {
+  if (!body || typeof body !== 'object') return { ok: true, value: {} }
+
+  const out = {}
+  const has = (key) => Object.prototype.hasOwnProperty.call(body, key)
+  const fail = (message) => ({ ok: false, message })
+
+  for (const [field, min] of EXTENDED_NUMBERS) {
+    if (!has(field) || body[field] === null) continue
+    const read = readExtendedNumber(body[field])
+    if (read.skip) continue
+    if (read.error) return fail(`${field} ${read.error}.`)
+    if (min !== null && read.value < min) return fail(`${field} must be ${min} or greater.`)
+    out[field] = read.value
+  }
+
+  for (const field of EXTENDED_BOOLEANS) {
+    if (!has(field) || body[field] === null) continue
+    // Strict. 'true' and 1 are refused so that an unknown amenity can never be
+    // coerced into a confident claim about a property.
+    if (typeof body[field] !== 'boolean') return fail(`${field} must be true or false.`)
+    out[field] = body[field]
+  }
+
+  for (const [field, allowed] of Object.entries(EXTENDED_ENUMS)) {
+    if (!has(field) || body[field] === null || body[field] === '') continue
+    if (typeof body[field] !== 'string' || !allowed.includes(body[field])) {
+      return fail(`${field} must be one of: ${allowed.join(', ')}.`)
+    }
+    out[field] = body[field]
+  }
+
+  if (has('nearbyTransport') && body.nearbyTransport !== null) {
+    const raw = body.nearbyTransport
+    if (!Array.isArray(raw)) return fail('nearbyTransport must be an array.')
+    if (raw.length > TRANSPORT_OPTIONS.length) {
+      return fail(`nearbyTransport may contain at most ${TRANSPORT_OPTIONS.length} entries.`)
+    }
+    for (const entry of raw) {
+      if (typeof entry !== 'string' || !TRANSPORT_OPTIONS.includes(entry)) {
+        return fail(`nearbyTransport may only contain: ${TRANSPORT_OPTIONS.join(', ')}.`)
+      }
+    }
+    // Deduped rather than rejected: a repeated checkbox value is a client
+    // mistake with one obvious correct reading.
+    out.nearbyTransport = [...new Set(raw)]
+  }
+
+  if (has('virtualTourUrl') && body.virtualTourUrl !== null && body.virtualTourUrl !== '') {
+    const raw = body.virtualTourUrl
+    if (typeof raw !== 'string') return fail('virtualTourUrl must be text.')
+
+    let parsedUrl
+    try {
+      parsedUrl = new URL(raw.trim())
+    } catch {
+      return fail('virtualTourUrl must be a valid URL.')
+    }
+    // https only — this rejects javascript:, data: and plain http in one test.
+    if (parsedUrl.protocol !== 'https:') return fail('virtualTourUrl must use https.')
+    if (!isAllowedTourHost(parsedUrl.hostname.toLowerCase())) {
+      return fail(`virtualTourUrl host is not allowed. Allowed: ${VIRTUAL_TOUR_HOSTS.join(', ')}.`)
+    }
+    out.virtualTourUrl = parsedUrl.toString()
+  }
+
+  /* ── currency ↔ priceLabel ──────────────────────────────────────────
+   *
+   * Four cases, chosen so neither field can silently misrepresent the other:
+   *
+   *   currency only        -> priceLabel derived from it
+   *   priceLabel only      -> currency derived, when the label maps cleanly
+   *   both, in agreement   -> left alone
+   *   both, contradictory  -> 400
+   *
+   * A priceLabel that maps to no currency (a custom string like "Price on
+   * request", which formatPrice passes through verbatim) is deliberately left
+   * untouched and does not derive or contradict anything — overwriting it with
+   * a symbol would destroy a value the admin chose on purpose.
+   */
+  const currencyGiven = has('currency') && out.currency
+  const labelGiven = has('priceLabel') && typeof body.priceLabel === 'string' && body.priceLabel.trim()
+  const labelCurrency = labelGiven ? symbolToCurrency(body.priceLabel) : null
+
+  if (currencyGiven && labelGiven) {
+    if (labelCurrency && labelCurrency !== out.currency) {
+      return fail(`priceLabel "${body.priceLabel.trim()}" does not match currency ${out.currency}.`)
+    }
+  } else if (currencyGiven) {
+    out.priceLabel = CURRENCY_TO_SYMBOL[out.currency]
+  } else if (labelCurrency) {
+    out.currency = labelCurrency
+  }
+
+  return { ok: true, value: out }
+}
+
 /**
  * Builds the write payload with every agent-related field decided by the
  * server rather than the browser.
@@ -430,6 +632,13 @@ router.post(
         return res.status(400).json({ success: false, message: parsedLocation.message })
       }
 
+      // Same reasoning as the location check above: reject a bad detail field
+      // before spending an agent lookup or an embedding call on it.
+      const parsedExtended = parseExtendedPropertyFields(req.body)
+      if (!parsedExtended.ok) {
+        return res.status(400).json({ success: false, message: parsedExtended.message })
+      }
+
       // Validate the agent BEFORE any other work, so a bad assignment costs
       // nothing and never reaches the database. No existing property on
       // create, so there is no previous agent whose details could go stale.
@@ -443,6 +652,9 @@ router.post(
       } else {
         delete propertyData.location
       }
+
+      // Normalised values win over whatever the body spread carried through.
+      Object.assign(propertyData, parsedExtended.value)
 
       try {
         const embeddingResult = await generatePropertyEmbedding(req.body)
@@ -475,6 +687,13 @@ router.put(
       const parsedLocation = parsePropertyLocation(req.body?.location)
       if (!parsedLocation.ok) {
         return res.status(400).json({ success: false, message: parsedLocation.message })
+      }
+
+      // Same reasoning as the location check above: reject a bad detail field
+      // before spending an agent lookup or an embedding call on it.
+      const parsedExtended = parseExtendedPropertyFields(req.body)
+      if (!parsedExtended.ok) {
+        return res.status(400).json({ success: false, message: parsedExtended.message })
       }
 
       const existingProperty = await Property.findById(req.params.id)
@@ -514,6 +733,10 @@ router.put(
       //   object      -> $set the normalised value
       delete updateData.location
       const clearLocation = parsedLocation.value === null
+
+      // Only the keys the caller actually sent; an omitted amenity is left
+      // exactly as stored rather than being reset to a default.
+      Object.assign(updateData, parsedExtended.value)
       if (parsedLocation.value) updateData.location = parsedLocation.value
 
       const updateOps = {}

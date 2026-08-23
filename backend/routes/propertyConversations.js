@@ -33,6 +33,7 @@ import {
   PROPERTY_SUMMARY_FIELDS,
 } from '../services/propertyMessaging.js'
 import { emitNewPropertyMessage } from '../services/propertyMessagingRealtime.js'
+import { sendNewMessagePush } from '../services/messagePush.js'
 
 const router = express.Router()
 
@@ -454,6 +455,34 @@ router.post('/:id/messages', async (req, res, next) => {
       currentAgentId,
       message,
     })
+
+    /*
+     * The second delivery channel, for a recipient whose app is not open.
+     *
+     * Placed here for exactly the reasons the socket emit is: both writes have
+     * committed, the recipient is known, and every rejecting path above has
+     * already returned — so a message that was refused notifies nobody.
+     *
+     * NOT awaited. Expo is a third party on the far side of the internet, and
+     * the agent pressing Send should not wait on it to learn their message was
+     * stored. The promise is still terminated with .catch() rather than left
+     * floating: sendNewMessagePush already swallows its own failures, and this
+     * makes an unhandled rejection impossible rather than merely unlikely —
+     * the same standard req.app?.get uses two lines above.
+     *
+     * `req.user.name` costs no query: `protect` already loaded the full user
+     * for this request, and the sender IS the person whose name the title
+     * shows.
+     */
+    sendNewMessagePush({
+      senderSide: side,
+      senderName: req.user?.name,
+      customerId: conversation.customer,
+      currentAgentId,
+      conversationId: conversation._id,
+      propertyId: conversation.property,
+      message,
+    }).catch(() => {})
 
     res.status(201).json({ success: true, message: messageResponse(message) })
   } catch (err) {

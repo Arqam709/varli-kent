@@ -42,6 +42,11 @@ const propertySchema = new mongoose.Schema({
   beds: { type: Number, required: true },
   baths: { type: Number, required: true },
   sqm: { type: Number, required: true },
+  // ── Donor-parity size fields ──────────────────────────────────────────
+  // Optional. Range-checked in routes/properties.js rather than here, matching
+  // how `location` is handled: one authority for what a valid value is.
+  netSqm: { type: Number },
+  openAreaSqm: { type: Number },
   rooms: { type: String },
   floor: { type: Number },
   totalFloors: { type: Number },
@@ -53,6 +58,80 @@ const propertySchema = new mongoose.Schema({
   elevator: { type: Boolean, default: false },
   pool: { type: Boolean, default: false },
   garden: { type: Boolean, default: false },
+
+  /* ─────────────────── Donor-parity listing detail ───────────────────
+   *
+   * Every field below is OPTIONAL and, with the single deliberate exception
+   * of `currency`, carries NO default.
+   *
+   * ── Why the new booleans must not default to false ──────────────────
+   * A default would rewrite history. Every property already in the database
+   * predates these fields, so defaulting `sauna` to false would silently
+   * assert "this listing has no sauna" about listings whose sauna state
+   * nobody has ever recorded. Absent must stay absent, so that "unknown" and
+   * "explicitly does not have it" remain different facts — the same
+   * distinction routes/propertyAssistant.js already relies on when it refuses
+   * to turn an unmentioned amenity into `false`.
+   *
+   * The five older booleans (furnished, balcony, elevator, pool, garden) keep
+   * their existing `default: false`; changing them would be a data migration
+   * dressed up as a schema edit.
+   */
+
+  // Layout / specification
+  floorLocation: {
+    type: String,
+    enum: ['Ground floor', 'High Entrance', 'Penthouse', 'Duplex', 'Triplex'],
+  },
+  kitchenType: { type: String, enum: ['Open (American)', 'Closed'] },
+  usageStatus: { type: String, enum: ['Empty', 'Tenant', 'Property Owner'] },
+  titleDeedStatus: {
+    type: String,
+    // The donor left this an unconstrained String even though its admin form
+    // offered a fixed list. Enforced here, because an unrecognised deed status
+    // is unusable to every reader and impossible to filter on later.
+    enum: [
+      'Shared Title Deed',
+      'Independent Title Deed',
+      'Land with Title Deed',
+      'Cooperative Share Title Deed',
+      'Established Usufruct Right',
+    ],
+  },
+
+  // Pricing metadata. `currency` is the one new field with a default, because
+  // it describes how an amount is denominated rather than claiming a feature.
+  // `priceLabel` remains what formatPrice() actually renders; the route layer
+  // keeps the two from contradicting each other.
+  currency: { type: String, enum: ['TL', 'USD', 'EUR', 'GBP'], default: 'USD' },
+
+  // Donor-compatible numeric metadata. The donor documents no business meaning
+  // and no bounds for this, so nothing is invented here beyond "must be a
+  // finite number" — it is preserved for parity, not interpreted.
+  coefficient: { type: Number },
+
+  // Amenities — see the no-default note above.
+  sauna: { type: Boolean },
+  jacuzzi: { type: Boolean },
+  steamRoom: { type: Boolean },
+  turkishBath: { type: Boolean },
+  basement: { type: Boolean },
+  withinSite: { type: Boolean },
+  eligibleForCredit: { type: Boolean },
+  exchange: { type: Boolean },
+
+  // `default: undefined` keeps Mongoose from materialising an empty array on
+  // every legacy property, so "no transport recorded" stays distinguishable
+  // from "recorded as none nearby".
+  nearbyTransport: {
+    type: [{ type: String, enum: ['Metro', 'Metrobus', 'Bus', 'Ferry', 'Train', 'Tram', 'Highway Access'] }],
+    default: undefined,
+  },
+
+  // Virtual tour. The URL is validated in the route (https + host allowlist)
+  // and is only ever stored — nothing in this project embeds it.
+  hasVirtualTour: { type: Boolean },
+  virtualTourUrl: { type: String },
   description: { type: String },
   images: [{ type: String }],
   mainImage: { type: String },
