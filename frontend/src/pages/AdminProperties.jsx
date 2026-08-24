@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { formatPrice } from '../lib/formatPrice'
 import PropertyLocationPicker from '../components/PropertyLocationPicker'
+import AdminPropertyAssistant from '../components/AdminPropertyAssistant'
 
 // `agent` is the assigned agent's User id, or '' for Unassigned. There is no
 // agentName field: the name now comes from the selected account, so an admin
@@ -269,7 +270,7 @@ const locationStateFromApi = (loc) =>
     : LOCATION_NONE
 
 const AdminProperties = () => {
-  const { hasPermission } = useAuth()
+  const { user, hasPermission } = useAuth()
   const { t } = useLanguage()
   const p = t.adminPages?.properties || {}
   const c = t.adminPages?.common || {}
@@ -357,6 +358,57 @@ const AdminProperties = () => {
       if (current !== '' && !symbolToCurrency(current)) return prev
       return { ...prev, priceLabel: CURRENCY_TO_SYMBOL[nextCurrency] }
     })
+  }
+
+  const CORE_AI_FIELDS = new Set([
+    'title', 'description', 'price', 'listingType', 'propertyType',
+    'district', 'address', 'beds', 'baths', 'sqm',
+  ])
+  const DETAIL_AI_NUMBERS = new Set(['netSqm', 'openAreaSqm', 'floor', 'totalFloors'])
+  const DETAIL_AI_ENUMS = new Set([
+    'rooms', 'floorLocation', 'buildingAge', 'heating', 'kitchenType',
+    'parking', 'usageStatus', 'titleDeedStatus',
+  ])
+
+  const applyParsedFields = (selected) => {
+    const core = {}
+    const detailValues = {}
+    let nextCurrency
+    let nextTransport
+
+    for (const [field, value] of Object.entries(selected)) {
+      if (CORE_AI_FIELDS.has(field)) {
+        core[field] = ['price', 'beds', 'baths', 'sqm'].includes(field) ? String(value) : value
+      } else if (DETAIL_AI_NUMBERS.has(field)) {
+        detailValues[field] = String(value)
+      } else if (DETAIL_AI_ENUMS.has(field)) {
+        detailValues[field] = value
+      } else if (CLASSIC_BOOLEANS.includes(field) && typeof value === 'boolean') {
+        detailValues[field] = value
+      } else if (TRISTATE_BOOLEANS.includes(field) && typeof value === 'boolean') {
+        detailValues[field] = value ? 'true' : 'false'
+      } else if (field === 'currency' && CURRENCIES.includes(value)) {
+        nextCurrency = value
+      } else if (field === 'nearbyTransport' && Array.isArray(value)) {
+        nextTransport = value.filter((option) => TRANSPORT_OPTIONS.includes(option))
+      }
+    }
+
+    if (Object.keys(core).length) setForm(prev => ({ ...prev, ...core }))
+    if (Object.keys(detailValues).length) setDetails(prev => ({ ...prev, ...detailValues }))
+    if (nextCurrency) handleCurrencyChange(nextCurrency)
+    if (nextTransport) {
+      setDetails(prev => ({ ...prev, nearbyTransport: [...new Set(nextTransport)] }))
+      setTransportTouched(true)
+    }
+  }
+
+  const applySuggestedCopy = (copy) => {
+    setForm(prev => ({
+      ...prev,
+      ...(typeof copy.title === 'string' ? { title: copy.title } : {}),
+      ...(typeof copy.description === 'string' ? { description: copy.description } : {}),
+    }))
   }
 
   const toggleTransport = (option) => {
@@ -608,6 +660,36 @@ const AdminProperties = () => {
     </div>
   )
 
+  const copyContext = {
+    district: form.district,
+    address: form.address,
+    propertyType: form.propertyType,
+    listingType: form.listingType,
+    beds: form.beds,
+    baths: form.baths,
+    sqm: form.sqm,
+    netSqm: details.netSqm,
+    openAreaSqm: details.openAreaSqm,
+    rooms: details.rooms,
+    floor: details.floor,
+    floorLocation: details.floorLocation,
+    totalFloors: details.totalFloors,
+    buildingAge: details.buildingAge,
+    heating: details.heating,
+    kitchenType: details.kitchenType,
+    parking: details.parking,
+    nearbyTransport: details.nearbyTransport,
+    usageStatus: details.usageStatus,
+    titleDeedStatus: details.titleDeedStatus,
+    ...Object.fromEntries(CLASSIC_BOOLEANS.map(field => [field, details[field] === true])),
+    ...Object.fromEntries(TRISTATE_BOOLEANS.flatMap(field =>
+      details[field] === '' ? [] : [[field, details[field] === 'true']]
+    )),
+  }
+  const canUseAssistant = user?.role === 'owner' || (
+    user?.role === 'admin' && (hasPermission('add_listing') || hasPermission('edit_listing'))
+  )
+
   const checkboxField = (field) => (
     <label key={field} htmlFor={`detail-${field}`} className="flex items-center gap-2 cursor-pointer">
       <input
@@ -643,6 +725,14 @@ const AdminProperties = () => {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-5">
+              {canUseAssistant && (
+                <AdminPropertyAssistant
+                  form={form}
+                  copyContext={copyContext}
+                  onApplyParsedFields={applyParsedFields}
+                  onApplyCopy={applySuggestedCopy}
+                />
+              )}
               <div className="grid gap-5 md:grid-cols-2">
                 <div className="md:col-span-2">
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.titleLabel || 'Title'}</label>

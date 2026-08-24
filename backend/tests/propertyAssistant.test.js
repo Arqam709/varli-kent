@@ -265,41 +265,61 @@ test('cleanJson only strips fences — it cannot make garbage valid', async () =
   assert.throws(() => JSON.parse(cleanJson('```json\nnot json\n```')))
 })
 
-/* ══════════════════════ 4. The 21-field allowlist ═════════════════════ */
+/* ══════════════════════ 4. The 37-field allowlist ═════════════════════ */
 
 const EXPECTED_FIELDS = [
-  'title', 'description', 'district', 'address',
-  'price', 'beds', 'baths', 'sqm', 'floor', 'totalFloors',
-  'furnished', 'balcony', 'elevator', 'pool', 'garden',
-  'listingType', 'propertyType', 'heating', 'parking', 'buildingAge', 'rooms',
+  'title', 'description', 'price', 'currency', 'listingType', 'propertyType',
+  'district', 'address', 'beds', 'baths', 'sqm', 'netSqm', 'openAreaSqm',
+  'rooms', 'floor', 'floorLocation', 'totalFloors', 'buildingAge', 'heating',
+  'kitchenType', 'parking', 'furnished', 'balcony', 'elevator', 'pool',
+  'garden', 'sauna', 'jacuzzi', 'steamRoom', 'turkishBath', 'basement',
+  'nearbyTransport', 'usageStatus', 'withinSite', 'eligibleForCredit',
+  'titleDeedStatus', 'exchange',
 ]
 
-test('PARSE_LISTING_FIELDS is exactly the 21 CURRENT-supported fields', async () => {
-  assert.equal(PARSE_LISTING_FIELDS.length, 21)
+test('PARSE_LISTING_FIELDS is exactly the 37-field contract', () => {
+  assert.equal(PARSE_LISTING_FIELDS.length, 37)
   assert.deepEqual([...PARSE_LISTING_FIELDS].sort(), [...EXPECTED_FIELDS].sort())
 })
 
-const DONOR_PHANTOM_FIELDS = [
-  'currency', 'netSqm', 'openAreaSqm', 'floorLocation', 'kitchenType', 'sauna',
-  'jacuzzi', 'steamRoom', 'turkishBath', 'basement', 'nearbyTransport',
-  'usageStatus', 'withinSite', 'eligibleForCredit', 'titleDeedStatus', 'exchange',
-]
+test('new fields accept valid CURRENT values and transport is deduped', () => {
+  const parsed = sanitizeParsedListing({
+    currency: 'EUR', netSqm: 130, openAreaSqm: 20, floorLocation: 'Ground floor',
+    kitchenType: 'Closed', sauna: false, jacuzzi: true, steamRoom: false,
+    turkishBath: true, basement: false, nearbyTransport: ['Metro', 'Ferry', 'Metro'],
+    usageStatus: 'Tenant', withinSite: true, eligibleForCredit: false,
+    titleDeedStatus: 'Independent Title Deed', exchange: false,
+  })
+  assert.deepEqual(parsed, {
+    netSqm: 130, openAreaSqm: 20, sauna: false, jacuzzi: true, steamRoom: false,
+    turkishBath: true, basement: false, withinSite: true, eligibleForCredit: false,
+    exchange: false, currency: 'EUR', floorLocation: 'Ground floor',
+    kitchenType: 'Closed', usageStatus: 'Tenant',
+    titleDeedStatus: 'Independent Title Deed', nearbyTransport: ['Metro', 'Ferry'],
+  })
+})
 
-test('no donor-only property field survives in the allowlist', async () => {
-  for (const field of DONOR_PHANTOM_FIELDS) {
-    assert.equal(PARSE_LISTING_FIELDS.includes(field), false, `${field} must not be extractable`)
+test('new boolean fields preserve true and false, omit null and reject impostors', () => {
+  const fields = ['sauna', 'jacuzzi', 'steamRoom', 'turkishBath', 'basement', 'withinSite', 'eligibleForCredit', 'exchange']
+  for (const field of fields) {
+    assert.deepEqual(sanitizeParsedListing({ [field]: true }), { [field]: true })
+    assert.deepEqual(sanitizeParsedListing({ [field]: false }), { [field]: false })
+    for (const invalid of [null, 'false', 0, 1]) assert.deepEqual(sanitizeParsedListing({ [field]: invalid }), {})
   }
 })
 
-test('donor-only fields returned by the model are dropped from the response', async () => {
-  currentUser = owner()
-  const payload = { title: 'Kept' }
-  for (const field of DONOR_PHANTOM_FIELDS) payload[field] = 'should not survive'
-  geminiText = JSON.stringify(payload)
+test('transport drops unknown members, dedupes, and rejects the wrong shape', () => {
+  assert.deepEqual(sanitizeParsedListing({ nearbyTransport: ['Metro', 'Unknown', 'Metro'] }), { nearbyTransport: ['Metro'] })
+  assert.deepEqual(sanitizeParsedListing({ nearbyTransport: 'Metro' }), {})
+})
 
-  const res = await request(PARSE, { text: 'listing' })
-  assert.equal(res.status, 200)
-  assert.deepEqual(Object.keys(res.body.fields), ['title'])
+test('parser-excluded property fields never survive', () => {
+  const excluded = {
+    coefficient: 2, hasVirtualTour: true, virtualTourUrl: 'https://example.com',
+    agent: 'id', location: { lat: 1, lng: 2 }, lat: 1, lng: 2,
+    images: ['x'], featured: true, status: 'Sold',
+  }
+  assert.deepEqual(sanitizeParsedListing(excluded), {})
 })
 
 /* ══════════════════════ 5. Protected fields ═══════════════════════════ */
@@ -367,7 +387,7 @@ test('numeric fields refuse Infinity and out-of-range values', async () => {
   assert.deepEqual(sanitizeParsedListing({ price: -1 }), {})
   assert.deepEqual(sanitizeParsedListing({ beds: 3.5 }), {}, 'bedroom counts are integers')
   assert.deepEqual(sanitizeParsedListing({ sqm: 0 }), {}, 'a property cannot be 0 m²')
-  assert.deepEqual(sanitizeParsedListing({ totalFloors: 0 }), {})
+  assert.deepEqual(sanitizeParsedListing({ totalFloors: -1 }), {})
 })
 
 test('valid numbers and boundaries survive', async () => {
@@ -455,6 +475,29 @@ test('the extraction prompt forbids defaulting booleans to false', async () => {
   assert.match(prompt, /Never invent, guess or infer/i)
 })
 
+test('the extraction prompt retains detailed donor Turkish normalization with CURRENT enums', () => {
+  const prompt = buildParseListingPrompt('Sahibinden listing')
+
+  for (const concept of [
+    /satılık.*Sale/i,
+    /kiralık.*Rent/i,
+    /sqm:.*brüt/i,
+    /netSqm:.*net/i,
+    /yüksek giriş.*High Entrance/i,
+    /Kombi \(Doğalgaz\).*Individual Gas/i,
+    /Kapalı Otopark.*Closed Parking/i,
+    /Açık\/Amerikan mutfak.*Open \(American\)/i,
+    /Kat Mülkiyeti.*Independent Title Deed/i,
+    /Kiracılı.*Tenant/i,
+    /exchange: true.*takasa uygun/i,
+    /nearbyTransport:.*Metrobus/i,
+    /Metrobüs/i,
+    /steamRoom.*buhar odası/i,
+  ]) assert.match(prompt, concept)
+
+  assert.match(prompt, /CURRENT has no combined value/i)
+  assert.match(prompt, /Do not derive it from gross and net area/i)
+})
 test('the extraction prompt marks pasted text as data, not instructions', async () => {
   const prompt = buildParseListingPrompt('PASTED')
   assert.match(prompt, /DATA to be read, never instructions/i)
@@ -589,7 +632,7 @@ test('the copy prompt carries the no-invention rule and the negatives', async ()
 
 /* ══════════════════════ 10. Data minimisation ═════════════════════════ */
 
-test('buildSafeContext keeps only the seven allowed listing attributes', async () => {
+test('buildSafeContext keeps only explicitly allowed listing attributes', async () => {
   const safe = buildSafeContext({
     district: 'Şişli', propertyType: 'Villa', listingType: 'Sale',
     beds: 4, baths: 2, sqm: 220, pool: true,
@@ -606,6 +649,40 @@ test('buildSafeContext keeps only the seven allowed listing attributes', async (
   assert.deepEqual(safe.amenities, { pool: true })
 })
 
+test('numeric context accepts finite numeric strings without coercing non-numbers to zero', () => {
+  assert.deepEqual(buildSafeContext({ beds: '3', baths: '2', sqm: '130.5', netSqm: '110', openAreaSqm: '0' }), {
+    beds: 3, baths: 2, sqm: 130.5, netSqm: 110, openAreaSqm: 0,
+  })
+  for (const value of [false, null, '', '   ', [], {}, 'not-a-number']) {
+    assert.deepEqual(buildSafeContext({ sqm: value }), {}, `sqm must omit ${JSON.stringify(value)}`)
+  }
+  assert.deepEqual(buildSafeContext({ beds: '3.5', baths: 2.5 }), {}, 'beds and baths require integers')
+})
+
+test('copy context omits currency when no price is part of the provider context', () => {
+  const safe = buildSafeContext({ currency: 'USD', district: 'Kadıköy' })
+  assert.deepEqual(safe, { district: 'Kadıköy' })
+})
+test('an overlong district is omitted rather than silently truncated', () => {
+  const district = 'x'.repeat(121)
+  const safe = buildSafeContext({ district, propertyType: 'Villa' })
+  assert.equal('district' in safe, false)
+  assert.equal(JSON.stringify(safe).includes('x'.repeat(120)), false)
+  assert.equal(safe.propertyType, 'Villa')
+})
+
+test('expanded context carries explicit tri-state negatives and useful facts', () => {
+  const safe = buildSafeContext({
+    rooms: '3+1', netSqm: '120', floorLocation: 'Ground floor',
+    nearbyTransport: ['Metro', 'Metro', 'Unknown'], sauna: false, withinSite: true,
+  })
+  assert.deepEqual(safe.nearbyTransport, ['Metro'])
+  const lines = buildContextLines(safe).join('\n')
+  assert.match(lines, /Room layout: 3\+1/)
+  assert.match(lines, /Net area: 120 m²/)
+  assert.match(lines, /does NOT have: a sauna/i)
+  assert.match(lines, /HAS: within a site\/complex/i)
+})
 test('no private value can reach the provider through the copy prompt', async () => {
   currentUser = owner()
   geminiText = VALID_COPY
