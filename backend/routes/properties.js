@@ -5,6 +5,7 @@ import { requireRole, requirePermission } from '../middleware/checkPermission.js
 import { generatePropertyEmbedding, embeddingSourceFieldsChanged } from '../services/propertyEmbeddingService.js'
 import { resolveAgentContact, publicAgent, AGENT_POPULATE_FIELDS } from '../services/agentAssignment.js'
 import { handlePropertyAgentReassignment } from '../services/propertyMessaging.js'
+import { sendNewPropertyPush } from '../services/propertyPush.js'
 // Not called directly — importing it registers the 'User' model with Mongoose,
 // which populate('agent') below depends on.
 import '../models/User.js'
@@ -698,6 +699,36 @@ router.post(
       }
 
       const property = await Property.create(propertyData)
+
+      /*
+       * Announce it — and only now.
+       *
+       * Every rejecting path above (bad location, bad detail field, bad agent)
+       * has already returned, and Property.create has resolved, so nothing can
+       * notify anyone about a listing the database did not accept.
+       *
+       * There is no draft/publish concept in this schema: `status` is a
+       * lifecycle value (Available / Sold / Rented / Pending) and the public
+       * listing query applies no status filter at all. A created property is
+       * therefore immediately visible and openable, which makes successful
+       * creation the correct boundary for "a customer can actually see this".
+       *
+       * NOT awaited. Expo is a third party on the far side of the internet and
+       * the admin pressing Create should not wait on it to learn their listing
+       * was saved. The promise is still terminated with .catch() rather than
+       * left floating: sendNewPropertyPush already contains its own failures,
+       * and this makes an unhandled rejection impossible rather than unlikely.
+       *
+       * The creator is excluded explicitly — they are looking at the form that
+       * created it, and `req.user._id` costs nothing here. Staff accounts are
+       * filtered inside the service; this covers the creator even in the
+       * unlikely case their role changes mid-session.
+       */
+      sendNewPropertyPush({
+        property,
+        excludeUserIds: [req.user?._id].filter(Boolean),
+      }).catch(() => {})
+
       res.status(201).json({ success: true, property })
     } catch (err) {
       next(err)
