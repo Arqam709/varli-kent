@@ -76,7 +76,7 @@ mock.module('../services/propertyMessaging.js', {
   namedExports: { handlePropertyAgentReassignment: async () => {} },
 })
 
-const { default: propertyRoutes, parseExtendedPropertyFields } = await import('../routes/properties.js')
+const { default: propertyRoutes, parseExtendedPropertyFields, EXTENDED_OWNED_FIELDS } = await import('../routes/properties.js')
 
 let server
 let baseUrl
@@ -570,5 +570,226 @@ test('the route imports no chatbot or embedding-mutating module for these fields
   const imported = [...src.matchAll(/^import[^\n]*?from\s+'([^']+)'/gm)].map((m) => m[1])
   for (const forbidden of ['chatFilters', 'chatMessageParsing', 'geminiPropertyParser', 'chatParsingVocabulary']) {
     assert.equal(imported.some((s) => s.includes(forbidden)), false, `must not import ${forbidden}`)
+  }
+})
+
+/* ══════════════ 11. The parser OWNS the 19 fields ════════════════════ */
+//
+// These assert the actual database payload, not the parser return value. The
+// gap between the two is where a skipped value could survive: the routes build
+// their payload from req.body, so a raw '' or null reaches the write unless it
+// is stripped. Testing parseExtendedPropertyFields alone would miss it entirely.
+
+const SKIPPED_INPUTS = [
+  ['empty numeric string', { netSqm: '' }, 'netSqm'],
+  ['whitespace numeric string', { coefficient: '   ' }, 'coefficient'],
+  ['empty currency', { currency: '' }, 'currency'],
+  ['empty kitchenType', { kitchenType: '' }, 'kitchenType'],
+  ['empty usageStatus', { usageStatus: '' }, 'usageStatus'],
+  ['empty titleDeedStatus', { titleDeedStatus: '' }, 'titleDeedStatus'],
+  ['empty floorLocation', { floorLocation: '' }, 'floorLocation'],
+  ['null boolean', { sauna: null }, 'sauna'],
+  ['null transport', { nearbyTransport: null }, 'nearbyTransport'],
+  ['empty virtualTourUrl', { virtualTourUrl: '' }, 'virtualTourUrl'],
+  ['null virtualTourUrl', { virtualTourUrl: null }, 'virtualTourUrl'],
+  ['null numeric', { openAreaSqm: null }, 'openAreaSqm'],
+]
+
+for (const [label, patch, field] of SKIPPED_INPUTS) {
+  test(`create: ${label} never reaches the write payload`, async () => {
+    currentUser = owner()
+    const res = await request('POST', '/api/properties', { ...BASE, ...patch })
+    assert.equal(res.status, 201)
+    assert.equal(field in created(), false,
+      `${field} was skipped by the parser and must not survive from req.body`)
+  })
+
+  test(`update: ${label} is a true no-op`, async () => {
+    currentUser = owner()
+    db.findByIdResult = { _id: 'p1', ...BASE, agent: null }
+    db.updateResult = { _id: 'p1', ...BASE }
+
+    const res = await request('PUT', '/api/properties/p1', patch)
+    assert.equal(res.status, 200)
+    assert.equal(field in updateSet(), false,
+      `${field} must not be written, so the stored value is preserved`)
+  })
+}
+
+test('update: an empty numeric string preserves the stored value', async () => {
+  currentUser = owner()
+  // The property already has netSqm: 100. Blanking the input is a no-op for
+  // this wave; explicit clearing is deliberately deferred to 10B2.
+  db.findByIdResult = { _id: 'p1', ...BASE, netSqm: 100, agent: null }
+  db.updateResult = { _id: 'p1', ...BASE, netSqm: 100 }
+
+  const res = await request('PUT', '/api/properties/p1', { netSqm: '' })
+  assert.equal(res.status, 200)
+  const set = updateSet()
+  assert.equal('netSqm' in set, false, 'the stored 100 must survive untouched')
+})
+
+test('a whole body of skipped values writes none of the 19', async () => {
+  currentUser = owner()
+  const res = await request('POST', '/api/properties', {
+    ...BASE,
+    netSqm: '', openAreaSqm: null, coefficient: '   ',
+    currency: '', floorLocation: '', kitchenType: '', usageStatus: '', titleDeedStatus: '',
+    sauna: null, jacuzzi: null, steamRoom: null, turkishBath: null, basement: null,
+    withinSite: null, eligibleForCredit: null, exchange: null, hasVirtualTour: null,
+    nearbyTransport: null, virtualTourUrl: '',
+  })
+
+  assert.equal(res.status, 201)
+  for (const field of ALL_19) {
+    assert.equal(field in created(), false, `${field} must be absent`)
+  }
+  assert.deepEqual(Object.keys(created()).sort(), Object.keys(BASE).sort())
+})
+
+/* ══════════════ 12. Normalised values DO reach the write ═════════════ */
+
+test('a numeric string is stored as a real number, not a string', async () => {
+  currentUser = owner()
+  const res = await request('POST', '/api/properties', {
+    ...BASE, netSqm: '120.5', openAreaSqm: '30', coefficient: '1.75',
+  })
+  assert.equal(res.status, 201)
+  assert.strictEqual(created().netSqm, 120.5)
+  assert.strictEqual(created().openAreaSqm, 30)
+  assert.strictEqual(created().coefficient, 1.75)
+  assert.equal(typeof created().netSqm, 'number', 'must not arrive as a string')
+})
+
+test('a deduped transport array reaches the write payload', async () => {
+  currentUser = owner()
+  const res = await request('POST', '/api/properties', {
+    ...BASE, nearbyTransport: ['Metro', 'Metro', 'Bus', 'Metro'],
+  })
+  assert.equal(res.status, 201)
+  assert.deepEqual(created().nearbyTransport, ['Metro', 'Bus'])
+})
+
+test('a derived priceLabel reaches the write payload alongside currency', async () => {
+  currentUser = owner()
+  const res = await request('POST', '/api/properties', { ...BASE, currency: 'EUR' })
+  assert.equal(res.status, 201)
+  assert.equal(created().currency, 'EUR')
+  assert.equal(created().priceLabel, '€')
+})
+
+test('a custom priceLabel survives the strip — it is not an owned field', async () => {
+  currentUser = owner()
+  const res = await request('POST', '/api/properties', {
+    ...BASE, priceLabel: 'Price on request',
+  })
+  assert.equal(res.status, 201)
+  assert.equal(created().priceLabel, 'Price on request',
+    'priceLabel is not owned by the parser and must never be stripped')
+})
+
+test('a normalised virtual tour URL reaches the write payload', async () => {
+  currentUser = owner()
+  const res = await request('POST', '/api/properties', {
+    ...BASE, virtualTourUrl: 'https://my.matterport.com/show/?m=abc',
+  })
+  assert.equal(res.status, 201)
+  assert.equal(created().virtualTourUrl, 'https://my.matterport.com/show/?m=abc')
+})
+
+test('an update writes only the normalised owned fields it was given', async () => {
+  currentUser = owner()
+  db.findByIdResult = { _id: 'p1', ...BASE, agent: null }
+  db.updateResult = { _id: 'p1', ...BASE }
+
+  const res = await request('PUT', '/api/properties/p1', {
+    netSqm: '88', sauna: false, nearbyTransport: ['Bus', 'Bus'],
+  })
+  assert.equal(res.status, 200)
+  const set = updateSet()
+  assert.strictEqual(set.netSqm, 88)
+  assert.strictEqual(set.sauna, false)
+  assert.deepEqual(set.nearbyTransport, ['Bus'])
+  assert.equal('jacuzzi' in set, false, 'untouched amenities stay untouched')
+})
+
+test('EXTENDED_OWNED_FIELDS covers the 19 and excludes priceLabel', async () => {
+  assert.equal(EXTENDED_OWNED_FIELDS.length, 19)
+  assert.deepEqual([...EXTENDED_OWNED_FIELDS].sort(), [...ALL_19].sort())
+  assert.equal(EXTENDED_OWNED_FIELDS.includes('priceLabel'), false)
+  for (const untouchable of ['agent', 'location', 'status', 'featured', 'images', 'price']) {
+    assert.equal(EXTENDED_OWNED_FIELDS.includes(untouchable), false,
+      `${untouchable} must never be owned by this parser`)
+  }
+})
+
+/* ══════════════ 13. Real Mongoose hydration ══════════════════════════ */
+//
+// The route tests above mock the model, so they can say nothing about what
+// Mongoose itself does to a document. These use the REAL Property schema with
+// no database connection, because a schema default applies on HYDRATION and
+// would therefore rewrite history for every listing already stored.
+
+// A query string gives a DIFFERENT module specifier, so mock.module above does
+// not intercept it and the genuine Mongoose model is loaded. That is the whole
+// point of this section: a schema default applies on hydration, and only the
+// real schema can prove whether it does.
+const { default: RealProperty } = await import('../models/Property.js?real=1')
+
+const legacyDoc = (extra = {}) => RealProperty.hydrate({
+  _id: '000000000000000000000001',
+  title: 'Legacy', listingType: 'Sale', price: 100,
+  district: 'D', address: 'A', beds: 1, baths: 1, sqm: 1,
+  ...extra,
+})
+
+test('a legacy document with no currency stays without one', async () => {
+  const doc = legacyDoc({ priceLabel: '€' })
+  assert.equal(doc.currency, undefined,
+    'a schema default would invent a currency for every stored listing')
+  assert.equal('currency' in doc.toObject(), false)
+})
+
+for (const label of ['€', '₺', '$', '£', 'Price on request']) {
+  test(`a legacy document priced with "${label}" gains no contradictory currency`, async () => {
+    const doc = legacyDoc({ priceLabel: label })
+    assert.equal(doc.priceLabel, label, 'the stored label is untouched')
+    assert.equal(doc.currency, undefined,
+      `${label} must not silently become USD`)
+  })
+}
+
+test('a new document gets no currency unless one is supplied', async () => {
+  const doc = new RealProperty({
+    title: 'N', listingType: 'Sale', price: 1,
+    district: 'D', address: 'A', beds: 1, baths: 1, sqm: 1,
+  })
+  assert.equal(doc.currency, undefined)
+})
+
+test('an explicitly supplied currency is kept', async () => {
+  const doc = new RealProperty({
+    title: 'N', listingType: 'Sale', price: 1, currency: 'EUR',
+    district: 'D', address: 'A', beds: 1, baths: 1, sqm: 1,
+  })
+  assert.equal(doc.currency, 'EUR')
+})
+
+test('hydration invents none of the new booleans or arrays either', async () => {
+  const doc = legacyDoc()
+  const obj = doc.toObject()
+  for (const field of NEW_BOOLEANS) {
+    assert.equal(obj[field], undefined, `${field} must stay unknown on a legacy listing`)
+  }
+  assert.equal(obj.nearbyTransport, undefined, 'no empty array may be materialised')
+})
+
+test('the five pre-existing booleans still default to false on a new document', async () => {
+  const doc = new RealProperty({
+    title: 'N', listingType: 'Sale', price: 1,
+    district: 'D', address: 'A', beds: 1, baths: 1, sqm: 1,
+  })
+  for (const field of ['furnished', 'balcony', 'elevator', 'pool', 'garden']) {
+    assert.equal(doc[field], false, `${field} keeps its original behaviour`)
   }
 })

@@ -103,7 +103,15 @@ const propertySchema = new mongoose.Schema({
   // it describes how an amount is denominated rather than claiming a feature.
   // `priceLabel` remains what formatPrice() actually renders; the route layer
   // keeps the two from contradicting each other.
-  currency: { type: String, enum: ['TL', 'USD', 'EUR', 'GBP'], default: 'USD' },
+  //
+  // NO default, for the same reason the booleans below have none — and this one
+  // was proven rather than assumed. With `default: 'USD'`, Mongoose materialises
+  // the value on HYDRATION, not just on create: a legacy listing stored with
+  // `priceLabel: '€'` and no currency read back as `{ priceLabel: '€',
+  // currency: 'USD' }`, inventing a contradiction the moment the schema shipped.
+  // New listings get their currency from the admin form, which sends it
+  // explicitly; legacy listings stay honestly unknown until someone edits them.
+  currency: { type: String, enum: ['TL', 'USD', 'EUR', 'GBP'] },
 
   // Donor-compatible numeric metadata. The donor documents no business meaning
   // and no bounds for this, so nothing is invented here beyond "must be a

@@ -316,6 +316,37 @@ const readExtendedNumber = (value) => {
  * changes the title cannot disturb an amenity. An empty string is treated the
  * same as absence, because that is what a cleared optional form input sends.
  */
+/**
+ * Every field parseExtendedPropertyFields OWNS.
+ *
+ * The routes build their write payload from req.body, so a raw value reaches
+ * the database unless something removes it first. Without this list a value the
+ * parser deliberately SKIPPED — `netSqm: ''`, `sauna: null`, an empty enum —
+ * would still be written verbatim, storing a string in a Number field and a
+ * null where "not supplied" was meant. Skipping would have meant "leave the raw
+ * value alone" rather than "no-op", which is the opposite of the contract.
+ *
+ * So these keys are stripped from the payload and then re-applied ONLY from the
+ * parser's normalised output: raw input -> validator -> database, never raw
+ * input -> database.
+ *
+ * `priceLabel` is deliberately NOT here. It predates this wave, is written by
+ * other paths, and may legitimately hold a custom string; the parser only ever
+ * ADDS a derived value for it.
+ */
+export const EXTENDED_OWNED_FIELDS = [
+  ...EXTENDED_NUMBERS.map(([field]) => field),
+  ...EXTENDED_BOOLEANS,
+  ...Object.keys(EXTENDED_ENUMS),
+  'nearbyTransport',
+  'virtualTourUrl',
+]
+
+/** Strips the owned keys so only validated values can be written. */
+const stripExtendedFields = (payload) => {
+  for (const field of EXTENDED_OWNED_FIELDS) delete payload[field]
+}
+
 export const parseExtendedPropertyFields = (body) => {
   if (!body || typeof body !== 'object') return { ok: true, value: {} }
 
@@ -653,7 +684,8 @@ router.post(
         delete propertyData.location
       }
 
-      // Normalised values win over whatever the body spread carried through.
+      // Strip first, then apply: a skipped value must leave nothing behind.
+      stripExtendedFields(propertyData)
       Object.assign(propertyData, parsedExtended.value)
 
       try {
@@ -734,8 +766,10 @@ router.put(
       delete updateData.location
       const clearLocation = parsedLocation.value === null
 
-      // Only the keys the caller actually sent; an omitted amenity is left
-      // exactly as stored rather than being reset to a default.
+      // Strip first, then apply. On an update this is what makes a skipped
+      // value a true no-op: the key never reaches $set, so the stored value is
+      // preserved rather than being overwritten with '' or null.
+      stripExtendedFields(updateData)
       Object.assign(updateData, parsedExtended.value)
       if (parsedLocation.value) updateData.location = parsedLocation.value
 
