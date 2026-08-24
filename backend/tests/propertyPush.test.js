@@ -12,16 +12,24 @@ const CUSTOMER_A = 'customer-a'
 const CUSTOMER_B = 'customer-b'
 const ADMIN = 'admin-id'
 const AGENT = 'agent-id'
+const OWNER = 'owner-id'
 const PROPERTY = 'property-id'
+const TOKEN_ANON = 'ExponentPushToken[anonymous]'
+const TOKEN_A = 'ExponentPushToken[customer-a]'
+const TOKEN_B = 'ExponentPushToken[customer-b]'
+const TOKEN_STAFF = 'ExponentPushToken[staff]'
 
 // ── Faked device registry ────────────────────────────────────────────────
 let devices = []
 
 const FakePushDevice = {
-  // Mirrors the real `distinct`: unique values, filtered.
-  distinct: async (field, query) => {
-    const matching = devices.filter((d) => (query?.active === undefined ? true : d.active === query.active))
-    return [...new Set(matching.map((d) => d[field]))]
+  find: (query) => {
+    const hits = devices.filter((d) => query?.active === undefined || d.active === query.active)
+    return {
+      select: () => ({
+        lean: async () => hits,
+      }),
+    }
   },
 }
 
@@ -31,11 +39,14 @@ let roles = {}
 const FakeUser = {
   find: (query) => {
     const ids = query._id.$in.map(String)
-    const wanted = query.role.$in
     const hits = ids
-      .filter((id) => wanted.includes(roles[id]))
+      .filter((id) => roles[id] === query.role)
       .map((id) => ({ _id: id }))
-    return { select: async () => hits }
+    return {
+      select: () => ({
+        lean: async () => hits,
+      }),
+    }
   },
 }
 
@@ -48,10 +59,10 @@ mock.module('../models/PushDevice.js', { defaultExport: FakePushDevice })
 mock.module('../models/User.js', { defaultExport: FakeUser })
 mock.module('../services/pushNotifications.js', {
   namedExports: {
-    sendPushToUsers: async (args) => {
+    sendPushToTokens: async (args) => {
       sends.push(args)
       if (nextThrow) throw nextThrow
-      return { ...nextResult, attempted: args.userIds.length }
+      return { ...nextResult, attempted: args.tokens.length }
     },
   },
 })
@@ -79,10 +90,10 @@ const property = (overrides = {}) => ({
 
 test.beforeEach(() => {
   devices = [
-    { user: CUSTOMER_A, active: true },
-    { user: CUSTOMER_B, active: true },
+    { token: TOKEN_A, user: CUSTOMER_A, active: true },
+    { token: TOKEN_B, user: CUSTOMER_B, active: true },
   ]
-  roles = { [CUSTOMER_A]: 'user', [CUSTOMER_B]: 'user', [ADMIN]: 'admin', [AGENT]: 'agent' }
+  roles = { [CUSTOMER_A]: 'user', [CUSTOMER_B]: 'user', [ADMIN]: 'admin', [AGENT]: 'agent', [OWNER]: 'owner' }
   sends = []
   nextResult = { attempted: 0, accepted: 2, failed: 0 }
   nextThrow = null
@@ -90,42 +101,60 @@ test.beforeEach(() => {
 
 /* ═══════════════ Recipients ═══════════════ */
 
+test('an active anonymous device receives the generic notification', async () => {
+  devices = [{ token: TOKEN_ANON, user: null, active: true }]
+
+  await sendNewPropertyPush({ property: property() })
+
+  assert.deepEqual(sends[0].tokens, [TOKEN_ANON])
+})
+
 test('1. users with an ACTIVE device are selected', async () => {
   await sendNewPropertyPush({ property: property() })
 
   assert.equal(sends.length, 1)
-  assert.deepEqual(sends[0].userIds.sort(), [CUSTOMER_A, CUSTOMER_B])
+  assert.deepEqual(sends[0].tokens.sort(), [TOKEN_A, TOKEN_B])
 })
 
 test('2. an INACTIVE device is excluded', async () => {
   devices = [
-    { user: CUSTOMER_A, active: true },
-    { user: CUSTOMER_B, active: false },
+    { token: TOKEN_A, user: CUSTOMER_A, active: true },
+    { token: TOKEN_B, user: CUSTOMER_B, active: false },
   ]
 
   await sendNewPropertyPush({ property: property() })
 
-  assert.deepEqual(sends[0].userIds, [CUSTOMER_A])
+  assert.deepEqual(sends[0].tokens, [TOKEN_A])
 })
 
-test('3. one user with SEVERAL devices is passed exactly once', async () => {
-  // Device fan-out belongs to sendPushToUsers. Deduplicating at the USER level
-  // here is what stops one person being notified twice on the same phone.
+test('3. one customer with several devices receives the generic push on each device', async () => {
+  const tabletToken = 'ExponentPushToken[customer-a-tablet]'
   devices = [
-    { user: CUSTOMER_A, active: true },
-    { user: CUSTOMER_A, active: true },
-    { user: CUSTOMER_A, active: true },
+    { token: TOKEN_A, user: CUSTOMER_A, active: true },
+    { token: tabletToken, user: CUSTOMER_A, active: true },
   ]
 
   await sendNewPropertyPush({ property: property() })
 
-  assert.deepEqual(sends[0].userIds, [CUSTOMER_A])
+  assert.deepEqual(sends[0].tokens.sort(), [TOKEN_A, tabletToken].sort())
 })
 
 test('4. excludeUserIds removes a user — the 8C.2 seam', async () => {
   await sendNewPropertyPush({ property: property(), excludeUserIds: [CUSTOMER_A] })
 
-  assert.deepEqual(sends[0].userIds, [CUSTOMER_B])
+  assert.deepEqual(sends[0].tokens, [TOKEN_B])
+})
+
+test('4b. excludeUserIds leaves anonymous and other-customer devices eligible', async () => {
+  devices = [
+    { token: TOKEN_ANON, user: null, active: true },
+    { token: TOKEN_A, user: CUSTOMER_A, active: true },
+    { token: TOKEN_B, user: CUSTOMER_B, active: true },
+  ]
+
+  await sendNewPropertyPush({ property: property(), excludeUserIds: [CUSTOMER_A] })
+
+  assert.deepEqual(sends[0].tokens.sort(), [TOKEN_ANON, TOKEN_B].sort())
 })
 
 test('5. an excluded saved-alert user gets NO generic notification', async () => {
@@ -141,19 +170,20 @@ test('5. an excluded saved-alert user gets NO generic notification', async () =>
 
 test('5b. staff accounts are excluded — these are customer notifications', async () => {
   devices = [
-    { user: CUSTOMER_A, active: true },
-    { user: ADMIN, active: true },
-    { user: AGENT, active: true },
+    { token: TOKEN_A, user: CUSTOMER_A, active: true },
+    { token: TOKEN_STAFF, user: ADMIN, active: true },
+    { token: TOKEN_STAFF + "-agent", user: AGENT, active: true },
+    { token: TOKEN_STAFF + "-owner", user: OWNER, active: true },
   ]
 
   await sendNewPropertyPush({ property: property() })
 
-  assert.deepEqual(sends[0].userIds, [CUSTOMER_A])
+  assert.deepEqual(sends[0].tokens, [TOKEN_A])
 })
 
 test('5c. findGenericPushRecipients is usable on its own', async () => {
   const ids = await findGenericPushRecipients({ excludeUserIds: [CUSTOMER_B] })
-  assert.deepEqual(ids, [CUSTOMER_A])
+  assert.deepEqual(ids, [TOKEN_A])
 })
 
 /* ═══════════════ Content ═══════════════ */
@@ -256,14 +286,14 @@ test('11b. a property with no id notifies nobody', async () => {
 
 test('12. each recipient id appears exactly once in the call', async () => {
   devices = [
-    { user: CUSTOMER_A, active: true },
-    { user: CUSTOMER_B, active: true },
-    { user: CUSTOMER_A, active: true },
-    { user: CUSTOMER_B, active: true },
+    { token: TOKEN_A, user: CUSTOMER_A, active: true },
+    { token: TOKEN_B, user: CUSTOMER_B, active: true },
+    { token: TOKEN_A, user: CUSTOMER_A, active: true },
+    { token: TOKEN_B, user: CUSTOMER_B, active: true },
   ]
 
   await sendNewPropertyPush({ property: property() })
 
-  const ids = sends[0].userIds
+  const ids = sends[0].tokens
   assert.equal(ids.length, new Set(ids).size, 'no duplicates reach the sender')
 })

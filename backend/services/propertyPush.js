@@ -1,6 +1,6 @@
 import PushDevice from '../models/PushDevice.js'
 import User from '../models/User.js'
-import { sendPushToUsers } from './pushNotifications.js'
+import { sendPushToTokens } from './pushNotifications.js'
 
 /**
  * The generic "a new listing went up" notification.
@@ -21,9 +21,6 @@ import { sendPushToUsers } from './pushNotifications.js'
  * this length anyway.
  */
 const BODY_MAX_LENGTH = 120
-
-/** Roles that run the business rather than shop on it. */
-const STAFF_ROLES = ['owner', 'admin', 'agent']
 
 /**
  * Turns a property into one readable line.
@@ -71,28 +68,40 @@ export const describeNewProperty = (property) => {
  * device — not by the size of the user base — so it stays cheap as the
  * customer base grows.
  *
- * @returns {Promise<string[]>} Distinct user ids, each appearing once.
+ * @returns {Promise<string[]>} Distinct eligible Expo tokens.
  */
 export const findGenericPushRecipients = async ({ excludeUserIds = [] } = {}) => {
-  // `distinct` does the de-duplication in the database: a customer with a
-  // phone AND a tablet appears once here, and sendPushToUsers then fans out to
-  // both devices. Deduplicating at the USER level is what stops them getting
-  // the same notification twice on one device.
-  const userIds = await PushDevice.distinct('user', { active: true })
-
+  const devices = await PushDevice.find({ active: true }).select('token user').lean()
   const excluded = new Set(excludeUserIds.filter(Boolean).map(String))
-  const candidates = userIds.map(String).filter((id) => !excluded.has(id))
+  const linkedUserIds = [
+    ...new Set(
+      devices
+        .map((device) => device.user)
+        .filter(Boolean)
+        .map(String)
+        .filter((id) => !excluded.has(id))
+    ),
+  ]
 
-  if (candidates.length === 0) return []
+  // Positive allowlist: only customer role=user is eligible. A future role is
+  // therefore excluded by default instead of accidentally treated as retail.
+  const customers = linkedUserIds.length
+    ? await User.find({ _id: { $in: linkedUserIds }, role: 'user' }).select('_id').lean()
+    : []
+  const customerIds = new Set(customers.map((user) => String(user._id)))
 
-  const staff = await User.find({ _id: { $in: candidates }, role: { $in: STAFF_ROLES } })
-    .select('_id')
-
-  const staffIds = new Set(staff.map((user) => String(user._id)))
-
-  return candidates.filter((id) => !staffIds.has(id))
+  return [
+    ...new Set(
+      devices
+        .filter((device) => {
+          if (!device.user) return true
+          const userId = String(device.user)
+          return !excluded.has(userId) && customerIds.has(userId)
+        })
+        .map((device) => device.token)
+    ),
+  ]
 }
-
 /**
  * Announces a newly created listing.
  *
@@ -111,14 +120,14 @@ export const sendNewPropertyPush = async ({ property, excludeUserIds = [] } = {}
   try {
     if (!property?._id) return empty
 
-    const userIds = await findGenericPushRecipients({ excludeUserIds })
+    const tokens = await findGenericPushRecipients({ excludeUserIds })
 
     // Nobody reachable. Returning early keeps a quiet installation from making
     // a pointless HTTPS round trip on every listing an admin creates.
-    if (userIds.length === 0) return empty
+    if (tokens.length === 0) return empty
 
-    return await sendPushToUsers({
-      userIds,
+    return await sendPushToTokens({
+      tokens,
       // Deliberately distinct from 8C.2's "New match for your saved alert", so
       // the two are tellable apart in the tray at a glance.
       title: 'New property added',
@@ -136,7 +145,7 @@ export const sendNewPropertyPush = async ({ property, excludeUserIds = [] } = {}
       },
     })
   } catch (err) {
-    // sendPushToUsers already swallows provider failures; this also contains a
+    // sendPushToTokens already swallows provider failures; this also contains a
     // database error resolving recipients, which would otherwise escape into a
     // route that has finished its real work.
     console.error('[push] could not send new-property notification:', err.message)

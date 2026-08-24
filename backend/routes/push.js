@@ -5,10 +5,64 @@ import { isExpoPushToken, sendPushToUsers } from '../services/pushNotifications.
 
 const router = express.Router()
 
-// Every route here is behind `protect`, and the owner is always taken from
-// `req.user` — there is no code path that accepts a userId from the request.
-
 const PLATFORMS = ['android', 'ios']
+
+const readRegistration = (body) => {
+  const token = typeof body?.token === 'string' ? body.token.trim() : ''
+  const platform = body?.platform
+
+  if (!isExpoPushToken(token)) {
+    return { error: 'A valid Expo push token is required' }
+  }
+  if (!PLATFORMS.includes(platform)) {
+    return { error: 'platform must be android or ios' }
+  }
+  return { token, platform }
+}
+
+/**
+ * POST /api/push/devices/anonymous — register public push capability.
+ *
+ * This route never accepts or derives account ownership. If the token is
+ * already linked to a user, the request is deliberately a no-op: possession
+ * of a token is not authority to detach somebody else's personal pushes.
+ * The response stays identical, so it is not a token-ownership oracle.
+ */
+router.post('/devices/anonymous', async (req, res, next) => {
+  try {
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'userId')) {
+      return res.status(400).json({ success: false, message: 'userId is not accepted' })
+    }
+
+    const registration = readRegistration(req.body)
+    if (registration.error) {
+      return res.status(400).json({ success: false, message: registration.error })
+    }
+
+    const { token, platform } = registration
+    const existing = await PushDevice.findOne({ token }).select('user')
+
+    if (!existing) {
+      try {
+        await PushDevice.create({ token, platform, user: null, active: true, lastSeenAt: new Date() })
+      } catch (err) {
+        // A concurrent authenticated registration may win the unique-token
+        // race. In that case it owns the row and this anonymous request must
+        // not overwrite it. Every other database failure remains real.
+        if (err?.code !== 11000) throw err
+      }
+    } else if (!existing.user) {
+      await PushDevice.updateOne(
+        { token, user: null },
+        { $set: { platform, active: true, lastSeenAt: new Date() } }
+      )
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    next(err)
+  }
+})
 
 /**
  * POST /api/push/devices — register this installation for notifications.
@@ -26,18 +80,11 @@ const PLATFORMS = ['android', 'ios']
  */
 router.post('/devices', protect, async (req, res, next) => {
   try {
-    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : ''
-    const platform = req.body?.platform
-
-    // Validated before it can reach the database, so a malformed value cannot
-    // sit in the collection failing every future send.
-    if (!isExpoPushToken(token)) {
-      return res.status(400).json({ success: false, message: 'A valid Expo push token is required' })
+    const registration = readRegistration(req.body)
+    if (registration.error) {
+      return res.status(400).json({ success: false, message: registration.error })
     }
-
-    if (!PLATFORMS.includes(platform)) {
-      return res.status(400).json({ success: false, message: 'platform must be android or ios' })
-    }
+    const { token, platform } = registration
 
     await PushDevice.findOneAndUpdate(
       { token },
@@ -61,14 +108,14 @@ router.post('/devices', protect, async (req, res, next) => {
 })
 
 /**
- * DELETE /api/push/devices — stop notifying this installation.
+ * DELETE /api/push/devices — detach personal ownership on sign-out.
  *
  * Called on sign-out. Scoped to `{ token, user: req.user._id }` so one account
  * cannot silence another account's device by guessing a token — the token is
  * the only thing the client supplies, and ownership is checked against the JWT.
  *
- * Deactivates rather than deletes, so signing back in restores it with one
- * update instead of racing to re-insert against the unique index.
+ * The token stays active and anonymous, so public new-listing notifications
+ * continue. Invalid-token handling remains the only normal deactivation path.
  */
 router.delete('/devices', protect, async (req, res, next) => {
   try {
@@ -80,7 +127,7 @@ router.delete('/devices', protect, async (req, res, next) => {
 
     await PushDevice.updateOne(
       { token, user: req.user._id },
-      { $set: { active: false } }
+      { $set: { user: null, active: true, lastSeenAt: new Date() } }
     )
 
     // Deliberately the same response whether or not a row matched. Reporting

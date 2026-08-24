@@ -9,6 +9,86 @@ import { useLanguage } from '../contexts/LanguageContext'
 import { SinglePropertyMap, isPubliclyMappable, isApproximateLocation } from '../components/PropertyMapView'
 import useSeo from '../lib/useSeo'
 
+
+/*
+ * Present, NOT truthy.
+ *
+ * The donor page filters its spec rows with `.filter(([, v]) => v)`, which
+ * silently drops every legitimate zero: floor 0 is the ground floor, and a
+ * stored 0 for any of these is a fact somebody entered on purpose. Absence is
+ * the only thing that should hide a row.
+ */
+const isPresent = (value) => value !== undefined && value !== null && value !== ''
+
+/*
+ * Spec rows, grouped rather than poured into one long list. Each group hides
+ * itself when it has nothing to show, so a minimal legacy listing renders no
+ * empty headings.
+ */
+const SPEC_GROUPS = [
+  ['sizeLayout', ['rooms', 'netSqm', 'openAreaSqm', 'floor', 'floorLocation', 'totalFloors']],
+  ['buildingDetails', ['buildingAge', 'heating', 'parking', 'kitchenType', 'coefficient']],
+  ['legalUsage', ['usageStatus', 'titleDeedStatus']],
+]
+
+/*
+ * Fields whose stored value is a canonical English enum with a translated
+ * display label. Everything else renders its stored value verbatim: rooms,
+ * heating, parking and buildingAge are CURRENT vocabularies that PropertiesPage
+ * already shows canonically, and inventing a second, translated vocabulary for
+ * them here would let the two drift apart.
+ */
+const ENUM_LABEL_MAPS = {
+  floorLocation: 'floorLocationOptions',
+  kitchenType: 'kitchenOptions',
+  usageStatus: 'usageStatusOptions',
+  titleDeedStatus: 'titleDeedOptions',
+}
+
+const SQM_FIELDS = new Set(['netSqm', 'openAreaSqm'])
+
+/*
+ * Amenities are a POSITIVE list: only `=== true` is rendered.
+ *
+ * This is the public half of the data-integrity work in 10B1 and 10B2. An
+ * amenity nobody has ever recorded is `undefined`, and one an admin explicitly
+ * denied is `false` — neither may appear, because a visitor cannot tell a
+ * greyed-out "No Sauna" from "we never asked". Only a recorded yes is a claim
+ * this page is entitled to make.
+ */
+const AMENITY_FIELDS = [
+  'furnished', 'balcony', 'elevator', 'pool', 'garden',
+  'sauna', 'jacuzzi', 'steamRoom', 'turkishBath', 'basement',
+  'withinSite', 'eligibleForCredit', 'exchange',
+]
+
+/*
+ * Re-validated here even though the backend already validates on write.
+ *
+ * Listings stored before Wave 10B1 never passed through that check, so the
+ * only thing standing between a legacy `javascript:` value and an anchor href
+ * is this function. Cheap, and it fails closed.
+ */
+const TOUR_HOSTS = ['matterport.com', 'kuula.co', 'youtube.com', 'youtu.be', 'vimeo.com']
+
+const safeTourUrl = (raw) => {
+  if (typeof raw !== 'string' || !raw.trim()) return ''
+
+  let url
+  try {
+    url = new URL(raw.trim())
+  } catch {
+    return ''
+  }
+
+  if (url.protocol !== 'https:') return ''
+
+  const host = url.hostname.toLowerCase()
+  const allowed = TOUR_HOSTS.some((h) => host === h || host.endsWith('.' + h))
+
+  return allowed ? url.toString() : ''
+}
+
 const PropertyDetailsPage = () => {
   const { id } = useParams()
   const [property, setProperty] = useState(null)
@@ -85,6 +165,49 @@ const PropertyDetailsPage = () => {
     </div>
   )
 
+
+  /*
+   * Option VALUE labels are reused from the admin namespace rather than
+   * duplicated: they are pure canonical-English -> translated maps with no
+   * form-specific wording, and Wave 10B2 already translated all six. Field
+   * LABELS are not reused — the admin ones are phrased for a form ("Net Area
+   * (m²)", "Total Floors in Building") and would read wrongly here.
+   */
+  const optionLabels = t.adminPages?.properties || {}
+
+  const specGroups = SPEC_GROUPS
+    .map(([groupKey, fields]) => [
+      groupKey,
+      fields
+        .filter((field) => isPresent(property[field]))
+        .map((field) => {
+          const stored = property[field]
+          const map = ENUM_LABEL_MAPS[field] ? optionLabels[ENUM_LABEL_MAPS[field]] : null
+          const shown = map?.[stored] ?? stored
+          return [field, SQM_FIELDS.has(field) ? `${shown} m²` : String(shown)]
+        }),
+    ])
+    .filter(([, rows]) => rows.length > 0)
+
+  const amenities = AMENITY_FIELDS.filter((field) => property[field] === true)
+  const transport = Array.isArray(property.nearbyTransport) ? property.nearbyTransport : []
+
+  /*
+   * Virtual tour. `hasVirtualTour` and `virtualTourUrl` are independent fields,
+   * so the three states they can combine into are decided explicitly:
+   *
+   *   a usable URL, not explicitly denied -> the link. An unset
+   *       `hasVirtualTour` does NOT suppress it: absence is not denial, which
+   *       is the same rule the amenities above follow.
+   *   hasVirtualTour === false            -> no link, even if a URL is stored.
+   *       That false is an admin saying there is no tour, and the public page
+   *       defers to it. The stored URL is untouched, merely not advertised.
+   *   hasVirtualTour === true, no usable URL -> a badge, never a broken link.
+   */
+  const tourUrl = safeTourUrl(property.virtualTourUrl)
+  const showTourLink = tourUrl !== '' && property.hasVirtualTour !== false
+  const showTourBadge = property.hasVirtualTour === true && !showTourLink
+
   const images = property.images?.length ? property.images : (property.mainImage ? [property.mainImage] : ['https://images.unsplash.com/photo-1486325212027-8081e485255e?w=800&q=80'])
   const fav = isFavourite(property._id)
   const whatsapp = property.whatsappNumber || property.agentPhone || ''
@@ -109,29 +232,6 @@ const PropertyDetailsPage = () => {
     </>
   )
 
-  const getDisplayPrice = (property) => {
-  const label = property.priceLabel?.trim()
-  const amount = Number(property.price || 0).toLocaleString('en-US')
-  const rentSuffix = property.listingType === 'Rent' ? '/mo' : ''
-
-  if (label) {
-    if (label === '$') {
-      return `$${amount}${rentSuffix}`
-    }
-
-    if (label === '₺' || label.toUpperCase() === 'TL') {
-      return `₺${amount}${rentSuffix}`
-    }
-
-    if (label === '€') {
-      return `€${amount}${rentSuffix}`
-    }
-
-    return label
-  }
-
-  return formatPrice(property.price, property.listingType)
-}
 
   return (
     <div className="min-h-screen bg-slate-50 pb-16">
@@ -216,6 +316,116 @@ const PropertyDetailsPage = () => {
                 ))}
               </div>
             </div>
+
+
+            {/* Detailed specifications — grouped, and each group hides when empty */}
+            {specGroups.length > 0 && (
+              <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+                <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-2xl font-semibold text-[#202a36]">
+                  {pd.specsTitle || 'Property Specs'}
+                </h2>
+                {specGroups.map(([groupKey, rows]) => (
+                  <div key={groupKey} className="mt-6">
+                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                      {pd[groupKey] || groupKey}
+                    </h3>
+                    <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                      {rows.map(([field, value]) => (
+                        <div key={field} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
+                          <span className="text-slate-500">{pd[field] || field}</span>
+                          <span className="font-semibold text-[#202a36] text-end">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/*
+              Features and nearby transport share a card, but the card is
+              guarded on EITHER being present. The donor nests its transport
+              chips inside an amenities-only guard, so a listing with transport
+              but no recorded amenity shows neither.
+            */}
+            {(amenities.length > 0 || transport.length > 0) && (
+              <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+                <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-2xl font-semibold text-[#202a36]">
+                  {pd.amenitiesTitle || 'Features & Amenities'}
+                </h2>
+
+                {amenities.length > 0 && (
+                  <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {amenities.map((field) => (
+                      <li key={field} className="flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-3">
+                        <svg
+                          className="h-4 w-4 shrink-0 text-[#4b6741]"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="text-sm font-medium text-[#202a36]">
+                          {optionLabels.amenityOptions?.[field] || field}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {transport.length > 0 && (
+                  <>
+                    <h3 className="mt-6 mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                      {pd.nearbyTransport || 'Nearby Transportation'}
+                    </h3>
+                    <ul className="flex flex-wrap gap-2">
+                      {transport.map((option) => (
+                        <li
+                          key={option}
+                          className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-[#4b6741]"
+                        >
+                          {optionLabels.transportOptions?.[option] || option}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Virtual tour — a link out, never an embed. No iframe, no HTML injection. */}
+            {(showTourLink || showTourBadge) && (
+              <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+                <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-2xl font-semibold text-[#202a36]">
+                  {pd.virtualTourTitle || 'Virtual Tour'}
+                </h2>
+                {showTourLink ? (
+                  <a
+                    href={tourUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#4b6741] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#3d5535]"
+                  >
+                    <svg
+                      className="h-4 w-4 shrink-0"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    {pd.viewVirtualTour || 'View Virtual Tour'}
+                  </a>
+                ) : (
+                  <p className="mt-5 text-slate-600">
+                    {pd.virtualTourAvailable || 'A virtual tour is available for this property. Contact the agent to arrange it.'}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/*
               Location. The order of these two branches is the privacy rule:

@@ -24,11 +24,12 @@ import mongoose from 'mongoose'
  */
 const pushDeviceSchema = new mongoose.Schema(
   {
-    // Always req.user._id. No route reads an owner from the request body.
+    // Null means the installation is currently anonymous. A user id is only
+    // ever attached by the authenticated registration route from req.user.
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      default: null,
       index: true,
     },
 
@@ -53,7 +54,8 @@ const pushDeviceSchema = new mongoose.Schema(
     },
 
     /**
-     * Cleared when Expo reports the token is dead, or when the user signs out.
+     * Cleared only when Expo reports the token is dead. Signing out detaches
+     * user but leaves the installation active for public notifications.
      *
      * Deactivating rather than deleting means a device that signs back in is
      * one update away from working, and it keeps the unique index meaningful:

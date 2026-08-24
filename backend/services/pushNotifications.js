@@ -156,6 +156,9 @@ export const sendPushNotifications = async ({ tokens, title, body, data = {} }) 
   return result
 }
 
+/** Token-level entry point shared by account and public notification domains. */
+export const sendPushToTokens = sendPushNotifications
+
 /**
  * Convenience wrapper: notify every active device belonging to these users.
  *
@@ -166,7 +169,7 @@ export const sendPushNotifications = async ({ tokens, title, body, data = {} }) 
 export const sendPushToUsers = async ({ userIds, title, body, data }) => {
   const devices = await PushDevice.find({ user: { $in: userIds }, active: true }).select('token')
 
-  return sendPushNotifications({
+  return sendPushToTokens({
     tokens: devices.map((device) => device.token),
     title,
     body,

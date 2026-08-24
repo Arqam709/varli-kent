@@ -31,6 +31,19 @@ const matches = (doc, query) =>
   })
 
 const FakePushDevice = {
+  findOne(query) {
+    const doc = rows.find((r) => matches(r, query)) ?? null
+    return { select: async () => doc }
+  },
+  async create(doc) {
+    if (rows.some((r) => r.token === doc.token)) {
+      const error = new Error('duplicate token')
+      error.code = 11000
+      throw error
+    }
+    rows.push({ ...doc })
+    return doc
+  },
   async findOneAndUpdate(query, update, options) {
     const set = update.$set || {}
     const existing = rows.find((r) => matches(r, query))
@@ -150,6 +163,77 @@ test.beforeEach(() => {
 })
 
 // ── Registration ─────────────────────────────────────────────────────────
+test('anonymous registration creates one active unlinked device', async () => {
+  const { status, body } = await call(
+    'POST',
+    '/devices/anonymous',
+    { token: TOKEN_A, platform: 'android' },
+    { auth: false }
+  )
+
+  assert.equal(status, 200)
+  assert.equal(body.success, true)
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].user, null)
+  assert.equal(rows[0].active, true)
+})
+
+test('anonymous registration rejects malformed tokens and arbitrary user ownership', async () => {
+  const malformed = await call(
+    'POST',
+    '/devices/anonymous',
+    { token: 'junk', platform: 'android' },
+    { auth: false }
+  )
+  assert.equal(malformed.status, 400)
+
+  const ownership = await call(
+    'POST',
+    '/devices/anonymous',
+    { token: TOKEN_A, platform: 'android', userId: USER_B },
+    { auth: false }
+  )
+  assert.equal(ownership.status, 400)
+  assert.equal(rows.length, 0)
+})
+
+test('anonymous registration cannot detach or reactivate a linked token', async () => {
+  await call('POST', '/devices', { token: TOKEN_A, platform: 'android' })
+  rows[0].active = false
+
+  const { status, body } = await call(
+    'POST',
+    '/devices/anonymous',
+    { token: TOKEN_A, platform: 'ios' },
+    { auth: false }
+  )
+
+  assert.equal(status, 200)
+  assert.equal(body.success, true)
+  assert.equal(String(rows[0].user), USER_A)
+  assert.equal(rows[0].active, false)
+  assert.equal(rows[0].platform, 'android')
+})
+
+test('authenticated registration associates the existing anonymous row without duplication', async () => {
+  await call(
+    'POST',
+    '/devices/anonymous',
+    { token: TOKEN_A, platform: 'android' },
+    { auth: false }
+  )
+
+  await call('POST', '/devices', {
+    token: TOKEN_A,
+    platform: 'android',
+    userId: USER_B,
+  })
+
+  assert.equal(rows.length, 1)
+  assert.equal(String(rows[0].user), USER_A, 'ownership comes from req.user, not request body')
+  assert.equal(rows[0].active, true)
+})
+
 test('registers a device for the authenticated user', async () => {
   const { status, body } = await call('POST', '/devices', {
     token: TOKEN_A,
@@ -221,16 +305,17 @@ test('registration requires authentication', async () => {
 })
 
 // ── Deregistration ───────────────────────────────────────────────────────
-test('sign-out deactivates this account\'s device', async () => {
+test('sign-out detaches ownership but keeps public push active', async () => {
   await call('POST', '/devices', { token: TOKEN_A, platform: 'android' })
 
   const { status } = await call('DELETE', '/devices', { token: TOKEN_A })
 
   assert.equal(status, 200)
-  assert.equal(rows[0].active, false)
+  assert.equal(rows[0].active, true)
+  assert.equal(rows[0].user, null)
 })
 
-test('one account CANNOT deactivate another account\'s device', async () => {
+test('one account CANNOT detach another account\'s device', async () => {
   await call('POST', '/devices', { token: TOKEN_A, platform: 'android' }) // owned by A
 
   currentUser = USER_B
@@ -270,7 +355,7 @@ test('the test payload is the agreed one', async () => {
   assert.deepEqual(message.data, { type: 'test' })
 })
 
-test('a deactivated device is not notified', async () => {
+test('a detached anonymous device is not selected for personal test push', async () => {
   await call('POST', '/devices', { token: TOKEN_A, platform: 'android' })
   await call('DELETE', '/devices', { token: TOKEN_A })
 
