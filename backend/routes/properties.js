@@ -5,7 +5,7 @@ import { requireRole, requirePermission } from '../middleware/checkPermission.js
 import { generatePropertyEmbedding, embeddingSourceFieldsChanged } from '../services/propertyEmbeddingService.js'
 import { resolveAgentContact, publicAgent, AGENT_POPULATE_FIELDS } from '../services/agentAssignment.js'
 import { handlePropertyAgentReassignment } from '../services/propertyMessaging.js'
-import { sendNewPropertyPush } from '../services/propertyPush.js'
+import { notifyNewPropertyCreated } from '../services/propertyCreatedPush.js'
 // Not called directly — importing it registers the 'User' model with Mongoose,
 // which populate('agent') below depends on.
 import '../models/User.js'
@@ -716,7 +716,7 @@ router.post(
        * NOT awaited. Expo is a third party on the far side of the internet and
        * the admin pressing Create should not wait on it to learn their listing
        * was saved. The promise is still terminated with .catch() rather than
-       * left floating: sendNewPropertyPush already contains its own failures,
+       * floating: notifyNewPropertyCreated contains matching/provider failures,
        * and this makes an unhandled rejection impossible rather than unlikely.
        *
        * The creator is excluded explicitly — they are looking at the form that
@@ -724,7 +724,7 @@ router.post(
        * filtered inside the service; this covers the creator even in the
        * unlikely case their role changes mid-session.
        */
-      sendNewPropertyPush({
+      notifyNewPropertyCreated({
         property,
         excludeUserIds: [req.user?._id].filter(Boolean),
       }).catch(() => {})

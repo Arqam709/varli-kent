@@ -81,9 +81,9 @@ mock.module('../middleware/checkPermission.js', {
 // ── The spy under test ───────────────────────────────────────────────────
 let pushCalls = []
 
-mock.module('../services/propertyPush.js', {
+mock.module('../services/propertyCreatedPush.js', {
   namedExports: {
-    sendNewPropertyPush: async (args) => {
+    notifyNewPropertyCreated: async (args) => {
       pushCalls.push(args)
       return { attempted: 1, accepted: 1, failed: 0 }
     },
