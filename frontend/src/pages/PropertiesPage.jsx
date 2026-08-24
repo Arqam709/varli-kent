@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../lib/api'
 import PropertyCard from '../components/PropertyCard'
@@ -24,6 +24,36 @@ const PROPERTY_TYPES = ['Apartment','Villa','Penthouse','Duplex','Studio','Offic
 const HEATING = ['Central','Individual Gas','Floor Heating','Air Conditioning','None']
 const PARKING = ['Open Parking','Closed Parking','None']
 const BUILDING_AGE = ['0 (New)','1-5','6-10','11-15','16-20','21+']
+
+/*
+ * Wave 10B4 vocabularies. These mirror the enums in
+ * backend/routes/properties.js exactly — the server drops any value it cannot
+ * store, so a control offering something else would just return nothing.
+ */
+const FLOOR_LOCATIONS = ['Ground floor','High Entrance','Penthouse','Duplex','Triplex']
+const KITCHEN_TYPES = ['Open (American)','Closed']
+const USAGE_STATUSES = ['Empty','Tenant','Property Owner']
+const TITLE_DEED_STATUSES = [
+  'Shared Title Deed','Independent Title Deed','Land with Title Deed',
+  'Cooperative Share Title Deed','Established Usufruct Right',
+]
+const TRANSPORT_OPTIONS = ['Metro','Metrobus','Bus','Ferry','Train','Tram','Highway Access']
+
+/*
+ * Amenities that carry no schema default, so a listing can be true, false, or
+ * never recorded. The control offers Any / Yes / No rather than a checkbox: an
+ * unchecked box would read as "No" and quietly exclude every listing that",
+ * predates the field.
+ */
+const TRISTATE_AMENITIES = ['sauna','jacuzzi','steamRoom','turkishBath','basement']
+const TRISTATE_LEGAL = ['withinSite','eligibleForCredit','exchange']
+
+// Sent as a day count, not as an absolute instant: a shared or bookmarked
+// link then keeps meaning "the last 7 days" instead of drifting further into
+// the past for whoever opens it tomorrow.
+const LISTED_SINCE_DAYS = ['1','3','7','15','30']
+
+const BATHS_OPTIONS = ['1','2','3','4','5']
 
 const Spinner = () => (
   <div className="flex justify-center py-20">
@@ -83,45 +113,130 @@ const PropertiesPage = () => {
   const [pool,        setPool]        = useState(searchParams.get('pool') || '')
   const [garden,      setGarden]      = useState(searchParams.get('garden') || '')
 
+  // ── Wave 10B4 ──
+  const [baths,       setBaths]       = useState(searchParams.get('baths') || '')
+  const [minNetSqm,   setMinNetSqm]   = useState(searchParams.get('minNetSqm') || '')
+  const [maxNetSqm,   setMaxNetSqm]   = useState(searchParams.get('maxNetSqm') || '')
+  const [minOpenArea, setMinOpenArea] = useState(searchParams.get('minOpenArea') || '')
+  const [maxOpenArea, setMaxOpenArea] = useState(searchParams.get('maxOpenArea') || '')
+  const [minCoefficient, setMinCoefficient] = useState(searchParams.get('minCoefficient') || '')
+  const [maxCoefficient, setMaxCoefficient] = useState(searchParams.get('maxCoefficient') || '')
+  const [floorLocation, setFloorLocation] = useState(() => searchParams.getAll('floorLocation'))
+  const [kitchenType, setKitchenType] = useState(() => searchParams.getAll('kitchenType'))
+  const [usageStatus, setUsageStatus] = useState(() => searchParams.getAll('usageStatus'))
+  const [titleDeedStatus, setTitleDeedStatus] = useState(() => searchParams.getAll('titleDeedStatus'))
+  const [nearbyTransport, setNearbyTransport] = useState(() => searchParams.getAll('nearbyTransport'))
+  const [listedSince, setListedSince] = useState(searchParams.get('listedSince') || '')
+  // One object rather than nine useStates: they are handled identically and
+  // the grouping keeps the query builder and the reset honest.
+  const [triState, setTriState] = useState(() => {
+    const initial = {}
+    for (const field of [...TRISTATE_AMENITIES, ...TRISTATE_LEGAL, 'hasVirtualTour']) {
+      initial[field] = searchParams.get(field) || ''
+    }
+    return initial
+  })
+
   useEffect(() => {
     api.get('/properties/areas').then(r => setAreas(r.data.areas || [])).catch(() => {})
   }, [])
 
+  /*
+   * One query string drives BOTH the request and the address bar, so the two
+   * can never disagree. Built as URLSearchParams rather than an axios params
+   * object because a multi-select must serialise as repeated keys
+   * (?nearbyTransport=Metro&nearbyTransport=Ferry) — which is what the route
+   * normalises into an any-of match. Axios would encode an array as
+   * `nearbyTransport[]`, a key the server does not read.
+   */
+  const queryString = useMemo(() => {
+    const params = new URLSearchParams()
+    const setIf = (key, value) => { if (value) params.set(key, value) }
+    const appendAll = (key, values) => { for (const v of values) params.append(key, v) }
+
+    setIf('listingType', listingType)
+    setIf('district', district)
+    setIf('propertyType', propertyType)
+    setIf('minPrice', minPrice)
+    setIf('maxPrice', maxPrice)
+    setIf('rooms', rooms)
+    setIf('minSqm', minSqm)
+    setIf('maxSqm', maxSqm)
+    setIf('floor', floor)
+    setIf('totalFloors', totalFloors)
+    setIf('heating', heating)
+    setIf('parking', parking)
+    setIf('buildingAge', buildingAge)
+    setIf('furnished', furnished)
+    setIf('balcony', balcony)
+    setIf('elevator', elevator)
+    setIf('pool', pool)
+    setIf('garden', garden)
+
+    setIf('baths', baths)
+    setIf('minNetSqm', minNetSqm)
+    setIf('maxNetSqm', maxNetSqm)
+    setIf('minOpenArea', minOpenArea)
+    setIf('maxOpenArea', maxOpenArea)
+    setIf('minCoefficient', minCoefficient)
+    setIf('maxCoefficient', maxCoefficient)
+    setIf('listedSince', listedSince)
+
+    appendAll('floorLocation', floorLocation)
+    appendAll('kitchenType', kitchenType)
+    appendAll('usageStatus', usageStatus)
+    appendAll('titleDeedStatus', titleDeedStatus)
+    appendAll('nearbyTransport', nearbyTransport)
+
+    for (const [field, value] of Object.entries(triState)) setIf(field, value)
+
+    return params.toString()
+  }, [
+    listingType, district, propertyType, minPrice, maxPrice, rooms, minSqm, maxSqm,
+    floor, totalFloors, heating, parking, buildingAge,
+    furnished, balcony, elevator, pool, garden,
+    baths, minNetSqm, maxNetSqm, minOpenArea, maxOpenArea, minCoefficient, maxCoefficient,
+    floorLocation, kitchenType, usageStatus, titleDeedStatus, nearbyTransport,
+    listedSince, triState,
+  ])
+
+  /** Distinct filters in play — a multi-select counts once, not once per value. */
+  const activeFilterCount = useMemo(
+    () => new Set([...new URLSearchParams(queryString).keys()]).size,
+    [queryString]
+  )
+
   const fetchProperties = useCallback(() => {
     setLoading(true)
-    const params = {}
-    if (listingType)  params.listingType  = listingType
-    if (district)     params.district     = district
-    if (propertyType) params.propertyType = propertyType
-    if (minPrice)     params.minPrice     = minPrice
-    if (maxPrice)     params.maxPrice     = maxPrice
-    if (rooms)        params.rooms        = rooms
-    if (minSqm)       params.minSqm       = minSqm
-    if (maxSqm)       params.maxSqm       = maxSqm
-    if (floor)        params.floor        = floor
-    if (totalFloors)  params.totalFloors  = totalFloors
-    if (heating)      params.heating      = heating
-    if (parking)      params.parking      = parking
-    if (buildingAge)  params.buildingAge  = buildingAge
-    if (furnished)    params.furnished    = furnished
-    if (balcony)      params.balcony      = balcony
-    if (elevator)     params.elevator     = elevator
-    if (pool)         params.pool         = pool
-    if (garden)       params.garden       = garden
-
-    api.get('/properties', { params })
+    api.get(`/properties${queryString ? '?' + queryString : ''}`)
       .then(r => { setProperties(r.data.properties || []); setTotal(r.data.count || 0) })
       .catch(() => { setProperties([]); setTotal(0) })
       .finally(() => setLoading(false))
-  }, [listingType, district, propertyType, minPrice, maxPrice, rooms, minSqm, maxSqm, floor, totalFloors, heating, parking, buildingAge, furnished, balcony, elevator, pool, garden])
+  }, [queryString])
 
   useEffect(() => { fetchProperties() }, [fetchProperties])
+
+  /*
+   * Keeps the address bar in step, so a filtered search survives a refresh and
+   * can be shared. `replace` because the list refetches as the user types —
+   * pushing a history entry per keystroke would bury the previous page under
+   * dozens of near-identical states and make Back useless.
+   */
+  useEffect(() => {
+    setSearchParams(queryString, { replace: true })
+  }, [queryString, setSearchParams])
+
 
   const clearFilters = () => {
     setListingType(''); setDistrict(''); setPropertyType(''); setMinPrice(''); setMaxPrice('')
     setRooms(''); setMinSqm(''); setMaxSqm(''); setFloor(''); setTotalFloors('')
     setHeating(''); setParking(''); setBuildingAge(''); setFurnished('')
     setBalcony(''); setElevator(''); setPool(''); setGarden('')
+    setBaths(''); setMinNetSqm(''); setMaxNetSqm(''); setMinOpenArea(''); setMaxOpenArea('')
+    setMinCoefficient(''); setMaxCoefficient(''); setListedSince('')
+    setFloorLocation([]); setKitchenType([]); setUsageStatus([]); setTitleDeedStatus([])
+    setNearbyTransport([])
+    setTriState(prev => Object.fromEntries(Object.keys(prev).map(field => [field, ''])))
     setSearchParams({})
     setMobileFilterOpen(false)
   }
@@ -129,7 +244,97 @@ const PropertiesPage = () => {
   const inp = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5E7F52]'
   const chk = 'h-4 w-4 rounded border-slate-300 text-[#5E7F52] focus:ring-[#5E7F52]'
 
-  const FilterPanel = () => (
+  const pp = t.propertiesPage || {}
+  // Canonical-value labels were translated in Waves 10B2/10B3; reused rather
+  // than duplicated so the public filter and the admin form cannot drift.
+  const optionLabels = t.adminPages?.properties || {}
+
+  const toggleInArray = (setter) => (option) =>
+    setter(prev => (prev.includes(option) ? prev.filter(v => v !== option) : [...prev, option]))
+
+  const setTri = (field, value) => setTriState(prev => ({ ...prev, [field]: value }))
+
+  const rangeRow = (key, labelText, minValue, setMin, maxValue, setMax, step) => (
+    <div key={key}>
+      <Label>{labelText}</Label>
+      <div className="flex gap-2">
+        <input
+          type="number" inputMode="decimal" step={step} min="0"
+          aria-label={`${labelText} — ${pp.min || 'Min'}`}
+          placeholder={pp.min || 'Min'}
+          value={minValue} onChange={e => setMin(e.target.value)} className={inp}
+        />
+        <input
+          type="number" inputMode="decimal" step={step} min="0"
+          aria-label={`${labelText} — ${pp.max || 'Max'}`}
+          placeholder={pp.max || 'Max'}
+          value={maxValue} onChange={e => setMax(e.target.value)} className={inp}
+        />
+      </div>
+    </div>
+  )
+
+  const multiSelect = (idPrefix, field, labelText, options, values, setter, labelMap) => (
+    <fieldset key={field}>
+      <legend className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">{labelText}</legend>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {options.map(option => (
+          <label key={option} htmlFor={`${idPrefix}-${field}-${option}`} className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
+            <input
+              id={`${idPrefix}-${field}-${option}`}
+              type="checkbox"
+              className={chk}
+              checked={values.includes(option)}
+              onChange={() => setter(option)}
+            />
+            <span>{labelMap?.[option] || option}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  )
+
+  /*
+   * Any / Yes / No, never a checkbox.
+   *
+   * These amenities have no schema default, so a listing is true, false, or
+   * never recorded. A checkbox can only say "yes" or "not yes", which would
+   * fold "we never asked" into "it has none" — exactly the distinction Waves
+   * 10B1 to 10B3 kept intact.
+   */
+  const triSelect = (idPrefix, field, labelText) => (
+    <div key={field}>
+      <label htmlFor={`${idPrefix}-${field}`} className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">{labelText}</label>
+      <select id={`${idPrefix}-${field}`} value={triState[field]} onChange={e => setTri(field, e.target.value)} className={inp}>
+        <option value="">{pp.any || 'Any'}</option>
+        <option value="true">{pp.yes || 'Yes'}</option>
+        <option value="false">{pp.no || 'No'}</option>
+      </select>
+    </div>
+  )
+
+  const section = (key, title, children) => (
+    <div key={key} className="border-t border-slate-100 pt-4">
+      <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-400">{title}</p>
+      <div className="space-y-4">{children}</div>
+    </div>
+  )
+
+  /*
+   * Rendered TWICE: the desktop sidebar, which is always mounted and merely
+   * hidden by CSS below the `lg` breakpoint, and the mobile drawer, which
+   * mounts only while it is open. With the drawer open both trees are in the
+   * DOM at once, so every generated id is scoped to its instance.
+   *
+   * Without the prefix each id existed twice, and `htmlFor` resolves to the
+   * FIRST match in document order — the hidden desktop control. Clicking a
+   * label in the drawer would have moved focus to an element the user cannot
+   * see, and the duplicate ids were invalid HTML besides.
+   *
+   * Called as a normal function, never mounted as a component type: that is
+   * what keeps inputs from being torn down and re-created on every keystroke.
+   */
+  const renderFilterPanel = (instanceId) => (
     <div className="space-y-5">
       {/* Listing type */}
       <div>
@@ -171,6 +376,15 @@ const PropertiesPage = () => {
         </select>
       </div>
 
+      {/* Bathrooms */}
+      <div>
+        <Label>{pp.baths || 'Bathrooms'}</Label>
+        <select value={baths} onChange={e => setBaths(e.target.value)} className={inp}>
+          <option value="">{pp.any || 'Any'}</option>
+          {BATHS_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
+      </div>
+
       {/* Price */}
       <div>
         <Label>{t.propertiesPage?.priceRange || 'Price Range ($)'}</Label>
@@ -192,7 +406,12 @@ const PropertiesPage = () => {
       {/* Advanced toggle */}
       <button type="button" onClick={() => setShowAdvanced(v => !v)}
         className="flex items-center gap-2 text-xs font-semibold text-[#5E7F52] hover:underline cursor-pointer w-full">
-        {showAdvanced ? (t.propertiesPage?.hideAdvanced || '▲ Hide advanced filters') : (t.propertiesPage?.showAdvanced || '▼ Show advanced filters')}
+        <span>{showAdvanced ? (t.propertiesPage?.hideAdvanced || '▲ Hide advanced filters') : (t.propertiesPage?.showAdvanced || '▼ Show advanced filters')}</span>
+        {activeFilterCount > 0 && (
+          <span className="rounded-full bg-[#5E7F52] px-2 py-0.5 text-[10px] font-bold text-white">
+            {activeFilterCount}
+          </span>
+        )}
       </button>
 
       {showAdvanced && (
@@ -251,6 +470,67 @@ const PropertiesPage = () => {
               ))}
             </div>
           </div>
+
+          {section('size', pp.sectionSizeArea || 'Size & Area', (
+            <>
+              {rangeRow('netSqm', pp.netArea || 'Net Area (m²)', minNetSqm, setMinNetSqm, maxNetSqm, setMaxNetSqm, '0.01')}
+              {rangeRow('openArea', pp.openArea || 'Open Area (m²)', minOpenArea, setMinOpenArea, maxOpenArea, setMaxOpenArea, '0.01')}
+            </>
+          ))}
+
+          {section('building', pp.sectionBuildingLayout || 'Building & Layout', (
+            <>
+              {multiSelect(instanceId, 'floorLocation', pp.floorLocation || 'Floor Location', FLOOR_LOCATIONS,
+                floorLocation, toggleInArray(setFloorLocation), optionLabels.floorLocationOptions)}
+              {multiSelect(instanceId, 'kitchenType', pp.kitchenType || 'Kitchen Type', KITCHEN_TYPES,
+                kitchenType, toggleInArray(setKitchenType), optionLabels.kitchenOptions)}
+              {/* Deliberately labelled with no unit or interpretation — the
+                  donor documents none, so none is invented here. */}
+              {rangeRow('coefficient', pp.coefficient || 'Coefficient', minCoefficient, setMinCoefficient, maxCoefficient, setMaxCoefficient, '0.01')}
+            </>
+          ))}
+
+          {section('extraAmenities', pp.sectionAmenitiesExtra || 'More Amenities', (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {TRISTATE_AMENITIES.map(field =>
+                triSelect(instanceId, field, optionLabels.amenityOptions?.[field] || field))}
+            </div>
+          ))}
+
+          {section('transport', pp.sectionTransport || 'Nearby Transport', (
+            multiSelect(instanceId, 'nearbyTransport', pp.nearbyTransport || 'Nearby Transport', TRANSPORT_OPTIONS,
+              nearbyTransport, toggleInArray(setNearbyTransport), optionLabels.transportOptions)
+          ))}
+
+          {section('legal', pp.sectionLegalUsage || 'Legal & Usage', (
+            <>
+              {multiSelect(instanceId, 'usageStatus', pp.usageStatus || 'Usage Status', USAGE_STATUSES,
+                usageStatus, toggleInArray(setUsageStatus), optionLabels.usageStatusOptions)}
+              {multiSelect(instanceId, 'titleDeedStatus', pp.titleDeedStatus || 'Title Deed', TITLE_DEED_STATUSES,
+                titleDeedStatus, toggleInArray(setTitleDeedStatus), optionLabels.titleDeedOptions)}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {TRISTATE_LEGAL.map(field =>
+                  triSelect(instanceId, field, optionLabels.amenityOptions?.[field] || field))}
+              </div>
+            </>
+          ))}
+
+          {section('listing', pp.sectionListing || 'Listing', (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {triSelect(instanceId, 'hasVirtualTour', pp.hasVirtualTour || 'Virtual Tour')}
+              <div>
+                <label htmlFor={`${instanceId}-listedSince`} className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">{pp.listedSince || 'Listed'}</label>
+                <select id={`${instanceId}-listedSince`} value={listedSince} onChange={e => setListedSince(e.target.value)} className={inp}>
+                  <option value="">{pp.anyTime || 'Any time'}</option>
+                  {LISTED_SINCE_DAYS.map(days => (
+                    <option key={days} value={days}>
+                      {pp[`last${days}Days`] || `Last ${days} days`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -317,7 +597,7 @@ const PropertiesPage = () => {
           <aside className="hidden lg:block w-72 shrink-0">
             <div className="sticky top-24 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm max-h-[calc(100vh-7rem)] overflow-y-auto">
               <h3 style={{ fontFamily: 'Cinzel, serif' }} className="mb-5 text-base font-semibold text-[#1E1E1C]">{t.propertiesPage?.filters || 'Filters'}</h3>
-              <FilterPanel />
+              {renderFilterPanel('desktop')}
             </div>
           </aside>
 
@@ -359,7 +639,7 @@ const PropertiesPage = () => {
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <FilterPanel />
+            {renderFilterPanel('mobile')}
           </div>
         </div>
       )}

@@ -480,6 +480,108 @@ const applyAgentContact = async (body, res, existingProperty = null) => {
   return data
 }
 
+/* ─────────────────── Public search filters ───────────────────────────
+ *
+ * Wave 10B4. Every helper below exists because the obvious one-liner is
+ * wrong in a way that is invisible from the response:
+ *
+ *   Number(raw)  — Number("") is 0 and Number("abc") is NaN. A blank input
+ *                  would silently become "minimum 0" and a typo would become
+ *                  a NaN comparison that matches nothing, with no error.
+ *
+ *   if (raw)     — drops a legitimate 0, so "ground floor" or "0 open area"
+ *                  could never be searched for.
+ *
+ *   raw === true — an unrecognised value must add NO filter rather than
+ *                  quietly filtering on something the caller did not ask for.
+ */
+
+/** Repeated params (?x=a&x=b) arrive as an array, single ones as a string. */
+const toFilterArray = (raw) =>
+  raw === undefined || raw === null ? [] : Array.isArray(raw) ? raw : [raw]
+
+/** Only a genuinely numeric, non-blank string becomes a number. */
+const filterNumber = (raw) => {
+  if (typeof raw !== 'string' || raw.trim() === '') return null
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+/** Adds { $gte, $lte } only for the bounds that actually parsed. */
+const applyRangeFilter = (filter, field, minRaw, maxRaw) => {
+  const min = filterNumber(minRaw)
+  const max = filterNumber(maxRaw)
+  if (min === null && max === null) return
+
+  filter[field] = {}
+  if (min !== null) filter[field].$gte = min
+  if (max !== null) filter[field].$lte = max
+}
+
+/*
+ * Three-state, and the third state is the point.
+ *
+ * Wave 10B1 gave these booleans NO schema default so that "nobody ever
+ * recorded whether this flat has a sauna" stays distinct from "it has none".
+ * A filter that mapped absent to false would collapse that distinction on the
+ * public site — searching "no sauna" would return every listing predating the
+ * field. So `false` matches ONLY a stored false, and anything other than the
+ * two recognised strings adds no filter at all.
+ */
+const applyTriStateFilter = (filter, field, raw) => {
+  if (raw === 'true') filter[field] = true
+  else if (raw === 'false') filter[field] = false
+}
+
+/*
+ * Enum filter, any-of.
+ *
+ * A value the schema cannot store is dropped rather than passed to Mongo. If
+ * the caller supplied the parameter but nothing survived validation the result
+ * is `$in: []`, which matches nothing — deliberately, because silently
+ * widening the search would show listings the visitor did not ask for.
+ */
+const applyEnumFilter = (filter, field, raw, allowed) => {
+  const supplied = toFilterArray(raw).filter(
+    (value) => typeof value === 'string' && value !== ''
+  )
+  if (!supplied.length) return
+
+  filter[field] = { $in: [...new Set(supplied.filter((value) => allowed.includes(value)))] }
+}
+
+/*
+ * "Listed since", accepting both encodings:
+ *
+ *   a whole number of days  ("7")  -> that many days before now
+ *   an absolute ISO instant        -> used as given (the donor contract)
+ *
+ * The day count is what this site's own UI sends, because it survives being
+ * bookmarked or shared: a stored absolute instant would keep drifting further
+ * into the past for whoever opens the link tomorrow.
+ */
+const MAX_LISTED_SINCE_DAYS = 3650
+
+const parseListedSince = (raw) => {
+  if (typeof raw !== 'string' || raw.trim() === '') return null
+  const value = raw.trim()
+
+  if (/^\d+$/.test(value)) {
+    const days = Number(value)
+    if (days < 1 || days > MAX_LISTED_SINCE_DAYS) return null
+    return new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+  }
+
+  // Date parsing is deliberately NOT left to the Date constructor alone: it
+  // accepts '-5' as 2001-04-30 and '2026' as a whole year, so a typo would
+  // become a silent, plausible-looking cutoff. Only an ISO-8601 calendar date
+  // (optionally with a time) is honoured.
+  if (!/^\d{4}-\d{2}-\d{2}([T ]|$)/.test(value)) return null
+
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
 // GET /api/properties
 router.get('/', async (req, res, next) => {
   try {
@@ -487,6 +589,12 @@ router.get('/', async (req, res, next) => {
       listingType, district, minPrice, maxPrice, propertyType, beds, baths, featured,
       rooms, minSqm, maxSqm, floor, totalFloors, heating, parking, buildingAge,
       furnished, balcony, elevator, pool, garden,
+      // ── Wave 10B4 ──
+      minNetSqm, maxNetSqm, minOpenArea, maxOpenArea, minCoefficient, maxCoefficient,
+      floorLocation, kitchenType, usageStatus, titleDeedStatus, nearbyTransport,
+      sauna, jacuzzi, steamRoom, turkishBath, basement,
+      withinSite, eligibleForCredit, exchange, hasVirtualTour,
+      listedSince,
     } = req.query
     const filter = {}
 
@@ -517,6 +625,38 @@ router.get('/', async (req, res, next) => {
       if (minSqm) filter.sqm.$gte = Number(minSqm)
       if (maxSqm) filter.sqm.$lte = Number(maxSqm)
     }
+
+    /* ── Wave 10B4 extended filters ──────────────────────────────────
+     *
+     * Appended, never interleaved: every line above this point behaves
+     * exactly as it did before, so a request carrying none of the
+     * parameters below produces byte-identical results to the previous
+     * release. The chatbot and the similar-properties call both rely on
+     * that.
+     */
+    applyRangeFilter(filter, 'netSqm', minNetSqm, maxNetSqm)
+    applyRangeFilter(filter, 'openAreaSqm', minOpenArea, maxOpenArea)
+    applyRangeFilter(filter, 'coefficient', minCoefficient, maxCoefficient)
+
+    applyEnumFilter(filter, 'floorLocation', floorLocation, FLOOR_LOCATIONS)
+    applyEnumFilter(filter, 'kitchenType', kitchenType, KITCHEN_TYPES)
+    applyEnumFilter(filter, 'usageStatus', usageStatus, USAGE_STATUSES)
+    applyEnumFilter(filter, 'titleDeedStatus', titleDeedStatus, TITLE_DEED_STATUSES)
+    // On an array field `$in` means "contains any of these", which is the
+    // any-of semantic a multi-select asks for.
+    applyEnumFilter(filter, 'nearbyTransport', nearbyTransport, TRANSPORT_OPTIONS)
+
+    for (const [field, raw] of [
+      ['sauna', sauna], ['jacuzzi', jacuzzi], ['steamRoom', steamRoom],
+      ['turkishBath', turkishBath], ['basement', basement],
+      ['withinSite', withinSite], ['eligibleForCredit', eligibleForCredit],
+      ['exchange', exchange], ['hasVirtualTour', hasVirtualTour],
+    ]) {
+      applyTriStateFilter(filter, field, raw)
+    }
+
+    const listedSinceDate = parseListedSince(listedSince)
+    if (listedSinceDate) filter.createdAt = { $gte: listedSinceDate }
 
     // .lean() because the payload is rewritten below rather than returned as
     // documents; the schema declares no virtuals, getters or toJSON transform,
