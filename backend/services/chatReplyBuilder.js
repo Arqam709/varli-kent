@@ -53,6 +53,7 @@ import {
   joinList,
 } from './chatReplyRenderer.js'
 import { CHAT_MESSAGES } from '../locales/chatMessages.js'
+import { buildKnowledgeAnswer } from '../utils/knowledgeAnswer.js'
 
 // Skip Gemini's own follow-up question when a soft description search should
 // run instead, or when the visitor just declined to narrow down — re-asking
@@ -96,7 +97,24 @@ export const shouldContinuePropertyFlow = (parsed = {}) =>
   PROPERTY_FLOW_INTENTS.includes(parsed.intentType) &&
   (parsed.noPreference === true || hasActiveSearchContext(parsed))
 
-export const buildNonPropertyReply = (parsed, language = 'en') => {
+/*
+ * Async only because the knowledge branch below may fall back to a semantic
+ * topic match, which embeds the message. Every other branch is still
+ * synchronous internally — only the return type changed, so all callers keep
+ * one call shape. routes/chat.js awaits it.
+ *
+ * `message` is threaded through because knowledge topic matching works off
+ * the raw text, not off the parsed criteria.
+ */
+export const buildNonPropertyReply = async (parsed, language = 'en', message = '') => {
+  // Checked before the generic branches below: a knowledge question is a
+  // specific, answerable case grounded in the curated knowledge base, not an
+  // "unclear message" case, even though Gemini names its replyType
+  // alongside the other canned reply types.
+  if (parsed.intentType === 'knowledge_question' || parsed.replyType === 'knowledge_reply') {
+    return buildKnowledgeAnswer({ message, language })
+  }
+
   if (
     (parsed.intentType === 'casual_chat' || parsed.replyType === 'casual_reply') &&
     !shouldContinuePropertyFlow(parsed)

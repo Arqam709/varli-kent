@@ -198,6 +198,7 @@ export const normalizeParsed = (parsed, message) => {
   'emotional_message',
   'contact_request',
   'website_service_question',
+  'knowledge_question',
   'unknown',
 ]
 
@@ -208,6 +209,7 @@ const allowedReplyTypes = [
   'support_reply',
   'contact_reply',
   'service_reply',
+  'knowledge_reply',
   'unknown_reply',
 ]
 

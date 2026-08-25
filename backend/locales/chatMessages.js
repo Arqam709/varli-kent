@@ -20,6 +20,12 @@ export const CHAT_MESSAGES = {
   en: {
     nonPropertyPage: 'For now, I can help with property searches. Service pages will be supported soon.',
 
+    // Shown when a knowledge question matched no curated topic — see
+    // utils/knowledgeAnswer.js. Never a guess.
+    knowledge: {
+      noMatchFallback: "I don't have verified information on that specific question, so I'd rather not guess. For legal, tax, or citizenship details, a licensed real estate lawyer or the Land Registry can give you a reliable answer. In the meantime, I'm happy to help you search for properties.",
+    },
+
     nonProperty: {
       casual: "I'm doing well, thank you. I'm here to help you find the right property. Are you looking to buy, rent, or just exploring?",
       emotional: "I'm sorry to hear that. I hope your day gets better. I'm mainly here to help with property search, so whenever you're ready, tell me what kind of home you're looking for.",
@@ -122,6 +128,12 @@ export const CHAT_MESSAGES = {
   tr: {
     nonPropertyPage: 'Şimdilik yalnızca mülk aramalarında yardımcı olabilirim. Hizmet sayfaları yakında desteklenecek.',
 
+    // Shown when a knowledge question matched no curated topic — see
+    // utils/knowledgeAnswer.js. Never a guess.
+    knowledge: {
+      noMatchFallback: "Bu soruya dair doğrulanmış bir bilgim yok, bu yüzden tahmin yürütmek istemem. Hukuki, vergi veya vatandaşlık detayları için ruhsatlı bir gayrimenkul avukatına ya da Tapu Müdürlüğüne danışabilirsiniz. Bu arada mülk aramanızda size memnuniyetle yardımcı olabilirim.",
+    },
+
     nonProperty: {
       casual: 'İyiyim, teşekkür ederim. Size doğru mülkü bulmakta yardımcı olmak için buradayım. Satın almak mı, kiralamak mı istiyorsunuz, yoksa sadece göz mü atıyorsunuz?',
       emotional: 'Bunu duyduğuma üzüldüm. Umarım gününüz düzelir. Ben daha çok mülk arama konusunda yardımcı oluyorum, o yüzden hazır olduğunuzda nasıl bir ev aradığınızı söyleyebilirsiniz.',
@@ -218,6 +230,12 @@ export const CHAT_MESSAGES = {
 
   ar: {
     nonPropertyPage: 'في الوقت الحالي، يمكنني المساعدة في البحث عن العقارات فقط. سيتم دعم صفحات الخدمات قريباً.',
+
+    // Shown when a knowledge question matched no curated topic — see
+    // utils/knowledgeAnswer.js. Never a guess.
+    knowledge: {
+      noMatchFallback: "لا تتوفر لديّ معلومات مؤكدة عن هذا السؤال تحديداً، ولا أفضّل التخمين. للحصول على تفاصيل قانونية أو ضريبية أو تتعلق بالجنسية، يمكن لمحامٍ عقاري مرخّص أو دائرة الطابو تقديم إجابة موثوقة. وفي هذه الأثناء، يسعدني مساعدتك في البحث عن عقار.",
+    },
 
     nonProperty: {
       casual: 'بخير، شكراً لك. أنا هنا لمساعدتك في إيجاد العقار المناسب. هل تبحث عن الشراء، أم الإيجار، أم أنك تستكشف فقط؟',

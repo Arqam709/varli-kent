@@ -80,6 +80,11 @@ Available intentType:
 - "emotional_message": visitor shares feelings or a personal emotional message, like "my day was bad".
 - "contact_request": visitor wants to speak to an agent, be called or contacted, or make/arrange/book/schedule an appointment, viewing, visit, or tour — including phrased as a question like "can you make an appointment for me", "can I visit it", "can I see it", or "is this still available".
 - "website_service_question": visitor asks about VarliKent services like architecture, renovation, construction, interior design, or general website/service information.
+- "knowledge_question": visitor asks a GENERAL knowledge question about Istanbul real estate itself — not a request to search or filter the listings. Examples: the legal or tax process of buying property as a foreigner, required documents, annual property tax or title deed tax, VAT exemption rules, citizenship by investment, or what a specific district is like to live in (its character, who it suits) asked as general knowledge rather than as a search filter.
+  - vs "property_search": the test is whether the visitor wants a RESULT SET or an EXPLANATION. "Show me apartments in Beşiktaş" and "I want a family villa in Kadıköy" are property_search even though they name a district and a lifestyle; "Is Beşiktaş good for families?" and "What is Kadıköy like?" are knowledge_question because no listings were requested.
+  - vs "website_service_question": that intent stays with anything about VarliKent itself — its services, its team, how to contact it. knowledge_question is about Istanbul real estate in general, independent of this company.
+  - A knowledge question asked mid-search (e.g. after browsing apartments, "by the way, how much is the title deed tax?") is still knowledge_question for THAT turn — do not fold it into the property search context.
+  - A knowledge question about a specific district still needs that district identified: keep the district value in the "district" field exactly as for a normal search (canonical spelling, per DISTRICT NAMES below), even though replyType is "knowledge_reply" rather than "search".
 - "unknown": message is unclear or unrelated.
 
 Available replyType:

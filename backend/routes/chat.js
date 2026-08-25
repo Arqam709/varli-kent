@@ -276,7 +276,7 @@ if (districtScopeResult.handled) {
       parsed.pendingLead = leadResult.pendingLead
     }
 
-    const nonPropertyReply = buildNonPropertyReply(parsed, language)
+    const nonPropertyReply = await buildNonPropertyReply(parsed, language, message)
 
 if (nonPropertyReply) {
   let responseConversationId = null

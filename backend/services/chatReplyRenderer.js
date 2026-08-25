@@ -214,6 +214,12 @@ export const renderMixedListingNotice = (language = DEFAULT_MESSAGE_LANGUAGE) =>
 
 export const renderNoResultsPlain = (language = DEFAULT_MESSAGE_LANGUAGE) => tMessage(['noResults', 'plain'], language)
 
+// Knowledge Q&A (utils/knowledgeAnswer.js): the static reply for a question
+// no curated topic matched. Deliberately the only non-curated thing that
+// module can ever say.
+export const renderKnowledgeFallback = (language = DEFAULT_MESSAGE_LANGUAGE) =>
+  tMessage(['knowledge', 'noMatchFallback'], language)
+
 // ─── English search-result renderer (byte-identical to the pre-Phase-3
 // chatReplyBuilder.js buildReplyText — same joins, same idiosyncrasies) ────
 const PROPERTY_TYPE_PLURAL_OVERRIDES_EN = { Duplex: 'Duplexes' }
