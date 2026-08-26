@@ -86,7 +86,26 @@ router.post('/', optionalAuth, async (req, res, next) => {
       pageKey === 'rent' ||
       pageKey.startsWith('/properties/')
 
-    if (!isPropertyPage) {
+    /* Wave 11C — service pages.
+     *
+     * A visitor reading /architecture or /renovation is exactly the visitor
+     * most likely to ask what that service includes, and until now the
+     * chatbot answered them with "I can only help with properties on this
+     * page". These pageKeys are the ones AIChatbot.jsx sends (note
+     * interior_design, underscore — the route is /interior-design but the
+     * key is not the path).
+     *
+     * `contact` is included because the donor includes it and the same
+     * reasoning applies: the contact page is where lead intent is highest.
+     *
+     * Kept as a separate list from isPropertyPage rather than folded into
+     * it: nothing downstream should start treating /renovation as a place
+     * that forces a listingType the way /sale and /rent do.
+     */
+    const SERVICE_PAGE_KEYS = ['architecture', 'construction', 'renovation', 'interior_design', 'contact']
+    const isServicePage = SERVICE_PAGE_KEYS.includes(pageKey)
+
+    if (!isPropertyPage && !isServicePage) {
       const nonPropertyPageReply = renderNonPropertyPageReply(language)
       let responseConversationId = null
 

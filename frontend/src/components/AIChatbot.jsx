@@ -138,6 +138,14 @@ export default function AIChatbot() {
     if (path === '/properties') return 'properties'
     if (path === '/sale') return 'sale'
     if (path === '/rent') return 'rent'
+    // Wave 11C — service pages. The key is not always the path: the route is
+    // /interior-design but the key is interior_design, matching the value
+    // routes/chat.js's SERVICE_PAGE_KEYS expects.
+    if (path === '/architecture') return 'architecture'
+    if (path === '/construction') return 'construction'
+    if (path === '/renovation') return 'renovation'
+    if (path === '/interior-design') return 'interior_design'
+    if (path === '/contact') return 'contact'
 
     return 'hidden'
   }, [location.pathname])
@@ -154,10 +162,20 @@ export default function AIChatbot() {
   // pageKey support, chatLeadFlow.js's resolvePropertyFromPage, the
   // propertyDetail translation config) stays intact and this can be
   // restored later by just re-adding the clause below.
+  //
+  // Wave 11C adds the four service pages and /contact — the visitor reading
+  // /renovation is the one most likely to ask what renovation includes, and
+  // there is now a curated answer for that. The backend's own gate
+  // (routes/chat.js SERVICE_PAGE_KEYS) accepts exactly these same keys.
   const chatbotAllowed =
     pageKey === 'properties' ||
     pageKey === 'sale' ||
-    pageKey === 'rent'
+    pageKey === 'rent' ||
+    pageKey === 'architecture' ||
+    pageKey === 'construction' ||
+    pageKey === 'renovation' ||
+    pageKey === 'interior_design' ||
+    pageKey === 'contact'
 
   const pageConfig = useMemo(() => {
     const pages = c.pages || {}
@@ -165,6 +183,15 @@ export default function AIChatbot() {
 
     if (pageKey === 'sale') return pages.sale || fallback
     if (pageKey === 'rent') return pages.rent || fallback
+    // Wave 11C. Without these the service pages would fall through to
+    // pages.default, whose welcome asks for a budget and district — which
+    // would steer a visitor on /renovation away from the very question this
+    // wave taught the bot to answer.
+    if (pageKey === 'architecture') return pages.architecture || fallback
+    if (pageKey === 'construction') return pages.construction || fallback
+    if (pageKey === 'renovation') return pages.renovation || fallback
+    if (pageKey === 'interior_design') return pages.interiorDesign || fallback
+    if (pageKey === 'contact') return pages.contact || fallback
     if (pageKey.startsWith('/properties/')) return pages.propertyDetail || fallback
 
     return pages.default || fallback

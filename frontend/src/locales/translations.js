@@ -910,6 +910,61 @@ const translations = {
             'Show me apartments for sale',
           ],
         },
+        architecture: {
+          welcome:
+            'Welcome to VarliKent. Ask me about our architecture services, or tell me about the project you have in mind.',
+          placeholder: 'Ask about architecture services...',
+          quickQuestions: [
+            'What architecture services do you offer?',
+            'Can your architecture service design a new building?',
+            'What stages does your architecture process follow?',
+            'Do you handle structural engineering and urban planning?',
+          ],
+        },
+        construction: {
+          welcome:
+            'Welcome to VarliKent. Ask me about our construction services, or tell me about the project you want to build.',
+          placeholder: 'Ask about construction services...',
+          quickQuestions: [
+            'What construction services do you offer?',
+            'Can your construction service build a new property?',
+            'What stages does your construction process follow?',
+            'How does your construction service handle earthquake safety?',
+          ],
+        },
+        renovation: {
+          welcome:
+            'Welcome to VarliKent. Ask me about our renovation services, or tell me about the space you want to renovate.',
+          placeholder: 'Ask about renovation services...',
+          quickQuestions: [
+            'What renovation services do you offer?',
+            'I want to renovate my apartment',
+            'Can you renovate a kitchen or bathroom?',
+            'Can I preview materials and finishes before renovation starts?',
+          ],
+        },
+        interiorDesign: {
+          welcome:
+            'Welcome to VarliKent. Ask me about our interior design services, or tell me about the space you want to design.',
+          placeholder: 'Ask about interior design services...',
+          quickQuestions: [
+            'What interior design services do you offer?',
+            'Can you redesign my home interior?',
+            'How does the interior design process work?',
+            'What interior design styles can I choose from?',
+          ],
+        },
+        contact: {
+          welcome:
+            'Welcome to VarliKent. Ask me anything, or tell me how I can help connect you with our team.',
+          placeholder: 'Ask a question...',
+          quickQuestions: [
+            'How can I contact your team?',
+            'I want to schedule a consultation',
+            'Can you help me find a property?',
+            'What services do you offer?',
+          ],
+        },
       },
     },
   },
@@ -1844,6 +1899,61 @@ forgotPasswordPage: {
             'Bu mülkle ilgileniyorum',
             'Bu bölgedeki mülkleri göster',
             'Satılık daireleri göster',
+          ],
+        },
+        architecture: {
+          welcome:
+            "VarliKent'e hoş geldiniz. Mimarlık hizmetlerimiz hakkında soru sorabilir ya da aklınızdaki projeyi anlatabilirsiniz.",
+          placeholder: 'Mimarlık hizmetleri hakkında soru sorun...',
+          quickQuestions: [
+            'Mimarlık hizmeti olarak neler sunuyorsunuz?',
+            'Mimarlık hizmetiniz yeni bir bina tasarlayabilir mi?',
+            'Mimarlık hizmetiniz hangi aşamalardan oluşuyor?',
+            'Yapısal mühendislik ve kentsel planlama yapıyor musunuz?',
+          ],
+        },
+        construction: {
+          welcome:
+            "VarliKent'e hoş geldiniz. İnşaat hizmetlerimiz hakkında soru sorabilir ya da inşa etmek istediğiniz projeyi anlatabilirsiniz.",
+          placeholder: 'İnşaat hizmetleri hakkında soru sorun...',
+          quickQuestions: [
+            'Hangi inşaat hizmetlerini sunuyorsunuz?',
+            'İnşaat hizmetiniz yeni bir mülk inşa edebilir mi?',
+            'İnşaat süreciniz hangi aşamalardan oluşuyor?',
+            'İnşaat hizmetinizde deprem güvenliğini nasıl sağlıyorsunuz?',
+          ],
+        },
+        renovation: {
+          welcome:
+            "VarliKent'e hoş geldiniz. Tadilat hizmetlerimiz hakkında soru sorabilir ya da yenilemek istediğiniz alanı anlatabilirsiniz.",
+          placeholder: 'Tadilat hizmetleri hakkında soru sorun...',
+          quickQuestions: [
+            'Hangi tadilat hizmetlerini sunuyorsunuz?',
+            'Dairemde tadilat yaptırmak istiyorum',
+            'Mutfak veya banyo tadilatı yapıyor musunuz?',
+            'Tadilat başlamadan önce malzemeleri ve kaplamaları önizleyebilir miyim?',
+          ],
+        },
+        interiorDesign: {
+          welcome:
+            "VarliKent'e hoş geldiniz. İç mimarlık hizmetlerimiz hakkında soru sorabilir ya da tasarlamak istediğiniz alanı anlatabilirsiniz.",
+          placeholder: 'İç mimarlık hizmetleri hakkında soru sorun...',
+          quickQuestions: [
+            'Hangi iç mimarlık hizmetlerini sunuyorsunuz?',
+            'Evimin iç mekan tasarımını yapabilir misiniz?',
+            'İç mimarlık süreci nasıl işliyor?',
+            'İç mimaride hangi tarzlar arasından seçim yapabilirim?',
+          ],
+        },
+        contact: {
+          welcome:
+            "VarliKent'e hoş geldiniz. Bana istediğinizi sorabilir ya da ekibimizle bağlantı kurmanıza nasıl yardımcı olabileceğimi söyleyebilirsiniz.",
+          placeholder: 'Bir soru sorun...',
+          quickQuestions: [
+            'Ekibinizle nasıl iletişime geçebilirim?',
+            'Bir görüşme planlamak istiyorum',
+            'Mülk bulmama yardımcı olabilir misiniz?',
+            'Hangi hizmetleri sunuyorsunuz?',
           ],
         },
       },
@@ -2781,6 +2891,61 @@ forgotPasswordPage: {
             'أنا مهتم بهذا العقار',
             'أرني عقارات في هذه المنطقة',
             'أرني شققاً للبيع',
+          ],
+        },
+        architecture: {
+          welcome:
+            'مرحباً بك في فارلي كنت. اسألني عن خدمات العمارة لدينا، أو أخبرني عن المشروع الذي تفكر فيه.',
+          placeholder: 'اسأل عن خدمات العمارة...',
+          quickQuestions: [
+            'ما هي خدمات العمارة التي تقدمونها؟',
+            'هل يمكن لخدمة العمارة لديكم تصميم مبنى جديد؟',
+            'ما المراحل التي تمر بها عملية العمارة لديكم؟',
+            'هل تشمل خدمة العمارة الهندسة الإنشائية والتخطيط الحضري؟',
+          ],
+        },
+        construction: {
+          welcome:
+            'مرحباً بك في فارلي كنت. اسألني عن خدمات البناء لدينا، أو أخبرني عن المشروع الذي تريد بناءه.',
+          placeholder: 'اسأل عن خدمات البناء...',
+          quickQuestions: [
+            'ما هي خدمات الإنشاء التي تقدمونها؟',
+            'هل يمكن لخدمة الإنشاء لديكم بناء عقار جديد؟',
+            'ما المراحل التي تمر بها عملية الإنشاء لديكم؟',
+            'كيف تتعاملون مع السلامة من الزلازل في خدمة الإنشاء؟',
+          ],
+        },
+        renovation: {
+          welcome:
+            'مرحباً بك في فارلي كنت. اسألني عن خدمات التجديد لدينا، أو أخبرني عن المساحة التي تريد تجديدها.',
+          placeholder: 'اسأل عن خدمات التجديد...',
+          quickQuestions: [
+            'ما هي خدمات التجديد التي تقدمونها؟',
+            'أريد تجديد شقتي',
+            'هل تقومون بتجديد المطبخ أو الحمام؟',
+            'هل يمكنني معاينة المواد والتشطيبات قبل بدء التجديد؟',
+          ],
+        },
+        interiorDesign: {
+          welcome:
+            'مرحباً بك في فارلي كنت. اسألني عن خدمات التصميم الداخلي لدينا، أو أخبرني عن المساحة التي تريد تصميمها.',
+          placeholder: 'اسأل عن خدمات التصميم الداخلي...',
+          quickQuestions: [
+            'ما هي خدمات التصميم الداخلي التي تقدمونها؟',
+            'هل يمكنكم إعادة تصميم المنزل من الداخل؟',
+            'كيف تسير عملية التصميم الداخلي؟',
+            'ما أنماط التصميم الداخلي التي يمكنني الاختيار من بينها؟',
+          ],
+        },
+        contact: {
+          welcome:
+            'مرحباً بك في فارلي كنت. اسألني أي شيء، أو أخبرني كيف يمكنني مساعدتك في التواصل مع فريقنا.',
+          placeholder: 'اطرح سؤالاً...',
+          quickQuestions: [
+            'كيف يمكنني التواصل مع فريقكم؟',
+            'أريد حجز استشارة',
+            'هل يمكنكم مساعدتي في العثور على عقار؟',
+            'ما هي الخدمات التي تقدمونها؟',
           ],
         },
       },
@@ -3888,9 +4053,9 @@ forgotPasswordPage: {
           placeholder: 'Fragen Sie nach Architekturleistungen...',
           quickQuestions: [
             'Welche Architekturleistungen bieten Sie an?',
-            'Ich möchte ein neues Gebäude entwerfen',
-            'Wie läuft der Designprozess ab?',
-            'Zeigen Sie mir Beispiele Ihrer Projekte',
+            'Kann Ihr Architekturservice ein neues Gebäude entwerfen?',
+            'Welche Phasen umfasst Ihr Architekturprozess?',
+            'Übernehmen Sie Tragwerksplanung und Stadtplanung?',
           ],
         },
         construction: {
@@ -3899,9 +4064,9 @@ forgotPasswordPage: {
           placeholder: 'Fragen Sie nach Bauleistungen...',
           quickQuestions: [
             'Welche Bauleistungen bieten Sie an?',
-            'Ich möchte eine neue Immobilie bauen',
-            'Wie lange dauert der Bau?',
-            'Zeigen Sie mir Beispiele Ihrer Bauprojekte',
+            'Kann Ihr Bauservice eine neue Immobilie errichten?',
+            'Welche Phasen umfasst Ihr Bauprozess?',
+            'Wie berücksichtigt Ihr Bauservice die Erdbebensicherheit?',
           ],
         },
         renovation: {
@@ -3911,8 +4076,8 @@ forgotPasswordPage: {
           quickQuestions: [
             'Welche Renovierungsleistungen bieten Sie an?',
             'Ich möchte meine Wohnung renovieren',
-            'Wie lange dauert eine Renovierung?',
-            'Zeigen Sie mir Beispiele Ihrer Renovierungsprojekte',
+            'Renovieren Sie Küche oder Badezimmer?',
+            'Kann ich Materialien und Oberflächen vor der Renovierung ansehen?',
           ],
         },
         interiorDesign: {
@@ -3921,9 +4086,9 @@ forgotPasswordPage: {
           placeholder: 'Fragen Sie nach Innenarchitekturleistungen...',
           quickQuestions: [
             'Welche Innenarchitekturleistungen bieten Sie an?',
-            'Ich möchte mein Zuhause neu gestalten',
+            'Können Sie das Interieur meines Zuhauses neu gestalten?',
             'Wie läuft der Innenarchitekturprozess ab?',
-            'Zeigen Sie mir Beispiele Ihrer Innenarchitekturprojekte',
+            'Welche Innenarchitektur-Stile stehen zur Auswahl?',
           ],
         },
         contact: {
@@ -3933,7 +4098,7 @@ forgotPasswordPage: {
           quickQuestions: [
             'Wie kann ich Ihr Team kontaktieren?',
             'Ich möchte eine Beratung vereinbaren',
-            'Wo befindet sich Ihr Büro?',
+            'Können Sie mir helfen, eine Immobilie zu finden?',
             'Welche Leistungen bieten Sie an?',
           ],
         },
@@ -5056,9 +5221,9 @@ forgotPasswordPage: {
           placeholder: 'Спросите об архитектурных услугах...',
           quickQuestions: [
             'Какие архитектурные услуги вы предлагаете?',
-            'Я хочу спроектировать новое здание',
-            'Как проходит процесс проектирования?',
-            'Покажи примеры ваших проектов',
+            'Может ли ваша архитектурная служба спроектировать новое здание?',
+            'Какие этапы включает ваш архитектурный процесс?',
+            'Занимаетесь ли вы конструкционным проектированием и градостроительством?',
           ],
         },
         construction: {
@@ -5067,9 +5232,9 @@ forgotPasswordPage: {
           placeholder: 'Спросите о строительных услугах...',
           quickQuestions: [
             'Какие строительные услуги вы предлагаете?',
-            'Я хочу построить новый объект',
-            'Сколько времени занимает строительство?',
-            'Покажи примеры ваших строительных проектов',
+            'Может ли ваша строительная служба построить новый объект?',
+            'Какие этапы включает ваш строительный процесс?',
+            'Как вы обеспечиваете сейсмическую безопасность при строительстве?',
           ],
         },
         renovation: {
@@ -5079,8 +5244,8 @@ forgotPasswordPage: {
           quickQuestions: [
             'Какие услуги по ремонту вы предлагаете?',
             'Я хочу отремонтировать свою квартиру',
-            'Сколько времени занимает ремонт?',
-            'Покажи примеры ваших проектов по ремонту',
+            'Делаете ли вы ремонт кухни или ванной?',
+            'Могу ли я посмотреть материалы и отделку до начала ремонта?',
           ],
         },
         interiorDesign: {
@@ -5089,9 +5254,9 @@ forgotPasswordPage: {
           placeholder: 'Спросите об услугах по дизайну интерьера...',
           quickQuestions: [
             'Какие услуги по дизайну интерьера вы предлагаете?',
-            'Я хочу переделать интерьер своего дома',
+            'Можете ли вы переделать интерьер моего дома?',
             'Как проходит процесс дизайна интерьера?',
-            'Покажи примеры ваших проектов по дизайну интерьера',
+            'Какие стили дизайна интерьера доступны на выбор?',
           ],
         },
         contact: {
@@ -5101,7 +5266,7 @@ forgotPasswordPage: {
           quickQuestions: [
             'Как связаться с вашей командой?',
             'Я хочу записаться на консультацию',
-            'Где находится ваш офис?',
+            'Можете ли вы помочь мне найти недвижимость?',
             'Какие услуги вы предлагаете?',
           ],
         },
@@ -6224,9 +6389,9 @@ forgotPasswordPage: {
           placeholder: 'آرکیٹیکچر سروسز کے بارے میں پوچھیں...',
           quickQuestions: [
             'آپ کون سی آرکیٹیکچر سروسز پیش کرتے ہیں؟',
-            'میں ایک نئی عمارت ڈیزائن کرنا چاہتا ہوں',
-            'ڈیزائن کا عمل کیسے کام کرتا ہے؟',
-            'مجھے اپنے پراجیکٹس کی مثالیں دکھائیں',
+            'کیا آپ کی آرکیٹیکچر سروس نئی عمارت ڈیزائن کر سکتی ہے؟',
+            'آپ کے آرکیٹیکچر عمل میں کون سے مراحل شامل ہیں؟',
+            'کیا آپ اسٹرکچرل انجینئرنگ اور اربن پلاننگ کرتے ہیں؟',
           ],
         },
         construction: {
@@ -6235,9 +6400,9 @@ forgotPasswordPage: {
           placeholder: 'تعمیراتی سروسز کے بارے میں پوچھیں...',
           quickQuestions: [
             'آپ کون سی تعمیراتی سروسز پیش کرتے ہیں؟',
-            'میں ایک نئی جائیداد تعمیر کرنا چاہتا ہوں',
-            'تعمیر میں کتنا وقت لگتا ہے؟',
-            'مجھے اپنے تعمیراتی پراجیکٹس کی مثالیں دکھائیں',
+            'کیا آپ کی تعمیراتی سروس نئی جائیداد بنا سکتی ہے؟',
+            'آپ کے تعمیراتی عمل میں کون سے مراحل شامل ہیں؟',
+            'آپ کی تعمیراتی سروس زلزلے سے حفاظت کو کیسے یقینی بناتی ہے؟',
           ],
         },
         renovation: {
@@ -6247,8 +6412,8 @@ forgotPasswordPage: {
           quickQuestions: [
             'آپ کون سی تزئین و آرائش کی سروسز پیش کرتے ہیں؟',
             'میں اپنا اپارٹمنٹ نئی شکل دینا چاہتا ہوں',
-            'تزئین و آرائش میں کتنا وقت لگتا ہے؟',
-            'مجھے اپنے تزئین و آرائش کے پراجیکٹس کی مثالیں دکھائیں',
+            'کیا آپ کچن یا باتھ روم کی تزئین و آرائش کرتے ہیں؟',
+            'کیا میں تزئین و آرائش شروع ہونے سے پہلے مٹیریل اور فنش دیکھ سکتا ہوں؟',
           ],
         },
         interiorDesign: {
@@ -6257,9 +6422,9 @@ forgotPasswordPage: {
           placeholder: 'انٹیریئر ڈیزائن سروسز کے بارے میں پوچھیں...',
           quickQuestions: [
             'آپ کون سی انٹیریئر ڈیزائن سروسز پیش کرتے ہیں؟',
-            'میں اپنے گھر کو دوبارہ ڈیزائن کرنا چاہتا ہوں',
+            'کیا آپ میرے گھر کا انٹیریئر دوبارہ ڈیزائن کر سکتے ہیں؟',
             'انٹیریئر ڈیزائن کا عمل کیسے کام کرتا ہے؟',
-            'مجھے اپنے انٹیریئر ڈیزائن پراجیکٹس کی مثالیں دکھائیں',
+            'انٹیریئر ڈیزائن میں کون سے اسٹائل دستیاب ہیں؟',
           ],
         },
         contact: {
@@ -6269,7 +6434,7 @@ forgotPasswordPage: {
           quickQuestions: [
             'میں آپ کی ٹیم سے کیسے رابطہ کر سکتا ہوں؟',
             'میں ایک مشاورت کا وقت طے کرنا چاہتا ہوں',
-            'آپ کا دفتر کہاں واقع ہے؟',
+            'کیا آپ مجھے جائیداد تلاش کرنے میں مدد کر سکتے ہیں؟',
             'آپ کون سی خدمات پیش کرتے ہیں؟',
           ],
         },

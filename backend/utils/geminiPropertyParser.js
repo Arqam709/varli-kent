@@ -79,10 +79,13 @@ Available intentType:
 - "casual_chat": visitor says hello, asks how you are, thanks you, or makes small talk.
 - "emotional_message": visitor shares feelings or a personal emotional message, like "my day was bad".
 - "contact_request": visitor wants to speak to an agent, be called or contacted, or make/arrange/book/schedule an appointment, viewing, visit, or tour — including phrased as a question like "can you make an appointment for me", "can I visit it", "can I see it", or "is this still available".
-- "website_service_question": visitor asks about VarliKent services like architecture, renovation, construction, interior design, or general website/service information.
-- "knowledge_question": visitor asks a GENERAL knowledge question about Istanbul real estate itself — not a request to search or filter the listings. Examples: the legal or tax process of buying property as a foreigner, required documents, annual property tax or title deed tax, VAT exemption rules, citizenship by investment, or what a specific district is like to live in (its character, who it suits) asked as general knowledge rather than as a search filter.
+- "website_service_question": visitor asks a VAGUE or general question about VarliKent as a company or site — "what services do you offer", "tell me about your company", "what can you do for me" — where NO specific service is named, or a general website/navigation question. Also covers how to contact the company.
+- "knowledge_question": visitor asks a question that has a curated factual answer — not a request to search or filter the listings. Two kinds:
+  (a) GENERAL Istanbul real-estate knowledge: the legal or tax process of buying property as a foreigner, required documents, annual property tax or title deed tax, VAT exemption rules, citizenship by investment, or what a specific district is like to live in (its character, who it suits) asked as general knowledge rather than as a search filter.
+  (b) A SPECIFIC VarliKent service named by the visitor — architecture, construction, renovation, or interior design — where they ask what it includes, how it works, what it covers, or whether VarliKent can do it for them. Examples: "what does your architecture service include", "how does the renovation process work", "can you help design my interior", "what's involved in construction management", "mimarlık hizmetiniz neleri kapsıyor", "خدمة التجديد لديكم".
   - vs "property_search": the test is whether the visitor wants a RESULT SET or an EXPLANATION. "Show me apartments in Beşiktaş" and "I want a family villa in Kadıköy" are property_search even though they name a district and a lifestyle; "Is Beşiktaş good for families?" and "What is Kadıköy like?" are knowledge_question because no listings were requested.
-  - vs "website_service_question": that intent stays with anything about VarliKent itself — its services, its team, how to contact it. knowledge_question is about Istanbul real estate in general, independent of this company.
+  - CRITICAL — a service word alone never makes a message a service question. "Find a villa that needs renovation", "show me apartments in a new building", and "properties with modern interiors" are all property_search: the visitor wants LISTINGS, and "renovation"/"interior" merely describes the kind of listing. Only treat it as knowledge_question (b) when the visitor is asking about VARLIKENT'S OWN SERVICE.
+  - vs "website_service_question": that intent is ONLY for a VAGUE, unspecific question about VarliKent as a company — "what services do you offer", "what can you do for me", "tell me about your company" — where no specific service is named and there is nothing concrete to ground an answer in. The moment the visitor names one of the four specific services and asks about it, that is "knowledge_question" (replyType "knowledge_reply"), because there is a curated, factual answer to ground it in.
   - A knowledge question asked mid-search (e.g. after browsing apartments, "by the way, how much is the title deed tax?") is still knowledge_question for THAT turn — do not fold it into the property search context.
   - A knowledge question about a specific district still needs that district identified: keep the district value in the "district" field exactly as for a normal search (canonical spelling, per DISTRICT NAMES below), even though replyType is "knowledge_reply" rather than "search".
 - "unknown": message is unclear or unrelated.
@@ -1134,6 +1137,42 @@ Example X11 (listing metadata, NOT a distance question):
 Visitor: Show apartments that have a metro station nearby.
 => propertyType: "Apartment", nearbyTransport: ["Metro"]
 Note: a question about WHICH station is closest to one specific property is not a property search and must not fill nearbyTransport.
+
+SERVICE QUESTION EXAMPLES (the vague/specific split):
+
+Example S1 (VAGUE — no specific service named):
+Visitor: What services do you offer?
+=> intentType: "website_service_question", replyType: "service_reply"
+
+Example S2 (VAGUE, Turkish):
+Visitor: VarliKent neler yapıyor?
+=> intentType: "website_service_question", replyType: "service_reply"
+
+Example S3 (SPECIFIC service named — curated answer exists):
+Visitor: What does your architecture service include?
+=> intentType: "knowledge_question", replyType: "knowledge_reply"
+
+Example S4 (SPECIFIC, Turkish):
+Visitor: Tadilat hizmetiniz neleri kapsıyor?
+=> intentType: "knowledge_question", replyType: "knowledge_reply"
+
+Example S5 (SPECIFIC, Arabic):
+Visitor: ماذا تشمل خدمة التصميم الداخلي لديكم؟
+=> intentType: "knowledge_question", replyType: "knowledge_reply"
+
+Example S6 (SPECIFIC, phrased as a capability question):
+Visitor: Can you renovate my apartment?
+=> intentType: "knowledge_question", replyType: "knowledge_reply"
+
+Example S7 (TRAP — a service word describing a LISTING, not a service question):
+Visitor: Find me a villa in Sarıyer that needs renovation.
+=> intentType: "property_search", propertyType: "Villa", district: "Sarıyer", descriptionQuery: "needs renovation"
+The visitor wants LISTINGS. "renovation" describes the property, not a question about VarliKent's renovation service.
+
+Example S8 (TRAP — being on a service page does not make it a service question):
+Visitor: Find villas in Sarıyer.
+=> intentType: "property_search", propertyType: "Villa", district: "Sarıyer"
+This is a property search no matter which page the visitor is reading. Page context never forces an intent.
 
 ${conversationBlock}
 `

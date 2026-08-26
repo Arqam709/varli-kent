@@ -27,16 +27,31 @@
 //              answers inconsistent with every other reply the bot sends, and
 //              would mean translating legal thresholds by hand.
 //
-// The donor also carried five `service_offering` topics (architecture,
-// construction, renovation, interior design, overview). Those are deliberately
-// NOT included: CURRENT already answers service questions through its own
-// `website_service_question` intent in services/chatReplyBuilder.js, and
-// importing the donor's service keywords would have let this feature quietly
-// take that intent over.
+// Wave 11C adds the donor's `service_offering` category — four topics
+// describing what VarliKent's own architecture, construction, renovation and
+// interior design services actually include.
+//
+// Wave 11A had deliberately left these out, on the reasoning that CURRENT
+// already answered service questions through `website_service_question`. That
+// held for the VAGUE question and still does, but it was too broad: it also
+// sent "what does your architecture service include?" to a one-line reply
+// that lists the five service areas and asks which one the visitor means —
+// which is exactly the question they had just answered. The split Wave 11C
+// draws is between the two:
+//
+//   vague   ("what services do you offer?")        -> website_service_question
+//   specific("what does renovation include?")      -> knowledge_question
+//
+// The donor's fifth topic, `service_overview`, is NOT carried over. It is a
+// duplicate of CURRENT's existing generic service reply, which already names
+// all five areas AND asks which one to expand on — the better move, because
+// it invites the follow-up that these four topics then answer. Adding it
+// would have put two answers behind one question.
 
 export const KNOWLEDGE_TOPIC_CATEGORY = {
   LEGAL_TAX_CITIZENSHIP: 'legal_tax_citizenship',
   DISTRICT_LIFESTYLE: 'district_lifestyle',
+  SERVICE_OFFERING: 'service_offering',
 }
 
 /*
@@ -310,7 +325,120 @@ const districtTopics = {
   },
 }
 
-export const KNOWLEDGE_BASE = { ...legalTopics, ...districtTopics }
+/* ─── Service offering ─────────────────────────────────────────────────
+ *
+ * Transplanted verbatim from the donor. The copy is not generic real-estate
+ * boilerplate — it is drawn from this site's own service pages
+ * (src/pages/ArchitecturePage.jsx, ConstructionPage.jsx, RenovationPage.jsx,
+ * InteriorDesignPage.jsx) and their default text in src/locales/
+ * translations.js, so an answer here describes what VarliKent actually
+ * offers rather than what a model assumes a property company offers.
+ *
+ * No disclaimer category: these are factual descriptions of VarliKent's own
+ * service scope, with nothing regulatory to hedge. assembleAnswer() in
+ * utils/knowledgeAnswer.js attaches the verified-note and disclaimer only to
+ * LEGAL_TAX_CITIZENSHIP topics, so these are returned as-is.
+ *
+ * en/tr/ar only — the same three languages the chat pipeline supports
+ * (utils/chatLanguage.js) and the only three the donor wrote. Nothing here
+ * is machine-translated at reply time, and no de/ru/ur text was invented:
+ * a visitor on those site languages gets the en body, which is the same
+ * fallback every other knowledge topic already uses.
+ */
+const serviceTopics = {
+  service_architecture: {
+    category: KNOWLEDGE_TOPIC_CATEGORY.SERVICE_OFFERING,
+    en: `VarliKent's architecture service covers the full building lifecycle:
+- Concept & Design — from the initial brief to detailed architectural plans, designing space that inspires.
+- Structural Engineering — robust, code-compliant structural systems for every building typology.
+- Urban Planning — master plans aligned with Istanbul's evolving urban fabric.
+- Project Management — full oversight from groundbreaking to handover.
+The work follows a four-stage process: Brief & Research, Concept Design, Technical Development, and Construction Oversight.`,
+    tr: `VarliKent'in mimarlık hizmeti, binanın tüm yaşam döngüsünü kapsar:
+- Konsept ve Tasarım — ilk brief'ten detaylı mimari planlara kadar, ilham veren mekanlar tasarlamak.
+- Yapısal Mühendislik — her bina tipolojisi için sağlam, yönetmeliğe uygun taşıyıcı sistemler.
+- Kentsel Planlama — İstanbul'un gelişen kentsel dokusuna uygun master planlar.
+- Proje Yönetimi — temelden teslimata kadar tam denetim.
+Çalışma dört aşamalı bir süreci izler: Brief ve Araştırma, Konsept Tasarım, Teknik Geliştirme ve İnşaat Denetimi.`,
+    ar: `تشمل خدمة العمارة لدى فارلي كنت دورة حياة المبنى بأكملها:
+- المفهوم والتصميم — من الفكرة الأولية إلى المخططات المعمارية التفصيلية، لتصميم مساحات ملهمة.
+- الهندسة الإنشائية — أنظمة إنشائية متينة ومتوافقة مع الأنظمة لكل نوع من المباني.
+- التخطيط الحضري — مخططات رئيسية متوافقة مع النسيج الحضري المتطور لإسطنبول.
+- إدارة المشاريع — إشراف كامل من بدء الأعمال وحتى التسليم.
+يمر العمل بأربع مراحل: الملخص والبحث، تصميم المفهوم، التطوير التقني، والإشراف على البناء.`,
+  },
+
+  service_construction: {
+    category: KNOWLEDGE_TOPIC_CATEGORY.SERVICE_OFFERING,
+    en: `VarliKent's construction service covers:
+- General Contracting — turn-key construction for residential, commercial, and mixed-use developments.
+- Structural Works — reinforced concrete and steel frame solutions built to seismic zone standards.
+- MEP Engineering — mechanical, electrical, and plumbing systems fully integrated into the build.
+- Envelope & Façade — glass curtain walls, cladding systems, and high-performance insulation.
+The process moves through Site Survey, Foundation, Structural Frame, and Fit-Out.
+Because Istanbul sits in an active seismic zone, every structure is engineered to current Turkish Building Earthquake Code (TBDY) standards, including: ductile reinforced concrete frames designed to absorb and dissipate seismic energy; structural steel bracing and moment-resisting frames where needed for lateral stability; soil studies and foundation safety analysis before any excavation begins; independent, licensed structural engineers inspecting and signing off on every load-bearing milestone; and material quality verification (concrete strength testing, rebar certification, and batch quality checks at every pour).`,
+    tr: `VarliKent'in inşaat hizmeti şunları kapsar:
+- Genel Yüklenicilik — konut, ticari ve karma kullanımlı projeler için anahtar teslim inşaat.
+- Yapısal İşler — deprem bölgesi standartlarına uygun betonarme ve çelik konstrüksiyon çözümleri.
+- MEP Mühendisliği — yapıya tam entegre mekanik, elektrik ve tesisat sistemleri.
+- Cephe ve Kabuk — cam perde duvarlar, kaplama sistemleri ve yüksek performanslı yalıtım.
+Süreç Saha Etüdü, Temel, Taşıyıcı Sistem ve İç Mekan Uygulamaları aşamalarından geçer.
+İstanbul aktif bir deprem bölgesinde yer aldığından, her yapı güncel Türkiye Bina Deprem Yönetmeliği'ne (TBDY) göre mühendislik hesaplarıyla tasarlanır: deprem enerjisini emen ve dağıtan sünek betonarme sistemler; gerektiğinde yanal stabilite için çelik çapraz elemanlar ve moment aktaran çerçeveler; kazı öncesi zemin etütleri ve temel güvenlik analizleri; her taşıyıcı aşamada lisanslı, bağımsız yapı mühendislerinin denetimi ve onayı; ve malzeme kalite doğrulaması (her dökümde beton dayanım testleri, donatı sertifikasyonu ve parti kontrolleri).`,
+    ar: `تشمل خدمة الإنشاء لدى فارلي كنت:
+- المقاولات العامة — بناء جاهز للتسليم للمشاريع السكنية والتجارية والمختلطة الاستخدام.
+- الأعمال الإنشائية — حلول الخرسانة المسلحة والهياكل الفولاذية المبنية وفق معايير المناطق الزلزالية.
+- هندسة الأنظمة الميكانيكية والكهربائية والصحية (MEP) — أنظمة مدمجة بالكامل في البناء.
+- الواجهات والغلاف الخارجي — جدران ستائرية زجاجية، أنظمة كسوة، وعزل عالي الأداء.
+تمر العملية بمراحل: مسح الموقع، الأساسات، الهيكل الإنشائي، والتشطيب الداخلي.
+ولأن إسطنبول تقع في منطقة زلزالية نشطة، يتم تصميم كل مبنى هندسياً وفق كود الأبنية الزلزالي التركي الحالي (TBDY)، ويشمل ذلك: أطر خرسانية مسلحة مرنة مصممة لامتصاص وتبديد الطاقة الزلزالية؛ تدعيمات فولاذية إنشائية عند الحاجة لتحقيق الاستقرار الجانبي؛ دراسات تربة وتحليل سلامة الأساسات قبل بدء الحفر؛ إشراف مهندسين إنشائيين مرخصين ومستقلين على كل مرحلة إنشائية حاملة؛ والتحقق من جودة المواد (اختبارات مقاومة الخرسانة، شهادات حديد التسليح، وفحوصات الدفعات عند كل صب).`,
+  },
+
+  service_renovation: {
+    category: KNOWLEDGE_TOPIC_CATEGORY.SERVICE_OFFERING,
+    en: `VarliKent's renovation service covers:
+- Window & Door Replacement — thermally broken aluminium and timber joinery with acoustic glazing.
+- Structural Alterations — safe load-bearing modifications, wall removals, and ceiling raising.
+- Electrical & Lighting — full rewire, smart home integration, and bespoke lighting design.
+- Bathroom & Kitchen — marble wet rooms, bespoke cabinetry, and premium appliance fit-out.
+Clients can preview the transformation interactively before work begins — choosing materials, wall and floor finishes, and lighting mood — moving from dated finishes, poor natural lighting, an inefficient layout, and original fixtures to premium marble surfaces, architectural lighting design, an open-plan remodel, and smart home integration.`,
+    tr: `VarliKent'in tadilat (renovasyon) hizmeti şunları kapsar:
+- Pencere ve Kapı Değişimi — akustik camlı, ısı yalıtımlı alüminyum ve ahşap doğramalar.
+- Yapısal Değişiklikler — güvenli taşıyıcı duvar müdahaleleri, duvar kaldırma ve tavan yükseltme.
+- Elektrik ve Aydınlatma — komple yeniden kablolama, akıllı ev entegrasyonu ve özel aydınlatma tasarımı.
+- Banyo ve Mutfak — mermer ıslak hacimler, özel dolap tasarımı ve premium beyaz eşya montajı.
+Müşteriler, işe başlamadan önce malzeme, duvar/zemin kaplaması ve aydınlatma modunu seçerek dönüşümü interaktif olarak önizleyebilir — eski görünümlü yüzeylerden, yetersiz doğal ışıktan, verimsiz bir düzenden ve orijinal eski armatürlerden; premium mermer yüzeylere, mimari aydınlatma tasarımına, açık plan yenilemeye ve akıllı ev entegrasyonuna geçiş.`,
+    ar: `تشمل خدمة التجديد لدى فارلي كنت:
+- استبدال النوافذ والأبواب — نجارة ألمنيوم وخشب معزولة حرارياً بزجاج عازل للصوت.
+- التعديلات الإنشائية — تعديلات آمنة للجدران الحاملة، إزالة الجدران ورفع الأسقف.
+- الكهرباء والإضاءة — إعادة تمديد كاملة، دمج المنزل الذكي، وتصميم إضاءة مخصص.
+- الحمامات والمطابخ — غرف رطبة من الرخام، خزائن مخصصة، وتركيب أجهزة فاخرة.
+يمكن للعملاء معاينة التحول بشكل تفاعلي قبل بدء العمل — باختيار المواد وتشطيبات الجدران والأرضيات ونمط الإضاءة — للانتقال من تشطيبات قديمة، إضاءة طبيعية ضعيفة، توزيع غير عملي، وتجهيزات أصلية قديمة، إلى أسطح رخامية فاخرة، تصميم إضاءة معماري، تصميم مفتوح، ودمج المنزل الذكي.`,
+  },
+
+  service_interior_design: {
+    category: KNOWLEDGE_TOPIC_CATEGORY.SERVICE_OFFERING,
+    en: `VarliKent's interior design service covers:
+- Concept & Mood Boards — visual direction for every room: colour stories, material palettes, and spatial flow.
+- Furniture Sourcing — a curated selection from Italian and Scandinavian premium suppliers, delivered and installed.
+- Art & Accessories — original artwork, sculptures, and decorative objects that elevate every corner.
+- Lighting Design — layered ambient, task, and accent lighting to create mood and highlight architecture.
+Clients can choose from design directions such as Contemporary, Warm Modern, Coastal, and Classic, and preview wall and floor finishes and material palettes before committing. Consultations start with a complimentary 30-minute session with the design team.`,
+    tr: `VarliKent'in iç mimari hizmeti şunları kapsar:
+- Konsept ve Mood Board'lar — her oda için görsel yön: renk hikayeleri, malzeme paletleri ve mekânsal akış.
+- Mobilya Tedariki — İtalyan ve İskandinav premium tedarikçilerden seçilmiş, teslim edilip kurulan parçalar.
+- Sanat ve Aksesuarlar — her köşeyi zenginleştiren özgün sanat eserleri, heykeller ve dekoratif objeler.
+- Aydınlatma Tasarımı — mimarinin altını çizen ve atmosfer yaratan katmanlı ambiyans, görev ve vurgu aydınlatması.
+Müşteriler Çağdaş, Sıcak Modern, Sahil ve Klasik gibi tasarım yönelimlerinden seçim yapabilir, taahhüt vermeden önce duvar/zemin kaplamalarını ve malzeme paletlerini önizleyebilir. Görüşmeler, tasarım ekibiyle ücretsiz 30 dakikalık bir seansla başlar.`,
+    ar: `تشمل خدمة التصميم الداخلي لدى فارلي كنت:
+- المفهوم ولوحات الإلهام — توجيه بصري لكل غرفة: قصص الألوان، لوحات المواد، وتدفق المساحة.
+- توريد الأثاث — اختيار منسّق من موردين إيطاليين وإسكندنافيين فاخرين، يتم تسليمه وتركيبه.
+- الفن والإكسسوارات — أعمال فنية أصلية، منحوتات، وقطع ديكور ترتقي بكل زاوية.
+- تصميم الإضاءة — إضاءة محيطية ووظيفية وتوكيدية متعددة الطبقات لخلق أجواء وإبراز التفاصيل المعمارية.
+يمكن للعملاء الاختيار من توجهات تصميم مثل المعاصر، الحديث الدافئ، الساحلي، والكلاسيكي، ومعاينة تشطيبات الجدران والأرضيات ولوحات المواد قبل الالتزام. تبدأ الاستشارات بجلسة مجانية مدتها 30 دقيقة مع فريق التصميم.`,
+  },
+}
+
+export const KNOWLEDGE_BASE = { ...legalTopics, ...districtTopics, ...serviceTopics }
 
 export const KNOWLEDGE_TOPIC_IDS = Object.keys(KNOWLEDGE_BASE)
 

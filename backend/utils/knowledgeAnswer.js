@@ -141,17 +141,98 @@ const DISTRICT_TOPIC_ID = {
  * not match inside "private". Multi-word terms still use a substring test on
  * the normalized text — a phrase is specific enough for that to be safe.
  */
+/* ─── Stage 1b: service-offering keywords (Wave 11C) ──────────────────────
+ *
+ * Transplanted from the donor, same flat mixed-language shape as the legal
+ * keywords above. These are merged into ONE scored pass with the legal terms
+ * (see KEYWORD_TOPICS) rather than checked in a separate stage, so a service
+ * question never has to fight a legal keyword for priority — the highest
+ * keyword score wins, exactly as it already does between legal topics.
+ *
+ * The donor's fifth topic, service_overview, and its keywords ('what
+ * services do you offer', 'what can you help me with', ...) are deliberately
+ * NOT here. Those phrases are the VAGUE question, which CURRENT already
+ * answers through website_service_question with a reply that lists all five
+ * areas and asks which one to expand on. Importing them would have let this
+ * feature quietly take that intent over — the exact outcome Wave 11A
+ * avoided, and still worth avoiding.
+ */
+const SERVICE_TOPIC_KEYWORDS = {
+  service_architecture: [
+    'architecture', 'architecture service', 'architectural', 'architect', 'building design',
+    'concept and design', 'structural engineering', 'urban planning',
+    // Deliberately no bare 'mimari'/'mimarlık' single-word terms here — both
+    // words also appear inside "iç mimari"/"iç mimarlık" (Turkish for
+    // interior design), so a bare-word match would tie against
+    // service_interior_design's phrase match. Multi-word phrases only.
+    'mimarlık hizmeti', 'mimari tasarım', 'mimari proje', 'yapı tasarımı', 'kentsel planlama',
+    'bina tasarımı',
+    'عمارة', 'العمارة', 'الهندسة المعمارية', 'خدمة العمارة', 'التصميم المعماري', 'مهندس معماري',
+  ],
+  service_construction: [
+    'construction', 'construction service', 'construction management', 'general contracting',
+    'general contractor', 'structural works', 'mep engineering', 'build my building', 'building construction',
+    'inşaat', 'inşaat hizmeti', 'inşaat yönetimi', 'yüklenicilik', 'genel yüklenicilik', 'yapısal işler',
+    'بناء', 'الإنشاء', 'خدمة الإنشاء', 'إدارة البناء', 'المقاولات', 'مقاولات عامة', 'أعمال إنشائية',
+  ],
+  service_renovation: [
+    'renovation', 'renovation service', 'renovate', 'remodel', 'remodeling', 'refurbishment',
+    'renovation process', 'kitchen renovation', 'bathroom renovation',
+    'tadilat', 'renovasyon', 'tadilat hizmeti', 'yenileme', 'mutfak tadilatı', 'banyo tadilatı',
+    'تجديد', 'التجديد', 'خدمة التجديد', 'ترميم', 'تجديد المطبخ', 'تجديد الحمام',
+  ],
+  service_interior_design: [
+    'interior design', 'interior designer', 'interior design service', 'interior decorating',
+    'design my interior', 'furniture sourcing', 'mood board', 'design my home interior',
+    'iç mimari', 'iç tasarım', 'iç mimarlık', 'iç mekan tasarımı', 'mobilya tedariki',
+    'تصميم داخلي', 'التصميم الداخلي', 'مصمم داخلي', 'ديكور داخلي', 'تصميم المنزل من الداخل',
+  ],
+}
+
+// One merged map, one scored pass.
+const KEYWORD_TOPICS = { ...LEGAL_TOPIC_KEYWORDS, ...SERVICE_TOPIC_KEYWORDS }
+
+/*
+ * Turkish interior-design disambiguation.
+ *
+ * The donor's guard for this was incomplete. Its comment explains that
+ * service_architecture carries no BARE 'mimari'/'mimarlık' term, because
+ * those words also sit inside "iç mimari"/"iç mimarlık" (interior design) —
+ * but the multi-word terms it kept have the same problem: "iç mimarlık
+ * hizmeti" contains BOTH 'iç mimarlık' (interior) and 'mimarlık hizmeti'
+ * (architecture). Both score 1, the tie is broken by object key order, and
+ * "what does your interior design service include?" in Turkish answers
+ * about architecture instead.
+ *
+ * No amount of phrase-list tuning fixes that cleanly, because the
+ * architecture phrase is a genuine substring of the interior one. The real
+ * rule is linguistic: in Turkish the leading "iç" ("interior") is what
+ * disambiguates, so when an explicit interior marker is present, the
+ * architecture topic cannot claim the message.
+ */
+const INTERIOR_MARKERS = ['iç mimari', 'iç mimarlık', 'iç tasarım', 'iç mekan', 'interior']
+
+const hasInteriorMarker = (normalizedText) =>
+  INTERIOR_MARKERS.some((marker) => normalizedText.includes(normalizeForMatching(marker)))
+
 const tokenize = (normalizedText = '') =>
   normalizedText.split(/[^\p{L}\p{N}]+/u).filter(Boolean)
 
-const matchLegalTopic = (message = '') => {
+// Scores every keyword topic — legal/tax/citizenship AND service-offering —
+// in a single pass and returns the highest scorer.
+const matchKeywordTopic = (message = '') => {
   const normalized = normalizeForMatching(message)
   const tokens = new Set(tokenize(normalized))
+  const interiorWins = hasInteriorMarker(normalized)
 
   let bestTopic = null
   let bestScore = 0
 
-  for (const [topicId, terms] of Object.entries(LEGAL_TOPIC_KEYWORDS)) {
+  for (const [topicId, terms] of Object.entries(KEYWORD_TOPICS)) {
+    // See INTERIOR_MARKERS above: "iç mimarlık hizmeti" is an interior
+    // design question whose text also contains an architecture phrase.
+    if (topicId === 'service_architecture' && interiorWins) continue
+
     let score = 0
 
     for (const term of terms) {
@@ -179,13 +260,15 @@ const matchDistrictTopic = (message = '') => {
 /*
  * Deterministic, synchronous, no network — the primary path.
  *
- * Legal keywords are checked before districts on purpose: "what is the
+ * Keyword topics are checked before districts on purpose: "what is the
  * property tax in Beşiktaş" mentions both, and the tax is the more specific
- * information need.
+ * information need. The same ordering now also covers service topics, so
+ * "does your renovation service work in Kadıköy" answers about renovation
+ * rather than describing the neighbourhood.
  */
 export const matchKnowledgeTopicByKeyword = (message = '') => {
-  const legalMatch = matchLegalTopic(message)
-  if (legalMatch) return legalMatch
+  const keywordMatch = matchKeywordTopic(message)
+  if (keywordMatch) return keywordMatch
   return matchDistrictTopic(message)
 }
 
@@ -217,6 +300,16 @@ const CANONICAL_TOPIC_QUESTIONS = {
   district_zeytinburnu: 'What is Zeytinburnu like to live in?',
   district_avcilar: 'What is Avcılar like to live in?',
   district_bahcelievler: 'What is Bahçelievler like to live in?',
+  // Wave 11C — transplanted from the donor. Adding them here is the whole
+  // semantic wiring: buildTopicEmbeddings() indexes this object, so service
+  // topics become eligible for the existing fallback with no second matcher,
+  // no second embedding provider, and no new dependency. The fallback still
+  // only SELECTS a topic; the answer text always comes from the curated
+  // knowledge base (see assembleAnswer).
+  service_architecture: 'What does your architecture service include?',
+  service_construction: 'What is involved in your construction management service?',
+  service_renovation: 'How does your renovation process work?',
+  service_interior_design: 'Can you help design my interior?',
 }
 
 // Same order of magnitude as the property semantic search default, kept as a
