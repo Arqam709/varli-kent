@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { assets } from '../assets/assets'
 import api from '../lib/api'
 import { useLanguage } from '../contexts/LanguageContext'
+import { localizedText } from '../lib/localizedText'
 import useSeo from '../lib/useSeo'
 import { C } from '../contexts/ThemeContext'
 
@@ -50,8 +51,6 @@ const AboutPage = () => {
     path: '/about',
   })
   const [data, setData] = useState(DEFAULT)
-  const [displayData, setDisplayData] = useState(DEFAULT)
-  const translationCache = useRef({})
 
   useEffect(() => {
     api.get('/about').then(res => {
@@ -59,46 +58,12 @@ const AboutPage = () => {
     }).catch(() => {})
   }, [])
 
-  useEffect(() => {
-    if (language === 'en') { setDisplayData(data); return }
-    if (translationCache.current[language]) { setDisplayData(translationCache.current[language]); return }
+  
+  const loc = (value, fallback = '') => localizedText(value, language, fallback)
 
-    const blocks = data.contentBlocks || []
-    const texts = [
-      data.heroLabel, data.heroHeading, data.heroSubtext,
-      data.missionLabel, data.missionHeading, data.missionParagraph1, data.missionParagraph2,
-      data.teamLabel, data.teamHeading,
-      ...data.stats.map(s => s.label),
-      ...data.team.map(m => m.role),
-      ...blocks.flatMap(b => [b.heading, ...(b.paragraphs || [])]),
-    ]
-
-    api.post('/translate', { texts, targetLang: language }).then(r => {
-      if (!r.data?.translations) { setDisplayData(data); return }
-      const tr = r.data.translations
-      let i = 0
-      const next = () => tr[i++] ?? ''
-      const translated = {
-        ...data,
-        heroLabel: next(), heroHeading: next(), heroSubtext: next(),
-        missionLabel: next(), missionHeading: next(), missionParagraph1: next(), missionParagraph2: next(),
-        teamLabel: next(), teamHeading: next(),
-        stats: data.stats.map(s => ({ ...s, label: next() })),
-        team: data.team.map(m => ({ ...m, role: next() })),
-        contentBlocks: blocks.map(b => ({
-          ...b,
-          heading: next(),
-          paragraphs: (b.paragraphs || []).map(() => next()),
-        })),
-      }
-      translationCache.current[language] = translated
-      setDisplayData(translated)
-    }).catch(() => setDisplayData(data))
-  }, [data, language])
-
-  const sortedStats = [...displayData.stats].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-  const sortedTeam = [...displayData.team].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-  const sortedBlocks = [...(displayData.contentBlocks || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+  const sortedStats = [...data.stats].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+  const sortedTeam = [...data.team].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+  const sortedBlocks = [...(data.contentBlocks || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: C.charcoal }}>
@@ -108,13 +73,13 @@ const AboutPage = () => {
         <DarkGlow />
         <div className="relative z-10 container mx-auto px-6 text-center">
           <p className="text-xs uppercase tracking-[0.5em] font-medium mb-4" style={{ color: C.accent }}>
-            {displayData.heroLabel}
+            {loc(data.heroLabel, DEFAULT.heroLabel)}
           </p>
           <h1 style={{ fontFamily: 'Cinzel, serif', color: C.marble }} className="text-5xl lg:text-6xl font-bold leading-tight">
-            {displayData.heroHeading}
+            {loc(data.heroHeading, DEFAULT.heroHeading)}
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed" style={{ color: 'rgba(var(--vk-light-rgb, 246,243,237), 0.55)' }}>
-            {displayData.heroSubtext}
+            {loc(data.heroSubtext, DEFAULT.heroSubtext)}
           </p>
         </div>
       </section>
@@ -131,7 +96,7 @@ const AboutPage = () => {
                   {s.value}
                 </p>
                 <p className="mt-3 text-sm tracking-wider uppercase" style={{ color: 'rgba(var(--vk-dark-rgb), 0.45)' }}>
-                  {s.label}
+                  {loc(s.label)}
                 </p>
               </div>
             ))}
@@ -147,24 +112,24 @@ const AboutPage = () => {
           <div className="grid gap-16 lg:grid-cols-2 items-center">
             <div>
               <p className="text-xs uppercase tracking-[0.4em] font-medium mb-4" style={{ color: C.accent }}>
-                {displayData.missionLabel}
+                {loc(data.missionLabel, DEFAULT.missionLabel)}
               </p>
               <h2 style={{ fontFamily: 'Cinzel, serif', color: C.marble }} className="text-4xl font-semibold leading-snug">
-                {displayData.missionHeading}
+                {loc(data.missionHeading, DEFAULT.missionHeading)}
               </h2>
               <p className="mt-6 text-lg leading-8" style={{ color: 'rgba(var(--vk-light-rgb, 246,243,237), 0.65)' }}>
-                {displayData.missionParagraph1}
+                {loc(data.missionParagraph1, DEFAULT.missionParagraph1)}
               </p>
               <p className="mt-4 leading-7" style={{ color: 'rgba(var(--vk-light-rgb, 246,243,237), 0.5)' }}>
-                {displayData.missionParagraph2}
+                {loc(data.missionParagraph2, DEFAULT.missionParagraph2)}
               </p>
             </div>
             <div className="overflow-hidden rounded-2xl shadow-2xl" style={{ border: '1px solid rgba(var(--vk-light-rgb, 246,243,237), 0.08)' }}>
-              {isVideo(displayData.missionImage) ? (
-                <video src={displayData.missionImage} autoPlay muted loop playsInline className="h-full w-full object-cover" style={{ aspectRatio: '4/3' }} />
+              {isVideo(data.missionImage) ? (
+                <video src={data.missionImage} autoPlay muted loop playsInline className="h-full w-full object-cover" style={{ aspectRatio: '4/3' }} />
               ) : (
                 <img
-                  src={displayData.missionImage || assets.brand_img}
+                  src={data.missionImage || assets.brand_img}
                   alt="Varlikent"
                   className="h-full w-full object-cover"
                   style={{ aspectRatio: '4/3' }}
@@ -201,17 +166,17 @@ const AboutPage = () => {
                       <div className="overflow-hidden rounded-2xl shadow-2xl" style={{ border: imgBorder }}>
                         {isVideo(block.image)
                           ? <video src={block.image} autoPlay muted loop playsInline className="h-full w-full object-cover" style={{ aspectRatio: '4/3' }} />
-                          : <img src={block.image} alt={block.heading} className="h-full w-full object-cover" style={{ aspectRatio: '4/3' }} />}
+                          : <img src={block.image} alt={loc(block.heading)} className="h-full w-full object-cover" style={{ aspectRatio: '4/3' }} />}
                       </div>
                     )}
                     <div>
-                      {block.heading && (
+                      {loc(block.heading) && (
                         <h2 style={{ fontFamily: 'Cinzel, serif', color: headingColor }} className="text-3xl font-semibold mb-6 leading-snug">
-                          {block.heading}
+                          {loc(block.heading)}
                         </h2>
                       )}
                       <div className="space-y-4">
-                        {block.paragraphs.filter(Boolean).map((p, pi) => (
+                        {block.paragraphs.map((p) => loc(p)).filter(Boolean).map((p, pi) => (
                           <p key={pi} className="leading-7" style={{ color: pi === 0 ? bodyColor0 : bodyColorN }}>{p}</p>
                         ))}
                       </div>
@@ -220,19 +185,19 @@ const AboutPage = () => {
                       <div className="overflow-hidden rounded-2xl shadow-2xl" style={{ border: imgBorder }}>
                         {isVideo(block.image)
                           ? <video src={block.image} autoPlay muted loop playsInline className="h-full w-full object-cover" style={{ aspectRatio: '4/3' }} />
-                          : <img src={block.image} alt={block.heading} className="h-full w-full object-cover" style={{ aspectRatio: '4/3' }} />}
+                          : <img src={block.image} alt={loc(block.heading)} className="h-full w-full object-cover" style={{ aspectRatio: '4/3' }} />}
                       </div>
                     )}
                   </div>
                 ) : (
                   <div className="max-w-3xl mx-auto text-center">
-                    {block.heading && (
+                    {loc(block.heading) && (
                       <h2 style={{ fontFamily: 'Cinzel, serif', color: headingColor }} className="text-3xl font-semibold mb-6">
-                        {block.heading}
+                        {loc(block.heading)}
                       </h2>
                     )}
                     <div className="space-y-4">
-                      {block.paragraphs.filter(Boolean).map((p, pi) => (
+                      {block.paragraphs.map((p) => loc(p)).filter(Boolean).map((p, pi) => (
                         <p key={pi} className="leading-7 text-lg" style={{ color: bodyColor0 }}>{p}</p>
                       ))}
                     </div>
@@ -252,10 +217,10 @@ const AboutPage = () => {
           <div className="container mx-auto px-6">
             <div className="mb-14 text-center">
               <p className="text-xs uppercase tracking-[0.4em] font-medium mb-4" style={{ color: C.accent }}>
-                {displayData.teamLabel}
+                {loc(data.teamLabel, DEFAULT.teamLabel)}
               </p>
               <h2 style={{ fontFamily: 'Cinzel, serif', color: C.charcoal }} className="text-4xl font-semibold">
-                {displayData.teamHeading}
+                {loc(data.teamHeading, DEFAULT.teamHeading)}
               </h2>
             </div>
             <div className={`grid gap-8 ${sortedTeam.length === 1 ? 'max-w-sm mx-auto' : sortedTeam.length === 2 ? 'md:grid-cols-2 max-w-2xl mx-auto' : 'md:grid-cols-3'}`}>
@@ -271,7 +236,7 @@ const AboutPage = () => {
                   <h3 style={{ fontFamily: 'Cinzel, serif', color: C.charcoal }} className="text-lg font-semibold">
                     {m.name}
                   </h3>
-                  <p className="mt-1 text-sm font-medium" style={{ color: C.accent }}>{m.role}</p>
+                  <p className="mt-1 text-sm font-medium" style={{ color: C.accent }}>{loc(m.role)}</p>
                 </div>
               ))}
             </div>

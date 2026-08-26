@@ -2,6 +2,15 @@ import { useState, useEffect, useRef } from 'react'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
 import { useLanguage } from '../contexts/LanguageContext'
+import { localizedText } from '../lib/localizedText'
+
+const editable = (value) => {
+  if (typeof value === 'string') return value
+  if (!value || typeof value !== 'object') return ''
+  // The admin's own words first, then English, then anything usable.
+  const source = typeof value.sourceLang === 'string' ? value.sourceLang : ''
+  return localizedText(value, source || 'en')
+}
 
 const UPLOAD_HINT = 'JPG, PNG, WEBP, GIF — max 10 MB · MP4, MOV, WEBM — max 100 MB'
 
@@ -80,19 +89,29 @@ const AdminAbout = () => {
     api.get('/about').then(res => {
       const a = res.data.about
       setForm({
-        heroLabel: a.heroLabel || '',
-        heroHeading: a.heroHeading || '',
-        heroSubtext: a.heroSubtext || '',
-        missionLabel: a.missionLabel || '',
-        missionHeading: a.missionHeading || '',
-        missionParagraph1: a.missionParagraph1 || '',
-        missionParagraph2: a.missionParagraph2 || '',
+        heroLabel: editable(a.heroLabel),
+        heroHeading: editable(a.heroHeading),
+        heroSubtext: editable(a.heroSubtext),
+        missionLabel: editable(a.missionLabel),
+        missionHeading: editable(a.missionHeading),
+        missionParagraph1: editable(a.missionParagraph1),
+        missionParagraph2: editable(a.missionParagraph2),
         missionImage: a.missionImage || '',
-        teamLabel: a.teamLabel || '',
-        teamHeading: a.teamHeading || '',
-        stats: a.stats?.length ? a.stats : [{ value: '10+', label: 'Years Experience', order: 0 }],
-        team: a.team?.length ? a.team : [emptyMember],
-        contentBlocks: a.contentBlocks?.length ? a.contentBlocks : [],
+        teamLabel: editable(a.teamLabel),
+        teamHeading: editable(a.teamHeading),
+        stats: a.stats?.length
+          ? a.stats.map(st => ({ ...st, label: editable(st.label) }))
+          : [{ value: '10+', label: 'Years Experience', order: 0 }],
+        team: a.team?.length
+          ? a.team.map(m => ({ ...m, role: editable(m.role) }))
+          : [emptyMember],
+        contentBlocks: a.contentBlocks?.length
+          ? a.contentBlocks.map(b => ({
+              ...b,
+              heading: editable(b.heading),
+              paragraphs: (b.paragraphs || []).map(editable),
+            }))
+          : [],
       })
     }).catch(() => setError('Failed to load about content'))
   }, [])
