@@ -132,7 +132,25 @@ CRITICAL RULES FOR MEMORY:
 Available listingType: "Sale" or "Rent"
 Available propertyType: "Apartment", "Villa", "Penthouse", "Duplex", "Studio", "Office", "Commercial", "Land", "Shop", "Warehouse", "Hotel", "Farm"
 Available searchMode: "field", "description", "hybrid"
-Boolean features: furnished, balcony, elevator, pool, garden, parking
+Boolean features: furnished, balcony, elevator, pool, garden, parking, sauna, jacuzzi, steamRoom, turkishBath, basement, withinSite, eligibleForCredit, exchange, hasVirtualTour, featured
+Set a boolean feature to true ONLY when the visitor asks for it. Never set one to false — if the visitor does not want something, simply leave it null.
+
+Available usageStatus values (array, multi-select) — CLOSED vocabulary, use ONLY these exact values: "Empty", "Tenant", "Property Owner"
+Available kitchenType values (array, multi-select) — CLOSED vocabulary: "Open (American)", "Closed"
+Available floorLocation values (array, multi-select) — CLOSED vocabulary: "Ground floor", "High Entrance", "Penthouse", "Duplex", "Triplex". This is the KIND of floor, and is a different field from the numeric minFloor/maxFloor ("above the 3rd floor").
+Available titleDeedStatus values (array, multi-select) — CLOSED vocabulary: "Shared Title Deed", "Independent Title Deed", "Land with Title Deed", "Cooperative Share Title Deed", "Established Usufruct Right"
+Available heating values (array, multi-select) — CLOSED vocabulary: "Central", "Individual Gas", "Floor Heating", "Air Conditioning", "None"
+Available parkingType values (array, multi-select) — CLOSED vocabulary: "Open Parking", "Closed Parking", "None". This is DIFFERENT from the boolean "parking" field: "parking" means "must have some parking", while parkingType captures a SPECIFIC kind the visitor named — "closed garage"/"kapalı otopark"/"garaj" => parkingType ["Closed Parking"]; "open parking"/"açık otopark" => parkingType ["Open Parking"]. Set both when the phrasing supports it.
+Available nearbyTransport values (array, multi-select) — CLOSED vocabulary: "Metro", "Metrobus", "Bus", "Ferry", "Train", "Tram", "Highway Access". This is LISTING METADATA — which transport types a listing records as nearby. Use it for "apartment near the metro". It is NOT a distance calculation and NOT a question about which specific station is closest to one property.
+Available rooms values (array, multi-select) — CLOSED vocabulary of room-layout strings, use the exact string: "Studio (1+0)", "1+1", "1.5+1", "2+0", "2+1", "2.5+1", "2+2", "3+0", "3+1", "3.5+1", "3+2", "3+3", "4+0", "4+1", "4.5+1", "4.5+2", "4+2", "4+3", "4+4", "5+1", "5.5+1", "5+2", "5+3", "5+4", "6+1", "6+2", "6.5+1", "6+3", "6+4", "7+1", "7+2", "7+3", "8+1", "8+2", "8+3", "8+4", "9+1", "9+2", "9+3", "9+4", "9+5", "9+6", "10+1", "10+2", "Out of 10". "3+1" means 3 bedrooms plus a living room — when the visitor says "3+1", also set beds 3.
+Available buildingAge bucket values (array, multi-select) — CLOSED vocabulary, use ONLY these exact values: "0 (New)", "1-5", "6-10", "11-15", "16-20", "21+". A relative-age phrase must expand to EVERY bucket whose whole range fits inside the stated span, e.g. "built in the last 10 years" => buildingAge ["0 (New)", "1-5", "6-10"].
+Available currency values: "TL", "USD", "EUR", "GBP"
+
+Numeric range pairs (min*/max*, exactly like minSqm/maxSqm): minNetSqm/maxNetSqm (net m²), minOpenAreaSqm/maxOpenAreaSqm (open/terrace/balcony area m²), minCoefficient/maxCoefficient, minFloor/maxFloor (which floor the unit is on — "above the 3rd floor" => minFloor 3), minTotalFloors/maxTotalFloors (how many floors the whole building has).
+
+listedSince: always leave this null yourself. A relative-date phrase ("listed in the last week", "son 3 günde eklenen", "الأسبوع الماضي") is parsed deterministically by the backend from the raw message, not by you.
+
+CURRENCY-AWARE PRICING: when the visitor states a budget together with a currency word, set BOTH the price field AND currency — "budget 200000 dollars" => maxPrice 200000, currency "USD"; "bütçem 200000 lira" => maxPrice 200000, currency "TL"; "200000 يورو" => maxPrice 200000, currency "EUR". If no currency word is mentioned, leave currency null. Never convert an amount between currencies.
 
 VOCABULARY EQUIVALENTS (map these words to the canonical field/enum value on the left — the OUTPUT must always be the canonical value, never the Turkish/Arabic word itself):
 - listingType "Rent": kiralık, kiralik (Turkish) — للإيجار (Arabic)
@@ -149,6 +167,29 @@ VOCABULARY EQUIVALENTS (map these words to the canonical field/enum value on the
 - pool: havuz (Turkish) — مسبح (Arabic)
 - garden: bahçe (Turkish) — حديقة (Arabic)
 - parking: otopark (Turkish) — موقف سيارات (Arabic)
+- sauna: sauna (Turkish) — ساونا (Arabic)
+- jacuzzi: jakuzi (Turkish) — جاكوزي (Arabic)
+- steamRoom: buhar odası (Turkish) — حمام بخار (Arabic)
+- turkishBath: hamam, türk hamamı (Turkish) — حمام تركي (Arabic) — "hamam" ALWAYS means turkishBath true, never the pool boolean and never a bathroom count
+- basement: bodrum (Turkish) — قبو، بدروم (Arabic)
+- withinSite ("in a gated site/complex"): site içinde, sitede, kapalı site (Turkish) — ضمن مجمع، مجمع سكني مغلق (Arabic)
+- eligibleForCredit: krediye uygun (Turkish) — مؤهل للقرض (Arabic)
+- exchange ("open to a trade-in"): takaslı, takas (Turkish) — قابل للمقايضة (Arabic)
+- hasVirtualTour: sanal tur (Turkish) — جولة افتراضية (Arabic)
+- kitchenType "Open (American)": açık mutfak, amerikan mutfak (Turkish) — مطبخ مفتوح (Arabic)
+- kitchenType "Closed": kapalı mutfak (Turkish) — مطبخ مغلق (Arabic)
+- usageStatus "Empty": boş (Turkish) — فارغ (Arabic); "Tenant": kiracılı (Turkish) — مستأجر (Arabic); "Property Owner": sahibi oturuyor (Turkish) — يسكنها المالك (Arabic)
+- floorLocation "Ground floor": zemin kat (Turkish) — الطابق الأرضي (Arabic); "Penthouse": çatı katı (Turkish) — بنتهاوس (Arabic)
+- titleDeedStatus "Independent Title Deed": kat mülkiyeti, müstakil tapu (Turkish) — سند مستقل (Arabic); "Shared Title Deed": hisseli tapu (Turkish) — سند مشترك (Arabic)
+- heating "Individual Gas": kombi, doğalgaz (Turkish) — غاز طبيعي (Arabic); "Central": merkezi ısıtma (Turkish) — تدفئة مركزية (Arabic); "Floor Heating": yerden ısıtma (Turkish) — تدفئة أرضية (Arabic); "Air Conditioning": klima (Turkish) — تكييف (Arabic)
+- nearbyTransport "Metro": metro istasyonu, metroya yakın (Turkish) — مترو، محطة مترو (Arabic)
+- nearbyTransport "Metrobus" (bus rapid transit / BRT): metrobüs (Turkish) — مترو باص (Arabic) — do NOT also output "Metro" merely because the word "metrobüs" contains "metro"; they are different transport modes
+- nearbyTransport "Bus": otobüs, otobüs durağı (Turkish) — باص، حافلة (Arabic)
+- nearbyTransport "Ferry": vapur, iskele (Turkish) — عبارة، معدية (Arabic)
+- nearbyTransport "Train": tren, tren istasyonu (Turkish) — قطار (Arabic)
+- nearbyTransport "Tram": tramvay (Turkish) — ترام (Arabic)
+- nearbyTransport "Highway Access": otoyol, otoyol bağlantısı (Turkish) — طريق سريع (Arabic)
+- currency "USD": dolar (Turkish) — دولار (Arabic); "TL": lira, Türk lirası, ₺ (Turkish) — ليرة (Arabic); "EUR": avro, euro, € (Turkish) — يورو (Arabic); "GBP": sterlin, pound, £ (Turkish) — جنيه (Arabic)
 These are common equivalents to recognize, not an exhaustive list — use your general understanding of Turkish and Arabic for anything not listed here.
 
 DISTRICT NAMES: always output the canonical Latin/Turkish database spelling of a district (e.g. "Beylikdüzü", "Kadıköy", "Beşiktaş", "Esenyurt", "Sarıyer"), even when the visitor typed an Arabic-script transliteration. Examples: بيليك دوزو => Beylikdüzü, كاديكوي => Kadıköy, بشكتاش => Beşiktaş, اسنيورت => Esenyurt, ساريير => Sarıyer. This is not an exhaustive district list — apply the same transliteration logic to other Istanbul districts using your own language understanding. Do not translate or transliterate a district name back into Turkish/Arabic script in your OUTPUT — the output value is always the canonical Latin spelling.
@@ -209,6 +250,37 @@ Return JSON in this exact shape:
   "pool": null,
   "garden": null,
   "parking": null,
+  "sauna": null,
+  "jacuzzi": null,
+  "steamRoom": null,
+  "turkishBath": null,
+  "basement": null,
+  "withinSite": null,
+  "eligibleForCredit": null,
+  "exchange": null,
+  "hasVirtualTour": null,
+  "featured": null,
+  "usageStatus": [],
+  "kitchenType": [],
+  "heating": [],
+  "titleDeedStatus": [],
+  "floorLocation": [],
+  "parkingType": [],
+  "buildingAge": [],
+  "rooms": [],
+  "nearbyTransport": [],
+  "minNetSqm": null,
+  "maxNetSqm": null,
+  "minOpenAreaSqm": null,
+  "maxOpenAreaSqm": null,
+  "minCoefficient": null,
+  "maxCoefficient": null,
+  "minFloor": null,
+  "maxFloor": null,
+  "minTotalFloors": null,
+  "maxTotalFloors": null,
+  "currency": null,
+  "listedSince": null,
   "mustHave": [],
   "niceToHave": [],
   "lifestyle": [],
@@ -1012,6 +1084,56 @@ Visitor: What other districts have good sea-view apartments?
 Example R5 (ordinary first search — no shown set to refine):
 Visitor: Show me apartments in Kadıköy.
 => district: "Kadıköy", resultScopeAction: "unclear"
+
+EXTENDED FIELD EXAMPLES (only the fields that change are shown; everything else keeps its default):
+
+Example X1 (boolean amenities):
+Visitor: Find me a villa in Beşiktaş with a sauna and a Turkish bath.
+=> propertyType: "Villa", district: "Beşiktaş", sauna: true, turkishBath: true, mustHave: ["sauna", "turkish bath"]
+
+Example X2 (Turkish amenities — canonical English output):
+Visitor: Beşiktaş'ta hamamı ve jakuzisi olan bir villa arıyorum.
+=> propertyType: "Villa", district: "Beşiktaş", turkishBath: true, jacuzzi: true, mustHave: ["hamam", "jakuzi"]
+
+Example X3 (enum + transport metadata):
+Visitor: I want an apartment with a closed kitchen near the metro.
+=> propertyType: "Apartment", kitchenType: ["Closed"], nearbyTransport: ["Metro"]
+
+Example X4 (legal fields):
+Visitor: Show properties eligible for credit with an independent title deed.
+=> eligibleForCredit: true, titleDeedStatus: ["Independent Title Deed"]
+
+Example X5 (numeric ranges — note floor vs floorLocation are different fields):
+Visitor: Apartment above the 3rd floor with at least 120 m² net area.
+=> propertyType: "Apartment", minFloor: 3, minNetSqm: 120
+
+Example X6 (Arabic amenities + gated site):
+Visitor: أريد شقة في مجمع سكني مغلق مع مسبح وساونا
+=> propertyType: "Apartment", withinSite: true, pool: true, sauna: true
+
+Example X7 (relative building age — expand to every bucket that fits):
+Visitor: Something built in the last 10 years in Sarıyer.
+=> district: "Sarıyer", buildingAge: ["0 (New)", "1-5", "6-10"]
+
+Example X8 (room layout also implies bedroom count):
+Visitor: 3+1 daire, kapalı otopark olsun.
+=> propertyType: "Apartment", rooms: ["3+1"], beds: 3, parkingType: ["Closed Parking"], parking: true
+
+Example X9 (currency alongside a budget — no conversion):
+Visitor: My budget is 500000 dollars for a flat in Şişli.
+=> propertyType: "Apartment", district: "Şişli", maxPrice: 500000, currency: "USD"
+
+Example X10 (an extended field is a SEARCH FILTER, not a knowledge question):
+Visitor: Find a Kadıköy apartment with a sauna.
+=> intentType: "property_search", district: "Kadıköy", propertyType: "Apartment", sauna: true
+Contrast — this one is NOT a property search and must stay knowledge_question:
+Visitor: Is Kadıköy good for families?
+=> intentType: "knowledge_question", replyType: "knowledge_reply" (do NOT set district as a search filter here)
+
+Example X11 (listing metadata, NOT a distance question):
+Visitor: Show apartments that have a metro station nearby.
+=> propertyType: "Apartment", nearbyTransport: ["Metro"]
+Note: a question about WHICH station is closest to one specific property is not a property search and must not fill nearbyTransport.
 
 ${conversationBlock}
 `

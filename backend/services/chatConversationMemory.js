@@ -14,7 +14,15 @@
 // clarification.
 
 import { findConceptForWord } from '../utils/lifestyleConcepts.js'
-import { defaultParsed, hasSoftDescriptionSearch, stripPerTurnFields } from './chatMessageParsing.js'
+import {
+  defaultParsed,
+  hasSoftDescriptionSearch,
+  stripPerTurnFields,
+  EXTENDED_ARRAY_FIELDS,
+  EXTENDED_BOOLEAN_FIELDS,
+  EXTENDED_NUMERIC_FIELDS,
+  EXTENDED_SCALAR_FIELDS,
+} from './chatMessageParsing.js'
 import {
   normalizeSlotStatus,
   normalizeTurn,
@@ -50,10 +58,22 @@ const CRITERIA_FIELDS = [
   'garden',
   'parking',
   'descriptionQuery',
+  // ── Wave 11B ──
+  // Stating "with a sauna" or "closed kitchen" IS a new search criterion.
+  // Without these, a message whose only content was an extended field would
+  // be read as a bare continuation and the criterion would never register.
+  ...EXTENDED_BOOLEAN_FIELDS,
+  ...EXTENDED_NUMERIC_FIELDS,
+  ...EXTENDED_SCALAR_FIELDS,
 ]
 
 export const messageHasNewCriteria = (parsedFromMessage = {}) => {
-  const hasArrayCriteria = ['districts', 'lifestyle', 'mustHave', 'niceToHave', 'requirements'].some(
+  const hasArrayCriteria = [
+    'districts', 'lifestyle', 'mustHave', 'niceToHave', 'requirements',
+    // ── Wave 11B ── "near the metro" states a criterion just as
+    // "in Kadıköy" does, so the extended multi-value fields count too.
+    ...EXTENDED_ARRAY_FIELDS,
+  ].some(
     (field) => Array.isArray(parsedFromMessage[field]) && parsedFromMessage[field].length > 0
   )
 
@@ -180,12 +200,40 @@ const mergeParsedWithContext = (currentFilters = {}, newParsed = {}) => {
     'pool',
     'garden',
     'parking',
+    /* ── Wave 11B ────────────────────────────────────────────────────────
+     *
+     * Without these, an extended criterion would survive exactly one turn:
+     * "villa in Beşiktaş with a sauna" would filter correctly, then "make it
+     * three bedrooms" would rebuild the filter from remembered state with
+     * the sauna gone — and the reply would present the results as if the
+     * requirement still held.
+     *
+     * They merge under the same hasValue() rule as the classic scalars, so
+     * they follow CURRENT's existing reset semantics rather than inventing
+     * new ones: a durable criterion persists across follow-ups, and the
+     * normal fresh-search paths clear it exactly as they clear district or
+     * listingType.
+     */
+    ...EXTENDED_BOOLEAN_FIELDS,
+    ...EXTENDED_NUMERIC_FIELDS,
+    ...EXTENDED_SCALAR_FIELDS,
   ]
 
   for (const field of fieldsToMerge) {
     if (hasValue(newParsed[field])) {
       merged[field] = newParsed[field]
     }
+  }
+
+  // Extended multi-value fields follow the mustHave/lifestyle pattern above:
+  // a new non-empty array replaces the remembered one, an empty array leaves
+  // it alone. hasValue() already treats [] as absent, so this is the same
+  // rule the loop applies to scalars, expressed for arrays.
+  for (const field of EXTENDED_ARRAY_FIELDS) {
+    merged[field] =
+      Array.isArray(newParsed[field]) && newParsed[field].length > 0
+        ? newParsed[field]
+        : merged[field] || []
   }
 
   // If user gives multiple districts, use districts[] and clear single district

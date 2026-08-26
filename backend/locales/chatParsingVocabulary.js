@@ -186,3 +186,226 @@ export const findAllCanonicalMatches = (normalizedText, termMap) => {
 
 export const matchesAnyTerm = (normalizedText, terms = []) =>
   terms.some((term) => normalizedText.includes(normalizeForMatching(term)))
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Wave 11B — extended property-field vocabulary
+ *
+ * Wave 10B4 gave the public filter sidebar nineteen extended fields. The
+ * chatbot could not understand any of them, so "villa in Beşiktaş with a
+ * sauna" fell through to free-text description search while the identical
+ * request typed into the sidebar filtered exactly. Everything below exists
+ * to close that gap.
+ *
+ * ── Where these canonical values come from ─────────────────────────────
+ * CURRENT's own vocabularies, NOT the donor's. That distinction is
+ * load-bearing: the donor's parking list is ['Open Parking Lot','Parking
+ * Garage','Open & Covered Parking','None'] and its building-age list is
+ * twelve single-year buckets, while CURRENT stores ['Open Parking','Closed
+ * Parking','None'] and six ranged buckets. Adopting the donor's values
+ * would build filters that match nothing in this database — the search
+ * would return zero results and read as an empty inventory.
+ *
+ * The lists below mirror, exactly:
+ *   - backend/models/Property.js    enum-enforced: floorLocation,
+ *                                   kitchenType, usageStatus,
+ *                                   titleDeedStatus, nearbyTransport,
+ *                                   currency
+ *   - backend/routes/properties.js  the same set, as REST allowlists
+ *   - src/pages/PropertiesPage.jsx  rooms, heating, parking, buildingAge —
+ *                                   no Mongoose enum, but the closed
+ *                                   vocabulary the admin form writes
+ *
+ * tests/chatFilters.test.js asserts these lists against
+ * routes/properties.js and PropertiesPage.jsx, so drift fails the suite
+ * instead of silently degrading search.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+// ─── Canonical value lists ───────────────────────────────────────────────
+export const CANONICAL_FLOOR_LOCATIONS = ['Ground floor', 'High Entrance', 'Penthouse', 'Duplex', 'Triplex']
+export const CANONICAL_KITCHEN_TYPES = ['Open (American)', 'Closed']
+export const CANONICAL_USAGE_STATUSES = ['Empty', 'Tenant', 'Property Owner']
+export const CANONICAL_TITLE_DEED_STATUSES = [
+  'Shared Title Deed',
+  'Independent Title Deed',
+  'Land with Title Deed',
+  'Cooperative Share Title Deed',
+  'Established Usufruct Right',
+]
+export const CANONICAL_TRANSPORT_OPTIONS = ['Metro', 'Metrobus', 'Bus', 'Ferry', 'Train', 'Tram', 'Highway Access']
+export const CANONICAL_CURRENCIES = ['TL', 'USD', 'EUR', 'GBP']
+export const CANONICAL_HEATING = ['Central', 'Individual Gas', 'Floor Heating', 'Air Conditioning', 'None']
+export const CANONICAL_PARKING_TYPES = ['Open Parking', 'Closed Parking', 'None']
+export const CANONICAL_ROOMS = [
+  'Studio (1+0)', '1+1', '1.5+1', '2+0', '2+1', '2.5+1', '2+2',
+  '3+0', '3+1', '3.5+1', '3+2', '3+3',
+  '4+0', '4+1', '4.5+1', '4.5+2', '4+2', '4+3', '4+4',
+  '5+1', '5.5+1', '5+2', '5+3', '5+4',
+  '6+1', '6+2', '6.5+1', '6+3', '6+4',
+  '7+1', '7+2', '7+3',
+  '8+1', '8+2', '8+3', '8+4',
+  '9+1', '9+2', '9+3', '9+4', '9+5', '9+6',
+  '10+1', '10+2', 'Out of 10',
+]
+
+// ─── Multilingual term maps ──────────────────────────────────────────────
+// Same { Canonical: [terms] } shape as LISTING_TYPE_TERMS/FEATURE_TERMS
+// above, so findFirstCanonicalMatch/findAllCanonicalMatches work unchanged.
+
+// The nine Wave 10B1 tri-state amenities, keyed by Property field name
+// rather than by a display value because each resolves to a boolean.
+export const AMENITY_TERMS = {
+  sauna: ['sauna', 'ساونا'],
+  jacuzzi: ['jacuzzi', 'jakuzi', 'jaküzi', 'جاكوزي'],
+  steamRoom: ['steam room', 'steamroom', 'buhar odası', 'buhar odasi', 'حمام بخار'],
+  // "hamam" always means a Turkish bath here — never the pool boolean and
+  // never a bathroom count, which is what a looser match would do with it.
+  turkishBath: ['turkish bath', 'hamam', 'türk hamamı', 'turk hamami', 'حمام تركي'],
+  basement: ['basement', 'bodrum', 'قبو', 'بدروم'],
+  withinSite: [
+    'within site', 'within a site', 'gated site', 'gated community', 'inside a complex',
+    'site içinde', 'site icinde', 'sitede', 'kapalı site', 'kapali site',
+    'ضمن مجمع', 'مجمع سكني مغلق', 'داخل مجمع',
+  ],
+  eligibleForCredit: [
+    'eligible for credit', 'mortgage eligible', 'suitable for credit', 'credit eligible',
+    'krediye uygun', 'kredi uygun', 'مؤهل للقرض', 'قابل للقرض',
+  ],
+  exchange: [
+    'open to exchange', 'trade-in', 'trade in', 'takaslı', 'takasli', 'takas',
+    'قابل للمقايضة', 'مقايضة',
+  ],
+  hasVirtualTour: ['virtual tour', 'sanal tur', 'جولة افتراضية', 'جولة ثلاثية'],
+}
+
+export const USAGE_STATUS_TERMS = {
+  Empty: ['empty', 'vacant', 'boş', 'bos', 'فارغ', 'خالي'],
+  Tenant: [
+    'tenant', 'tenant-occupied', 'occupied by tenant',
+    'kiracı', 'kiracili', 'kiracılı', 'kiracı oturuyor', 'مستأجر', 'مؤجر',
+  ],
+  'Property Owner': [
+    'property owner', 'owner occupied', 'owner-occupied',
+    'sahibi oturuyor', 'mal sahibi oturuyor', 'يسكنها المالك', 'يملكها المالك',
+  ],
+}
+
+export const KITCHEN_TYPE_TERMS = {
+  'Open (American)': [
+    'open kitchen', 'open (american)', 'american kitchen', 'open plan kitchen',
+    'açık mutfak', 'acik mutfak', 'amerikan mutfak', 'مطبخ مفتوح', 'مطبخ أمريكي',
+  ],
+  Closed: ['closed kitchen', 'separate kitchen', 'kapalı mutfak', 'kapali mutfak', 'مطبخ مغلق'],
+}
+
+// CURRENT's three stored parking values. 'Closed Parking' absorbs the
+// garage/indoor phrasings the donor routed to its own 'Parking Garage'.
+export const PARKING_TYPE_TERMS = {
+  'Closed Parking': [
+    'closed parking', 'closed garage', 'indoor parking', 'covered parking', 'parking garage',
+    'kapalı otopark', 'kapali otopark', 'garaj', 'kapalı garaj',
+    'كراج مغلق', 'موقف مغلق', 'جراج', 'موقف مسقوف',
+  ],
+  'Open Parking': [
+    'open parking', 'open parking lot', 'outdoor parking',
+    'açık otopark', 'acik otopark', 'موقف مكشوف', 'موقف مفتوح',
+  ],
+  None: ['no parking', 'without parking', 'otopark yok', 'بدون موقف'],
+}
+
+export const TRANSPORT_TERMS = {
+  // Metrobus is listed before Metro so that key order alone prevents
+  // "metrobüs" from also registering as "Metro" on a substring match.
+  Metrobus: ['metrobus', 'metrobüs', 'metrobuse', 'metrobüse yakın', 'bus rapid transit', 'brt', 'مترو باص', 'مترباص'],
+  Metro: ['metro station', 'metro istasyonu', 'metroya yakın', 'metroya yakin', 'the metro', 'محطة مترو', 'مترو'],
+  Ferry: ['ferry', 'ferry terminal', 'vapur', 'iskele', 'عبارة', 'معدية'],
+  Tram: ['tram', 'tramway', 'tramvay', 'ترام'],
+  Train: ['train station', 'train', 'railway', 'tren istasyonu', 'tren', 'قطار', 'محطة قطار'],
+  Bus: ['bus stop', 'bus station', 'otobüs', 'otobus', 'otobüs durağı', 'باص', 'حافلة'],
+  'Highway Access': [
+    'highway access', 'highway', 'motorway', 'otoyol', 'otoyol bağlantısı', 'otoyol baglantisi',
+    'طريق سريع', 'الطريق السريع',
+  ],
+}
+
+export const CURRENCY_TERMS = {
+  TL: ['tl', 'try', 'lira', 'türk lirası', 'turk lirasi', '₺', 'ليرة', 'ليرة تركية'],
+  USD: ['usd', 'dollar', 'dollars', 'dolar', '$', 'دولار'],
+  EUR: ['eur', 'euro', 'euros', 'avro', '€', 'يورو'],
+  GBP: ['gbp', 'pound', 'pounds', 'sterlin', '£', 'جنيه', 'باوند'],
+}
+
+export const FLOOR_LOCATION_TERMS = {
+  'Ground floor': ['ground floor', 'zemin kat', 'الطابق الأرضي', 'طابق أرضي'],
+  'High Entrance': ['high entrance', 'yüksek giriş', 'yuksek giris', 'مدخل مرتفع'],
+  Penthouse: ['penthouse', 'çatı katı', 'cati kati', 'بنتهاوس', 'شقة السطح'],
+  Duplex: ['duplex', 'dubleks', 'دوبلكس'],
+  Triplex: ['triplex', 'tripleks', 'تريبلكس'],
+}
+
+export const TITLE_DEED_TERMS = {
+  'Shared Title Deed': ['shared title deed', 'hisseli tapu', 'سند مشترك', 'طابو مشترك'],
+  'Independent Title Deed': [
+    'independent title deed', 'kat mülkiyeti', 'kat mulkiyeti', 'müstakil tapu',
+    'سند مستقل', 'طابو مستقل',
+  ],
+  'Land with Title Deed': ['land with title deed', 'arsa tapulu', 'arsa tapusu', 'سند أرض'],
+  'Cooperative Share Title Deed': ['cooperative share title deed', 'kooperatif hisseli tapu', 'سند تعاوني'],
+  'Established Usufruct Right': ['established usufruct right', 'intifa hakkı', 'intifa hakki', 'حق الانتفاع'],
+}
+
+export const HEATING_TERMS = {
+  Central: ['central heating', 'central', 'merkezi ısıtma', 'merkezi isitma', 'merkezi', 'تدفئة مركزية'],
+  'Individual Gas': [
+    'individual gas', 'combi boiler', 'combi', 'natural gas', 'kombi', 'doğalgaz', 'dogalgaz',
+    'غاز طبيعي', 'غلاية',
+  ],
+  'Floor Heating': ['floor heating', 'underfloor heating', 'yerden ısıtma', 'yerden isitma', 'تدفئة أرضية'],
+  'Air Conditioning': ['air conditioning', 'air-conditioning', 'klima', 'تكييف'],
+  None: ['no heating', 'without heating', 'ısıtma yok', 'isitma yok', 'بدون تدفئة'],
+}
+
+/* ─── Building age buckets ─────────────────────────────────────────────
+ *
+ * CURRENT's six stored buckets, each with the maximum age it covers. The
+ * donor's twelve single-year buckets ('0','1','2',...,'31+') are NOT used:
+ * no listing in this database carries one, so an $in against them matches
+ * nothing.
+ *
+ * `maxYears` exists so a relative phrase ("built in the last 10 years")
+ * can expand to every bucket that fits entirely inside the stated span,
+ * which is what an $in query needs. '21+' is unbounded, so it can never
+ * fit inside any finite span — Infinity makes that fall out of the
+ * comparison rather than needing a special case.
+ */
+export const BUILDING_AGE_BUCKETS = [
+  { label: '0 (New)', maxYears: 0 },
+  { label: '1-5', maxYears: 5 },
+  { label: '6-10', maxYears: 10 },
+  { label: '11-15', maxYears: 15 },
+  { label: '16-20', maxYears: 20 },
+  { label: '21+', maxYears: Infinity },
+]
+
+export const BUILDING_AGE_BUCKET_LABELS = BUILDING_AGE_BUCKETS.map((bucket) => bucket.label)
+
+// buildingAgeBucketsWithinYears(10) -> ['0 (New)', '1-5', '6-10'].
+// Returns [] for a non-finite or negative input rather than throwing.
+export const buildingAgeBucketsWithinYears = (years) => {
+  if (!Number.isFinite(years) || years < 0) return []
+  return BUILDING_AGE_BUCKETS.filter((bucket) => bucket.maxYears <= years).map((bucket) => bucket.label)
+}
+
+// Builds a { term: canonical } lookup from a { canonical: [terms] } map, so
+// each closed-vocabulary field does not need a hand-written synonym object
+// duplicating the term map above it. Terms are normalized with the same
+// normalizeForMatching the rest of this module uses, so an İ or an Arabic
+// alef variant inside a term list resolves the way it does in visitor text.
+export const buildSynonymsFromTermMap = (termMap) => {
+  const synonyms = {}
+  Object.entries(termMap).forEach(([canonical, terms]) => {
+    terms.forEach((term) => {
+      synonyms[normalizeForMatching(term)] = canonical
+    })
+  })
+  return synonyms
+}

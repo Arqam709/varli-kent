@@ -15,6 +15,27 @@ import {
   ARABIC_DUAL_BATHROOM_WORDS,
   MILLION_WORDS,
   THOUSAND_WORDS,
+  // ── Wave 11B ──
+  buildSynonymsFromTermMap,
+  buildingAgeBucketsWithinYears,
+  BUILDING_AGE_BUCKET_LABELS,
+  CANONICAL_CURRENCIES,
+  CANONICAL_FLOOR_LOCATIONS,
+  CANONICAL_HEATING,
+  CANONICAL_KITCHEN_TYPES,
+  CANONICAL_PARKING_TYPES,
+  CANONICAL_ROOMS,
+  CANONICAL_TITLE_DEED_STATUSES,
+  CANONICAL_TRANSPORT_OPTIONS,
+  CANONICAL_USAGE_STATUSES,
+  CURRENCY_TERMS,
+  FLOOR_LOCATION_TERMS,
+  HEATING_TERMS,
+  KITCHEN_TYPE_TERMS,
+  PARKING_TYPE_TERMS,
+  TITLE_DEED_TERMS,
+  TRANSPORT_TERMS,
+  USAGE_STATUS_TERMS,
 } from '../locales/chatParsingVocabulary.js'
 
 export const defaultParsed = {
@@ -41,6 +62,48 @@ nextQuestion: null,
   pool: null,
   garden: null,
   parking: null,
+  /* ── Wave 11B extended fields ──────────────────────────────────────────
+   *
+   * The nine Wave 10B1 tri-state amenities plus `featured`. Default null,
+   * not false: on these fields the schema deliberately keeps "never
+   * recorded" distinct from "recorded as absent", and the chat parser only
+   * ever raises them to `true`. See applyBoolean in services/chatFilters.js
+   * for why no negative branch exists.
+   */
+  sauna: null,
+  jacuzzi: null,
+  steamRoom: null,
+  turkishBath: null,
+  basement: null,
+  withinSite: null,
+  eligibleForCredit: null,
+  exchange: null,
+  hasVirtualTour: null,
+  featured: null,
+  // Closed-vocabulary multi-value fields. Arrays because each is a
+  // multi-select ("metro or ferry"), matched with $in.
+  usageStatus: [],
+  kitchenType: [],
+  heating: [],
+  titleDeedStatus: [],
+  floorLocation: [],
+  parkingType: [],
+  buildingAge: [],
+  rooms: [],
+  nearbyTransport: [],
+  // Numeric range pairs, same shape as minSqm/maxSqm above.
+  minNetSqm: null,
+  maxNetSqm: null,
+  minOpenAreaSqm: null,
+  maxOpenAreaSqm: null,
+  minCoefficient: null,
+  maxCoefficient: null,
+  minFloor: null,
+  maxFloor: null,
+  minTotalFloors: null,
+  maxTotalFloors: null,
+  currency: null,
+  listedSince: null,
   mustHave: [],
   niceToHave: [],
   lifestyle: [],
@@ -186,6 +249,251 @@ export const canonicalizeListingType = (value) =>
 export const canonicalizePropertyType = (value) =>
   canonicalizeEnumValue(value, CANONICAL_PROPERTY_TYPES, PROPERTY_TYPE_SYNONYMS)
 
+/* ═══════════════════════════════════════════════════════════════════════
+ * Wave 11B — extended-field canonicalization
+ *
+ * The same guard listingType/propertyType have used since Phase 4, applied
+ * to every extended enum field: an already-canonical value passes straight
+ * through (canonicalizeEnumValue's first line), a recognized Turkish or
+ * Arabic synonym maps back to the canonical English, and anything else
+ * becomes null rather than reaching Mongo as an unmatchable string.
+ *
+ * The donor validated only three of these (usageStatus, kitchenType,
+ * nearbyTransport) and passed heating, titleDeedStatus, floorLocation,
+ * parkingType and rooms through as raw strings, reasoning that no Mongoose
+ * enum constrained them. Two of those five ARE enum-constrained in CURRENT
+ * (titleDeedStatus, floorLocation), and the other three have a closed
+ * vocabulary the admin form writes — so all five are validated here.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+// Wave 11B synonym tables are built with normalizeForMatching (see
+// buildSynonymsFromTermMap), so lookups must normalize identically. The
+// older canonicalizeEnumValue uses a plain trim().toLowerCase() — keeping
+// them separate leaves listingType/propertyType behavior untouched.
+const canonicalizeExtendedValue = (value, canonicalList, synonyms) => {
+  if (typeof value !== 'string') return null
+  if (canonicalList.includes(value)) return value
+
+  return synonyms[normalizeForMatching(value)] || null
+}
+
+const USAGE_STATUS_SYNONYMS = buildSynonymsFromTermMap(USAGE_STATUS_TERMS)
+const KITCHEN_TYPE_SYNONYMS = buildSynonymsFromTermMap(KITCHEN_TYPE_TERMS)
+
+/*
+ * TRANSPORT_TERMS deliberately omits the bare words "metro" and "bus",
+ * because that map is also used for SUBSTRING scanning of free text, where
+ * "metro" matches inside "metrobüs" and "bus" inside "otobüs".
+ *
+ * This lookup is not a substring scan. By the time a value reaches a
+ * canonicalizer, Gemini or the fallback parser has already isolated it as
+ * one discrete value, so an EXACT key match on "metro" carries no collision
+ * risk — "metrobüs" arrives as its own whole string and hits its own key.
+ * Without these, "metro" (the single most likely thing a visitor says)
+ * would fail to canonicalize and the constraint would be dropped.
+ */
+const TRANSPORT_SYNONYMS = {
+  ...buildSynonymsFromTermMap(TRANSPORT_TERMS),
+  metro: 'Metro',
+  bus: 'Bus',
+  otobus: 'Bus',
+  train: 'Train',
+  tren: 'Train',
+  ferry: 'Ferry',
+  tram: 'Tram',
+  highway: 'Highway Access',
+}
+const PARKING_TYPE_SYNONYMS = buildSynonymsFromTermMap(PARKING_TYPE_TERMS)
+const CURRENCY_SYNONYMS = buildSynonymsFromTermMap(CURRENCY_TERMS)
+const FLOOR_LOCATION_SYNONYMS = buildSynonymsFromTermMap(FLOOR_LOCATION_TERMS)
+const TITLE_DEED_SYNONYMS = buildSynonymsFromTermMap(TITLE_DEED_TERMS)
+const HEATING_SYNONYMS = buildSynonymsFromTermMap(HEATING_TERMS)
+
+export const canonicalizeUsageStatus = (value) =>
+  canonicalizeExtendedValue(value, CANONICAL_USAGE_STATUSES, USAGE_STATUS_SYNONYMS)
+
+export const canonicalizeKitchenType = (value) =>
+  canonicalizeExtendedValue(value, CANONICAL_KITCHEN_TYPES, KITCHEN_TYPE_SYNONYMS)
+
+export const canonicalizeTransport = (value) =>
+  canonicalizeExtendedValue(value, CANONICAL_TRANSPORT_OPTIONS, TRANSPORT_SYNONYMS)
+
+export const canonicalizeParkingType = (value) =>
+  canonicalizeExtendedValue(value, CANONICAL_PARKING_TYPES, PARKING_TYPE_SYNONYMS)
+
+export const canonicalizeCurrency = (value) =>
+  canonicalizeExtendedValue(value, CANONICAL_CURRENCIES, CURRENCY_SYNONYMS)
+
+export const canonicalizeFloorLocation = (value) =>
+  canonicalizeExtendedValue(value, CANONICAL_FLOOR_LOCATIONS, FLOOR_LOCATION_SYNONYMS)
+
+export const canonicalizeTitleDeedStatus = (value) =>
+  canonicalizeExtendedValue(value, CANONICAL_TITLE_DEED_STATUSES, TITLE_DEED_SYNONYMS)
+
+export const canonicalizeHeating = (value) =>
+  canonicalizeExtendedValue(value, CANONICAL_HEATING, HEATING_SYNONYMS)
+
+// Room layouts are typed strings ("3+1"), not prose, so there is nothing to
+// translate — only whitespace to forgive and membership to prove.
+export const canonicalizeRooms = (value) => {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return CANONICAL_ROOMS.includes(trimmed) ? trimmed : null
+}
+
+// Building-age buckets arrive already-bucketed from Gemini or from
+// extractBuildingAgeFromText below; only membership needs proving.
+export const canonicalizeBuildingAge = (value) => {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return BUILDING_AGE_BUCKET_LABELS.includes(trimmed) ? trimmed : null
+}
+
+// Canonicalize every entry of an array, drop what does not resolve, and
+// deduplicate — "metro or the metro station" must not produce ['Metro','Metro'].
+const canonicalizeArray = (raw, canonicalizer) =>
+  Array.isArray(raw) ? [...new Set(raw.map(canonicalizer).filter(Boolean))] : []
+
+/*
+ * The Wave 11B field lists, in one place.
+ *
+ * Exported because three modules must agree on exactly this set:
+ * normalizeParsed below (validation), services/chatFilters.js (filter
+ * building) and services/chatConversationMemory.js (what survives a
+ * follow-up turn). A field present in one list but missing from another is
+ * precisely the bug this wave exists to fix — a criterion that parses, then
+ * quietly disappears one step later.
+ */
+export const EXTENDED_BOOLEAN_FIELDS = [
+  'sauna', 'jacuzzi', 'steamRoom', 'turkishBath', 'basement',
+  'withinSite', 'eligibleForCredit', 'exchange', 'hasVirtualTour', 'featured',
+]
+
+export const EXTENDED_ARRAY_FIELDS = [
+  'usageStatus', 'kitchenType', 'heating', 'titleDeedStatus',
+  'floorLocation', 'parkingType', 'buildingAge', 'rooms', 'nearbyTransport',
+]
+
+export const EXTENDED_NUMERIC_FIELDS = [
+  'minNetSqm', 'maxNetSqm',
+  'minOpenAreaSqm', 'maxOpenAreaSqm',
+  'minCoefficient', 'maxCoefficient',
+  'minFloor', 'maxFloor',
+  'minTotalFloors', 'maxTotalFloors',
+]
+
+export const EXTENDED_SCALAR_FIELDS = ['currency', 'listedSince']
+
+/* ─── Deterministic extractors ─────────────────────────────────────────
+ *
+ * Same shape and spirit as extractBudgetFromText above: read the raw
+ * message, mutate `parsed` in place, return it. Called from normalizeParsed
+ * so the Gemini path and the keywordFallbackParser safety net get identical
+ * behavior for these phrase patterns.
+ */
+
+const BUILDING_AGE_YEAR_PATTERNS = [
+  /(?:built|constructed)\b.{0,25}\blast\s+(\d+)\s+years?\b/,
+  /\blast\s+(\d+)\s+years?\b.{0,25}\b(?:built|construction|constructed)\b/,
+  /\bson\s+(\d+)\s+y[ıi]l/,
+  /(?:اخر|آخر)\s*(\d+)\s*سن(?:ة|وات)/,
+]
+
+// "built in the last 10 years" / "son 10 yılda yapılan" / "آخر 10 سنوات"
+// -> buildingAge: ['0 (New)', '1-5', '6-10'] — every CURRENT bucket whose
+// whole range fits inside the stated span. Only overrides parsed.buildingAge
+// when a pattern actually matches.
+export const extractBuildingAgeFromText = (message, parsed) => {
+  const text = normalizeDigits(message).toLowerCase()
+
+  for (const pattern of BUILDING_AGE_YEAR_PATTERNS) {
+    const match = text.match(pattern)
+    if (!match) continue
+
+    const buckets = buildingAgeBucketsWithinYears(Number(match[1]))
+    if (buckets.length > 0) parsed.buildingAge = buckets
+    break
+  }
+
+  return parsed
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+// Same ceiling routes/properties.js puts on its listedSince query param.
+const MAX_LISTED_SINCE_DAYS = 3650
+
+const RELATIVE_DATE_PATTERNS = [
+  { pattern: /\b(?:last|past)\s+24\s+hours?\b/, days: 1 },
+  { pattern: /\blast\s+(\d+)\s+days?\b/, daysFromMatch: true, unit: 1 },
+  { pattern: /\blast\s+week\b/, days: 7 },
+  { pattern: /\blast\s+(\d+)\s+weeks?\b/, daysFromMatch: true, unit: 7 },
+  { pattern: /\blast\s+month\b/, days: 30 },
+  { pattern: /\blast\s+(\d+)\s+months?\b/, daysFromMatch: true, unit: 30 },
+  /*
+   * Turkish is agglutinative: a case suffix attaches directly to the noun,
+   * so "son 3 günde eklenen" carries no word boundary after "gün" and a
+   * plain \b never fires. The donor's patterns have that bug and silently
+   * fail on the most natural phrasing of the request. The optional suffix
+   * groups below are explicit rather than a loose \w*, so "son 3 ay" still
+   * cannot match inside an unrelated word.
+   */
+  { pattern: /\bson\s+24\s+saat/, days: 1 },
+  { pattern: /\bson\s+(\d+)\s+g[üu]n(?:de|den|lük|luk)?\b/, daysFromMatch: true, unit: 1 },
+  { pattern: /\bge[çc]en\s+hafta|\bson\s+bir\s+hafta/, days: 7 },
+  { pattern: /\bson\s+(\d+)\s+hafta(?:da|dan|l[ıi]k)?\b/, daysFromMatch: true, unit: 7 },
+  { pattern: /\bge[çc]en\s+ay\b|\bson\s+bir\s+ay\b/, days: 30 },
+  { pattern: /\bson\s+(\d+)\s+ay(?:da|dan|l[ıi]k)?\b/, daysFromMatch: true, unit: 30 },
+  { pattern: /(?:اخر|آخر)\s*24\s*ساعة/, days: 1 },
+  { pattern: /(?:اخر|آخر)\s*(\d+)\s*(?:يوم|أيام|ايام)/, daysFromMatch: true, unit: 1 },
+  { pattern: /الأسبوع\s*الماضي|الاسبوع\s*الماضي/, days: 7 },
+  { pattern: /(?:اخر|آخر)\s*(\d+)\s*(?:أسابيع|اسابيع)/, daysFromMatch: true, unit: 7 },
+  { pattern: /الشهر\s*الماضي/, days: 30 },
+  { pattern: /(?:اخر|آخر)\s*(\d+)\s*(?:شهر|أشهر|اشهر)/, daysFromMatch: true, unit: 30 },
+]
+
+/*
+ * "listed in the last week" / "son 3 günde eklenen" / "الأسبوع الماضي"
+ * -> parsed.listedSince, an ISO timestamp.
+ *
+ * This is the ONLY producer of listedSince — the Gemini prompt explicitly
+ * tells the model to leave it null, so no free-text date ever reaches
+ * `new Date()`. The day count is bounded by the same 3650-day ceiling the
+ * REST route uses, so "last 99999 months" cannot build an absurd cutoff.
+ *
+ * Deliberately narrow: this answers "how recently was this LISTED", which
+ * is a property filter. A question about the current date or time is a
+ * different feature and is not handled here.
+ */
+export const extractListedSinceFromText = (message, parsed) => {
+  const text = normalizeDigits(message).toLowerCase()
+
+  for (const rule of RELATIVE_DATE_PATTERNS) {
+    const match = text.match(rule.pattern)
+    if (!match) continue
+
+    const days = rule.daysFromMatch ? Number(match[1]) * rule.unit : rule.days
+    if (Number.isFinite(days) && days > 0 && days <= MAX_LISTED_SINCE_DAYS) {
+      parsed.listedSince = new Date(Date.now() - days * MS_PER_DAY).toISOString()
+    }
+    break
+  }
+
+  return parsed
+}
+
+// "budget 200000 dollars" / "200000 lira" / "200000 دولار" -> currency,
+// alongside whatever extractBudgetFromText already did with the number.
+// Never overrides a currency Gemini already set — purely a safety net.
+// Records the denomination only; nothing here converts between currencies.
+export const extractCurrencyFromText = (message, parsed) => {
+  if (!parsed.currency) {
+    const match = findFirstCanonicalMatch(normalizeForMatching(message), CURRENCY_TERMS)
+    if (match) parsed.currency = match
+  }
+
+  return parsed
+}
+
 export const normalizeParsed = (parsed, message) => {
   const safe = {
     ...defaultParsed,
@@ -268,7 +576,54 @@ safe.descriptionQuery =
   safe.lifestyle = Array.isArray(safe.lifestyle) ? safe.lifestyle : []
   safe.requirements = Array.isArray(safe.requirements) ? safe.requirements : []
 
-  return extractBudgetFromText(message, safe)
+  /* ── Wave 11B extended fields ────────────────────────────────────────
+   *
+   * Booleans collapse to real `true` or `null`. The string "true" is
+   * accepted alongside the boolean because Gemini returns JSON as text and
+   * intermittently quotes its booleans; without that, chatFilters.js's
+   * `=== true` check would silently drop a requirement the visitor really
+   * stated. Everything else — including "false", "yes" and 0 — becomes
+   * null, which on these tri-state fields correctly means "not asked for"
+   * rather than "asked to be absent".
+   *
+   * Arrays are canonicalized against CURRENT's vocabularies, dropped when
+   * unrecognized, and deduplicated, so nothing the schema cannot store ever
+   * reaches an $in.
+   */
+  for (const field of EXTENDED_BOOLEAN_FIELDS) {
+    safe[field] = safe[field] === true || safe[field] === 'true' ? true : null
+  }
+
+  safe.usageStatus = canonicalizeArray(safe.usageStatus, canonicalizeUsageStatus)
+  safe.kitchenType = canonicalizeArray(safe.kitchenType, canonicalizeKitchenType)
+  safe.heating = canonicalizeArray(safe.heating, canonicalizeHeating)
+  safe.titleDeedStatus = canonicalizeArray(safe.titleDeedStatus, canonicalizeTitleDeedStatus)
+  safe.floorLocation = canonicalizeArray(safe.floorLocation, canonicalizeFloorLocation)
+  safe.parkingType = canonicalizeArray(safe.parkingType, canonicalizeParkingType)
+  safe.buildingAge = canonicalizeArray(safe.buildingAge, canonicalizeBuildingAge)
+  safe.rooms = canonicalizeArray(safe.rooms, canonicalizeRooms)
+  safe.nearbyTransport = canonicalizeArray(safe.nearbyTransport, canonicalizeTransport)
+
+  safe.currency = canonicalizeCurrency(safe.currency)
+
+  // Numeric bounds are validated again in chatFilters.js (they round-trip
+  // through the frontend between turns); this pass keeps obvious garbage out
+  // of conversation memory. Number.isFinite, never truthiness — floor 0 and
+  // coefficient 0 are legitimate bounds.
+  for (const field of EXTENDED_NUMERIC_FIELDS) {
+    const value = safe[field]
+    const usable =
+      (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) &&
+      Number.isFinite(Number(value))
+    safe[field] = usable ? Number(value) : null
+  }
+
+  extractBudgetFromText(message, safe)
+  extractBuildingAgeFromText(message, safe)
+  extractListedSinceFromText(message, safe)
+  extractCurrencyFromText(message, safe)
+
+  return safe
 }
 
 export const hasSoftDescriptionSearch = (parsed = {}) => {
