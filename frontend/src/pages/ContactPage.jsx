@@ -15,6 +15,17 @@ const fromLeft = { hidden: { opacity: 0, x: -48 }, show: { opacity: 1, x: 0, tra
 const fromRight = { hidden: { opacity: 0, x: 48 }, show: { opacity: 1, x: 0, transition: { duration: 0.75, ease: [0.22, 1, 0.36, 1] } } }
 const vp = { once: true, margin: '-60px' }
 
+// The canonical values the backend actually accepts — models/ContactSubmission.js's
+// interestType enum, routes/contact.js's isIn() validator, models/LeadRouting.js and
+// routes/leadRouting.js's ALL_TYPES all carry this exact set.
+//
+// These are the submitted VALUES; contactPage.interests supplies the display LABELS,
+// positionally. The select used to render the translated label as both, which meant a
+// Turkish visitor submitted interestType: 'Satın Alma' and was rejected by the enum —
+// the form only ever worked in English. Keep this array and every contactPage.interests
+// array the same length and the same order, or a label will attach to the wrong value.
+const INTEREST_TYPES = ['Buying', 'Renting', 'Selling', 'Renovation', 'Interior Design', 'Architecture', 'General']
+
 const ContactPage = () => {
   const { t } = useLanguage()
   const c = t.contactPage || {}
@@ -215,8 +226,8 @@ const ContactPage = () => {
                 <div>
                   <label className="block mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400" htmlFor="interestType">{c.interestLabel || 'I am interested in'}</label>
                   <select id="interestType" name="interestType" value={form.interestType} onChange={handleChange} className={selectCls}>
-                    {(c.interests || ['Buying','Renting','Selling','Renovation','Interior Design','Architecture','General']).map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
+                    {INTEREST_TYPES.map((canonical, i) => (
+                      <option key={canonical} value={canonical}>{c.interests?.[i] || canonical}</option>
                     ))}
                   </select>
                 </div>
