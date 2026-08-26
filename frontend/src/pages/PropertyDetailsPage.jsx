@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
@@ -8,6 +8,7 @@ import { formatPrice } from '../lib/formatPrice'
 import { useLanguage } from '../contexts/LanguageContext'
 import { SinglePropertyMap, isPubliclyMappable, isApproximateLocation } from '../components/PropertyMapView'
 import useSeo from '../lib/useSeo'
+import { buildPropertyJsonLd } from '../lib/propertyJsonLd'
 
 
 /*
@@ -103,30 +104,60 @@ const PropertyDetailsPage = () => {
   const [sending, setSending] = useState(false)
   const { isFavourite, toggleFavourite } = useFavourites()
 
+  /*
+   * Memoised so the object identity is stable across re-renders. useSeo's
+   * effect lists jsonLd as a dependency, so a fresh object every render would
+   * re-run the effect (and rewrite the script tag) on every keystroke in the
+   * contact form below.
+   */
+  // A route change renders once with the previous property still in state.
+  // Requiring the response id to match the route prevents property A from
+  // being published under property B's canonical URL during that interval.
+  const seoProperty = String(property?._id || '') === String(id) ? property : null
+  const propertyJsonLd = useMemo(() => buildPropertyJsonLd(seoProperty, id), [seoProperty, id])
+
   useSeo({
     title: property ? `${property.title} — ${property.district}, Istanbul` : 'Property Details',
-    description: property
+    description: seoProperty
       ? `${property.listingType === 'Rent' ? 'For Rent' : 'For Sale'}: ${property.title} in ${property.district}, Istanbul. ${property.beds} bed, ${property.baths} bath, ${property.sqm}m².`
       : 'View property details on Varlikent.',
-    image: property?.mainImage || property?.images?.[0],
+    image: seoProperty?.mainImage || seoProperty?.images?.[0],
     path: `/properties/${id}`,
     type: 'article',
+    // null while loading and for a property that failed to load, so a 404 or
+    // an in-flight request never publishes structured data. See
+    // lib/propertyJsonLd.js for what it does and does not claim.
+    jsonLd: propertyJsonLd,
   })
 
   useEffect(() => {
+    let active = true
     setLoading(true)
+    setProperty(null)
+    setSimilar([])
     api.get(`/properties/${id}`)
       .then(r => {
+        if (!active) return
         setProperty(r.data.property)
         setActiveImg(0)
         if (r.data.property) {
           api.get('/properties', { params: { district: r.data.property.district, listingType: r.data.property.listingType } })
-            .then(r2 => setSimilar((r2.data.properties || []).filter(p => p._id !== id).slice(0, 3)))
+            .then(r2 => {
+              if (active) setSimilar((r2.data.properties || []).filter(p => p._id !== id).slice(0, 3))
+            })
             .catch(() => {})
         }
       })
-      .catch(() => setProperty(null))
-      .finally(() => setLoading(false))
+      .catch(() => {
+        if (active) setProperty(null)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
   }, [id])
 
   const handleContact = async (e) => {

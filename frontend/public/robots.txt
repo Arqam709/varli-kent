@@ -1,4 +1,15 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://varlikent.com/sitemap.xml
+# Non-public areas. These are crawler instructions only — every route below is
+# reviewed for crawl exclusion; robots.txt is not access control.
+Disallow: /admin
+Disallow: /agent
+Disallow: /login
+Disallow: /register
+Disallow: /settings
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /favourites
+
+Sitemap: https://www.varlikent.com/sitemap.xml
