@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { editableText } from '../lib/localizedText'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
@@ -55,7 +56,9 @@ const AdminShowroom = () => {
 
   const openCreate = () => { setForm({ ...empty, serviceType: activeTab }); setModal('create') }
   const openEdit = (img) => {
-    setForm({ url: img.url, caption: img.caption || '', style: img.style || '', order: img.order ?? 0, visible: img.visible ?? true })
+    // Wave 12A2 — caption is stored localized; show the admin their own
+    // source text, not the object and not a machine translation of it.
+    setForm({ url: img.url, caption: editableText(img.caption), style: img.style || '', order: img.order ?? 0, visible: img.visible ?? true })
     setModal(img)
   }
 
@@ -164,13 +167,13 @@ const AdminShowroom = () => {
                 <div className="relative aspect-video bg-slate-100">
                   {isVideo(img.url)
                     ? <video src={img.url} className="h-full w-full object-cover" muted playsInline />
-                    : <img src={img.url} alt={img.caption || ''} className="h-full w-full object-cover" onError={e => { e.target.style.display = 'none' }} />}
+                    : <img src={img.url} alt={editableText(img.caption)} className="h-full w-full object-cover" onError={e => { e.target.style.display = 'none' }} />}
                   {isVideo(img.url) && (
                     <div className="absolute top-2 left-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white tracking-wide">VIDEO</div>
                   )}
                 </div>
                 <div className="p-4">
-                  {img.caption && <p className="text-sm font-semibold text-[#202a36] truncate">{img.caption}</p>}
+                  {editableText(img.caption) && <p className="text-sm font-semibold text-[#202a36] truncate">{editableText(img.caption)}</p>}
                   {img.style && <p className="text-xs text-[#4b6741] font-medium uppercase tracking-wide mt-0.5">{img.style}</p>}
                   <div className="mt-3 flex items-center gap-2 flex-wrap">
                     <button onClick={() => toggleVisible(img)}

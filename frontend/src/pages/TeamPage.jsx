@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useLanguage } from '../contexts/LanguageContext'
+import { localizedText } from '../lib/localizedText'
 import api from '../lib/api'
 import { C } from '../contexts/ThemeContext'
 
@@ -14,7 +15,16 @@ const fadeUp = {
 }
 
 export default function TeamPage() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+
+  /*
+   * Wave 12A2 — role and bio are stored per language and read here.
+   *
+   * A pure lookup: switching language selects a different stored string and
+   * makes no network request. Legacy rows still hold plain strings and
+   * resolve unchanged, which is why no migration is required.
+   */
+  const loc = (value) => localizedText(value, language)
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -144,7 +154,7 @@ export default function TeamPage() {
                             {m.name}
                           </p>
                           <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.22em]" style={{ color: C.gold }}>
-                            {m.role}
+                            {loc(m.role)}
                           </p>
                         </div>
                         {/* Gold accent line */}
@@ -160,13 +170,13 @@ export default function TeamPage() {
                   </div>
 
                   {/* Bio section — only if bio exists */}
-                  {m.bio && (
+                  {loc(m.bio) && (
                     <div
                       className="px-6 py-5"
                       style={{ borderTop: '1px solid rgba(201,163,90,0.1)' }}
                     >
                       <p className="text-xs leading-relaxed" style={{ color: 'rgba(246,243,237,0.45)' }}>
-                        {m.bio}
+                        {loc(m.bio)}
                       </p>
                     </div>
                   )}

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { useLanguage } from '../contexts/LanguageContext'
+import { localizedText } from '../lib/localizedText'
 
 const C = {
   charcoal: '#1E1E1C',
@@ -23,6 +25,16 @@ function useCardsVisible() {
 }
 
 export default function ShowroomCarousel({ images = [], loading = false, bgColor = '#2B2B28' }) {
+  const { language } = useLanguage()
+
+  /*
+   * Wave 12A2 — captions are stored per language and read here.
+   *
+   * A pure lookup, no network. Legacy rows hold plain strings and resolve
+   * unchanged. Everything else about this carousel — media URLs, video vs
+   * image handling, order, visibility — is untouched.
+   */
+  const loc = (value) => localizedText(value, language)
   const [idx, setIdx] = useState(0)
   const cardsVisible = useCardsVisible()
   const maxIdx = Math.max(0, images.length - Math.floor(cardsVisible))
@@ -75,16 +87,16 @@ export default function ShowroomCarousel({ images = [], loading = false, bgColor
                   ) : (
                     <img
                       src={img.url}
-                      alt={img.caption || ''}
+                      alt={loc(img.caption)}
                       className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                   )}
-                  {img.caption && (
+                  {loc(img.caption) && (
                     <div
                       className="absolute inset-x-0 bottom-0 px-4 py-3"
                       style={{ background: 'linear-gradient(to top, rgba(30,30,28,0.85), transparent)' }}
                     >
-                      <p className="text-xs tracking-wider uppercase" style={{ color: C.marble }}>{img.caption}</p>
+                      <p className="text-xs tracking-wider uppercase" style={{ color: C.marble }}>{loc(img.caption)}</p>
                     </div>
                   )}
                 </div>

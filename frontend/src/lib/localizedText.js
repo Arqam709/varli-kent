@@ -32,4 +32,31 @@ export const localizedText = (value, language = DEFAULT_LANGUAGE, fallback = '')
   return fallback
 }
 
+/**
+ * The text an admin should EDIT — their own source-language words, not a
+ * machine translation of them.
+ *
+ * Wave 12A2. An admin form cannot put a localized object in an <input>: it
+ * renders "[object Object]" and then saves that string back over real
+ * content. Every admin screen that edits localized content needs the same
+ * unwrap, so it lives here rather than being written out per page.
+ *
+ * Returning the SOURCE language matters. An admin who wrote a bio in Turkish
+ * should see their Turkish sentence when they reopen the form — showing them
+ * the English machine translation invites them to "correct" it, which
+ * silently changes the source language of the record.
+ *
+ * Sending a plain string back is also what tells the backend a field was
+ * edited; an untouched localized object is passed through, and an unchanged
+ * source string is detected and skipped (see utils/autoTranslate.js's
+ * isUnchangedSource), so neither spends translation quota.
+ */
+export const editableText = (value) => {
+  if (typeof value === 'string') return value
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return ''
+
+  const source = typeof value.sourceLang === 'string' ? value.sourceLang : ''
+  return localizedText(value, source || DEFAULT_LANGUAGE)
+}
+
 export default localizedText

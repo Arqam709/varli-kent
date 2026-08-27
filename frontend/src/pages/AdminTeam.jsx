@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { editableText } from '../lib/localizedText'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
@@ -45,7 +46,15 @@ const AdminTeam = () => {
   useEffect(() => { load() }, [])
 
   const openCreate = () => { setForm(empty); setModal('create') }
-  const openEdit = (m) => { setForm({ name: m.name, role: m.role, bio: m.bio || '', photo: m.photo || '', order: m.order ?? 0, visible: m.visible ?? true }); setModal(m) }
+  /*
+   * Wave 12A2 — role and bio are stored localized, so the form shows the
+   * admin their OWN source-language text rather than the raw object (which
+   * would render "[object Object]" and be saved back over real content).
+   *
+   * Sending a plain string is also the signal that the field was edited; an
+   * unchanged one is detected server-side and costs no translation quota.
+   */
+  const openEdit = (m) => { setForm({ name: m.name, role: editableText(m.role), bio: editableText(m.bio), photo: m.photo || '', order: m.order ?? 0, visible: m.visible ?? true }); setModal(m) }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -123,8 +132,8 @@ const AdminTeam = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-[#202a36] truncate">{m.name}</p>
-                  <p className="text-xs text-[#4b6741] font-medium uppercase tracking-wide mt-0.5">{m.role}</p>
-                  {m.bio && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{m.bio}</p>}
+                  <p className="text-xs text-[#4b6741] font-medium uppercase tracking-wide mt-0.5">{editableText(m.role)}</p>
+                  {editableText(m.bio) && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{editableText(m.bio)}</p>}
                   <div className="mt-3 flex items-center gap-2">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${m.visible ? 'bg-green-100 text-green-700' : 'bg-slate-700 text-white'}`}>
                       {m.visible ? (c.visible || 'Visible') : (c.hidden || 'Hidden')}
