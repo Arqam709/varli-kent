@@ -10,7 +10,7 @@ const leadRoutingSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    enum: ['Buying', 'Selling', 'Renting', 'Renovation', 'Interior Design', 'Architecture', 'General'],
+    enum: ['Buying', 'Selling', 'Renting', 'Renovation', 'Interior Design', 'Architecture', 'Construction', 'General'],
   },
   recipients: [recipientSchema],
 }, { timestamps: true })

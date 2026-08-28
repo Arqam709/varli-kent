@@ -1,28 +1,6 @@
 import mongoose from 'mongoose'
 import { localizedField } from '../utils/localizedField.js'
 
-/*
- * Wave 12A1 — dynamic content localization.
- *
- * Every prose field below is now a LOCALIZED field: routes/about.js
- * translates it once at admin save time and stores
- * { sourceLang, en, tr, ar, de, ru, ur }. The public page reads
- * value[language] with no translation request of its own.
- *
- * localizedField() is Mixed rather than the donor's strict sub-schema, and
- * that is load-bearing rather than lazy — see utils/localizedField.js for
- * why a sub-schema would destroy the plain-string values already stored in
- * this collection. Both shapes hydrate; resolveLocalized() gives them one
- * meaning. No migration is required for correctness.
- *
- * What stays a plain String is as deliberate as what changed:
- *   - `name`   a person's name is not translated
- *   - `value`  stat values are "10+", "500+" — numerals, not prose
- *   - `avatar`, `image`, `missionImage`  URLs
- *   - `imagePosition`  a machine value ('left'/'right') the layout reads
- *   - `order`  a number
- */
-
 const teamMemberSchema = new mongoose.Schema({
   name: { type: String, required: true },
   role: localizedField(),

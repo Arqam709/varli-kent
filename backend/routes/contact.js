@@ -15,7 +15,7 @@ router.post(
     body('email').isEmail().withMessage('Valid email is required'),
     body('phone').notEmpty().withMessage('Phone is required'),
     body('interestType')
-      .isIn(['Buying', 'Selling', 'Renting', 'Renovation', 'Interior Design', 'Architecture', 'General'])
+      .isIn(['Buying', 'Selling', 'Renting', 'Renovation', 'Interior Design', 'Architecture', 'Construction', 'General'])
       .withMessage('Valid interest type is required'),
     body('message').notEmpty().withMessage('Message is required'),
   ],

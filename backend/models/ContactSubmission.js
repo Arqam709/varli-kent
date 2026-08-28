@@ -6,7 +6,7 @@ const contactSubmissionSchema = new mongoose.Schema({
   phone: { type: String, required: true },
   interestType: {
     type: String,
-    enum: ['Buying', 'Selling', 'Renting', 'Renovation', 'Interior Design', 'Architecture', 'General'],
+    enum: ['Buying', 'Selling', 'Renting', 'Renovation', 'Interior Design', 'Architecture', 'Construction', 'General'],
     required: true,
   },
   message: { type: String, required: true },
