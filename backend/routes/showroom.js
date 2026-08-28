@@ -6,11 +6,6 @@ import { localizeFields, sanitizePoisonedTranslations } from '../utils/autoTrans
 
 const router = express.Router()
 
-/*
- * Wave 12A2. `caption` is the only prose on this model. `style` stays scalar
- * even though it looks like a word: the public route matches it exactly
- * against req.query.style, so translating it would break that filter.
- */
 export const LOCALIZED_SHOWROOM_FIELDS = ['caption']
 
 // GET /api/showroom/:service — public, visible images for a service

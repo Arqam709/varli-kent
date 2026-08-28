@@ -1,31 +1,30 @@
 import LeadRouting from '../models/LeadRouting.js'
 
-// ── Why this file no longer speaks SMTP ──────────────────────────────────
-// Delivery used to go out through Nodemailer to smtp.gmail.com:587. That works
-// locally and fails in production for a reason no amount of credential-fixing
-// would have solved: Render's free web services block outbound SMTP on ports
-// 25, 465 and 587. The symptom was a bare "Connection timeout" in the logs,
-// with the password-reset route behaving perfectly and no email ever arriving.
-//
-// Resend's HTTPS API is reached over 443, which is not blocked, so the fix is
-// to change the TRANSPORT and nothing else. Every piece of password-reset
-// logic — token generation, hashing, expiry, the generic response — is
-// untouched, and both HTML templates below are byte-for-byte what they were.
-//
-// No SDK: Node 18+ ships a global fetch, and one POST to one endpoint does not
-// justify a dependency. That also keeps the failure modes visible in this file
-// rather than inside someone else's client.
-
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
-/**
- * Pulls a short, safe description out of a Resend error response.
- *
- * Deliberately reads only `name` and `message` rather than dumping the body.
- * The body is provider-controlled and could echo parts of the request back; the
- * request contains the reset URL, which IS the credential. Truncated because a
- * log line is for diagnosis, not for archiving provider prose.
- */
+export const escapeHtml = (value) =>
+  String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char]))
+
+/** Maps every C0 control character (and DEL) to a space, by code point. */
+const stripControlChars = (value) =>
+  Array.from(String(value ?? ''), (char) => {
+    const code = char.charCodeAt(0)
+    return code < 0x20 || code === 0x7f ? ' ' : char
+  }).join('')
+
+
+export const safeHeaderText = (value) =>
+  stripControlChars(value)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200)
+
 const safeErrorDetail = async (response) => {
   try {
     const body = await response.json()
@@ -111,7 +110,33 @@ const sendEmailViaResend = async ({ to, subject, html }) => {
   return true
 }
 
-const leadEmailHtml = (submission) => `
+/**
+ * Builds the lead-notification email body.
+ *
+ * ── Every interpolation below is escaped ─────────────────────────────────
+ * `submission` is a ContactSubmission, and both paths that produce one carry
+ * visitor-supplied text: POST /api/contact (name/email/phone/message straight
+ * off the public form) and services/chatLeadFlow.js's submitLead(), whose
+ * `message` embeds the visitor's own chat words verbatim. express-validator
+ * checks that those fields are PRESENT and that `email` parses; neither it nor
+ * the Mongoose schema constrains their CONTENT, so `<img src=x onerror=...>`
+ * in any of them reached this template intact.
+ *
+ * `interestType` is the one field a schema enum genuinely pins down, and it is
+ * escaped anyway: "every dynamic value in this template is escaped" is an
+ * invariant a reader can check at a glance, where "all but one are" is a
+ * question. The cost is nothing; a value with no special characters escapes to
+ * itself.
+ *
+ * `createdAt` is likewise escaped after formatting even though
+ * `new Date(...).toLocaleString()` cannot emit markup — an unparseable value
+ * yields the literal "Invalid Date" — so the invariant holds without an
+ * exception to explain.
+ *
+ * Exported for tests only; nothing else imports it. Making a pure template
+ * builder addressable changes no runtime behaviour.
+ */
+export const leadEmailHtml = (submission) => `
 <!DOCTYPE html>
 <html>
 <head>
@@ -138,38 +163,59 @@ const leadEmailHtml = (submission) => `
 <div class="wrap">
   <div class="header">
     <div class="logo">VARLI<span>KENT</span></div>
-    <div class="badge">New Lead · ${submission.interestType}</div>
+    <div class="badge">New Lead · ${escapeHtml(submission.interestType)}</div>
   </div>
   <div class="body">
     <div class="section-label">From</div>
-    <div class="value"><strong>${submission.name}</strong></div>
+    <div class="value"><strong>${escapeHtml(submission.name)}</strong></div>
 
     <div class="section-label">Contact</div>
     <div class="value">
-      📧 <a href="mailto:${submission.email}" style="color:#4b6741;">${submission.email}</a><br/>
-      📞 <a href="tel:${submission.phone}" style="color:#4b6741;">${submission.phone}</a>
+      📧 <a href="mailto:${escapeHtml(submission.email)}" style="color:#4b6741;">${escapeHtml(submission.email)}</a><br/>
+      📞 <a href="tel:${escapeHtml(submission.phone)}" style="color:#4b6741;">${escapeHtml(submission.phone)}</a>
     </div>
 
     <div class="section-label">Interested In</div>
-    <div class="value">${submission.interestType}</div>
+    <div class="value">${escapeHtml(submission.interestType)}</div>
 
     <div class="section-label">Message</div>
-    <div class="message-box">${submission.message}</div>
+    <div class="message-box">${escapeHtml(submission.message)}</div>
 
     <div class="actions">
-      <a class="btn btn-primary" href="mailto:${submission.email}?subject=Re: Your Varlikent Inquiry">Reply by Email</a>
-      <a class="btn btn-secondary" href="tel:${submission.phone}">Call ${submission.phone}</a>
+      <a class="btn btn-primary" href="mailto:${escapeHtml(submission.email)}?subject=Re: Your Varlikent Inquiry">Reply by Email</a>
+      <a class="btn btn-secondary" href="tel:${escapeHtml(submission.phone)}">Call ${escapeHtml(submission.phone)}</a>
     </div>
   </div>
   <div class="footer">
-    Received ${new Date(submission.createdAt || Date.now()).toLocaleString()} · Varlikent Admin System
+    Received ${escapeHtml(new Date(submission.createdAt || Date.now()).toLocaleString())} · Varlikent Admin System
   </div>
 </div>
 </body>
 </html>
 `
 
-const passwordResetEmailHtml = (resetUrl) => `
+/**
+ * Builds the password-reset email body.
+ *
+ * `resetUrl` is assembled in routes/auth.js as
+ * `${FRONTEND_URL}/reset-password?token=${rawToken}`, where rawToken is 32
+ * random bytes rendered as hex — so in practice it contains no character this
+ * escapes. It is escaped regardless, because the safety of the one
+ * interpolation in this template should not rest on a claim about a value
+ * built in another file: FRONTEND_URL is operator-supplied, and the day the
+ * link grows a second query parameter its `&` must become `&amp;` to be valid
+ * HTML anyway.
+ *
+ * ── The link keeps working ───────────────────────────────────────────────
+ * HTML escaping inside a quoted href is an ENCODING, not a rewrite. A client
+ * decodes the entity before following the link, so `?token=abc&x=1` written as
+ * `?token=abc&amp;x=1` is fetched as `?token=abc&x=1`. The URL the user lands
+ * on is unchanged, which is what the reset flow depends on.
+ *
+ * Exported for tests only. The token itself never appears in a log here or in
+ * sendEmailViaResend(), and that stays true.
+ */
+export const passwordResetEmailHtml = (resetUrl) => `
 <!DOCTYPE html>
 <html>
 <head>
@@ -196,7 +242,7 @@ const passwordResetEmailHtml = (resetUrl) => `
   <div class="body">
     <h2>Reset Your Password</h2>
     <p>We received a request to reset the password for your Varlikent account. Click the button below to choose a new password.</p>
-    <a href="${resetUrl}" class="btn">Reset Password</a>
+    <a href="${escapeHtml(resetUrl)}" class="btn">Reset Password</a>
     <p class="notice">This link expires in <strong>1 hour</strong>. If you did not request a password reset, you can safely ignore this email — your password will not be changed.</p>
   </div>
   <div class="footer">
@@ -230,7 +276,12 @@ export const sendContactNotification = async (submission) => {
 
     return await sendEmailViaResend({
       to: toList,
-      subject: `New Lead: ${submission.interestType} — ${submission.name}`,
+      // A subject is a header, not HTML — see safeHeaderText(). `name` is
+      // visitor-supplied and is the reason this is not a plain interpolation;
+      // `interestType` gets the same treatment so the rule reads uniformly.
+      // Deliberately NOT escapeHtml(): a lead from "Tom & Jerry" must arrive
+      // reading "Tom & Jerry", not "Tom &amp; Jerry".
+      subject: `New Lead: ${safeHeaderText(submission.interestType)} — ${safeHeaderText(submission.name)}`,
       html: leadEmailHtml(submission),
     })
   } catch (err) {
