@@ -7,7 +7,17 @@ const DEFAULT_LANGUAGE = 'en'
 export const isPoisonedTranslation = (value) =>
   typeof value === 'string' && POISONED_RE.test(value)
 
-const isUsable = (value) =>
+/**
+ * Present, non-blank, and not provider garbage.
+ *
+ * Exported so callers that need to ask about ONE language — rather than run
+ * the whole fallback chain below — use this same definition instead of
+ * writing a second one. src/lib/pageContentResolve.js is the case that needs
+ * it: the CMS has to know whether the requested language specifically is
+ * usable, because if it is not, the caller's language-aware fallback should
+ * win over this file's English step.
+ */
+export const isUsable = (value) =>
   typeof value === 'string' && value.trim() !== '' && !POISONED_RE.test(value)
 
 export const localizedText = (value, language = DEFAULT_LANGUAGE, fallback = '') => {

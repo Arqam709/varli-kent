@@ -33,6 +33,7 @@ import AdminSiteSettings from './pages/AdminSiteSettings'
 import AdminLeadRouting from './pages/AdminLeadRouting'
 import AdminActivity from './pages/AdminActivity'
 import AdminStudioPalette from './pages/AdminStudioPalette'
+import AdminPageContent from './pages/AdminPageContent'
 import AgentDashboard from './pages/AgentDashboard'
 import AgentProperties from './pages/AgentProperties'
 import AgentMessages from './pages/AgentMessages'
@@ -87,6 +88,7 @@ const App = ({ ready }) => (
           <Route path="/admin/lead-routing" element={<ProtectedRoute requiredRole="owner"><AdminLeadRouting /></ProtectedRoute>} />
           <Route path="/admin/reviews" element={<ProtectedRoute requiredRole="admin"><AdminReviews /></ProtectedRoute>} />
           <Route path="/admin/about" element={<ProtectedRoute requiredRole="admin"><AdminAbout /></ProtectedRoute>} />
+          <Route path="/admin/page-content" element={<ProtectedRoute requiredRole="admin"><AdminPageContent /></ProtectedRoute>} />
           <Route path="/admin/projects" element={<ProtectedRoute requiredRole="admin"><AdminProjects /></ProtectedRoute>} />
           <Route path="/admin/team" element={<ProtectedRoute requiredRole="admin"><AdminTeam /></ProtectedRoute>} />
           <Route path="/admin/partners" element={<ProtectedRoute requiredRole="admin"><AdminPartners /></ProtectedRoute>} />

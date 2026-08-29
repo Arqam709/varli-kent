@@ -25,6 +25,7 @@ const ALL_PERMISSIONS = [
   { key: 'manage_projects', group: 'Content',          label: 'Manage Projects' },
   { key: 'manage_showroom', group: 'Content',          label: 'Manage Showroom' },
   { key: 'manage_about',    group: 'Content',          label: 'Manage About Page' },
+  { key: 'manage_page_content', group: 'Content',      label: 'Manage Page Content (Home & service pages)' },
   { key: 'manage_partners', group: 'Content',          label: 'Partners' },
   { key: 'manage_studio_colors', group: 'Content',     label: 'Studio Color Palettes (Renovation & Interior Design)' },
   // Users & Security

@@ -20,6 +20,7 @@ import showroomRoutes from './routes/showroom.js'
 import settingsRoutes from './routes/settings.js'
 import leadRoutingRoutes from './routes/leadRouting.js'
 import translateRoutes from './routes/translate.js'
+import pageContentRoutes from './routes/pageContent.js'
 import chatRoutes from './routes/chat.js'
 import chatConversationRoutes from './routes/chatConversations.js'
 import adminChatRoutes from './routes/adminChats.js'
@@ -61,6 +62,11 @@ app.use('/api/showroom', showroomRoutes)
 app.use('/api/settings', settingsRoutes)
 app.use('/api/lead-routing', leadRoutingRoutes)
 app.use('/api/translate', translateRoutes)
+// Registry-driven CMS for the static copy on the seven marketing pages. GET is
+// public; PUT is owner/admin + manage_page_content. Mounting it under this
+// exact path is also what gives it Activity Log coverage, since
+// middleware/activityLogger.js keys `resource` off the first path segment.
+app.use('/api/page-content', pageContentRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/chat/conversations', chatConversationRoutes)
 app.use('/api/admin/chats', adminChatRoutes)
