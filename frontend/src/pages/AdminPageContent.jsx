@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
 import { PAGE_CONTENT_REGISTRY, PAGE_CONTENT_KEYS, allFieldDefs, defaultValues } from '../lib/pageContentRegistry'
 import { editableText } from '../lib/localizedText'
+import { buildSavePayload, isEmptyPayload } from '../lib/pageContentResolve'
 import { useLanguage } from '../contexts/LanguageContext'
 
 const GOLD = '#C9A35A'
@@ -161,8 +162,33 @@ const AdminPageContent = () => {
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [dirty, setDirty] = useState(false)
   const [heroOpen, setHeroOpen] = useState(true)
+
+  /*
+   * What the server last told us this page contains. Every save diffs against
+   * it, so an untouched field is never sent and never re-translated.
+   *
+   * State rather than a ref: the save bar's visibility is derived from the
+   * diff, so replacing the baseline after a successful save has to trigger a
+   * re-render — otherwise the bar would keep offering to save changes the
+   * server already has.
+   */
+  const [baseline, setBaseline] = useState({ values: {}, sections: {} })
+
+  /*
+   * Generation counter for in-flight loads.
+   *
+   * Switching pages starts a new GET without cancelling the old one, so a slow
+   * /home response can land after a fast /architecture one and repopulate the
+   * form — and, worse, the BASELINE — with another page's content. The next
+   * save would then diff Architecture's values against Home's baseline and
+   * submit nearly every field.
+   *
+   * Each load claims a ticket; only the newest ticket is allowed to write
+   * state. Cheaper than AbortController here, and it needs nothing from the
+   * axios instance in lib/api.js.
+   */
+  const loadTicket = useRef(0)
 
   /*
    * Stored text is a localized object; the form needs one editable string.
@@ -174,13 +200,16 @@ const AdminPageContent = () => {
    * changes the record's source language.
    */
   const loadPage = useCallback(async (key) => {
+    const ticket = ++loadTicket.current
     setLoading(true)
     setLoadFailed(false)
-    setDirty(false)
 
     const fallback = defaultValues(key)
     setValues(fallback)
     setSections({})
+    // Switching pages resets the baseline too, so one page's edits can never
+    // be diffed against another's.
+    setBaseline({ values: fallback, sections: {} })
 
     try {
       const res = await api.get(`/page-content/${key}`)
@@ -197,44 +226,56 @@ const AdminPageContent = () => {
         if (typeof value === 'string' && value !== '') merged[def.key] = value
       }
 
+      // A newer page has been selected since this request went out.
+      if (ticket !== loadTicket.current) return
+
       setValues(merged)
       setSections(res.data.sections || {})
+      setBaseline({ values: merged, sections: res.data.sections || {} })
     } catch {
       // Everything below still shows the real current site copy from the
       // registry, so the editor stays usable and honest about why.
-      setLoadFailed(true)
+      if (ticket === loadTicket.current) setLoadFailed(true)
     } finally {
-      setLoading(false)
+      if (ticket === loadTicket.current) setLoading(false)
     }
   }, [])
 
   useEffect(() => { loadPage(pageKey) }, [pageKey, loadPage])
 
-  const setField = (key, value) => {
-    setValues((prev) => ({ ...prev, [key]: value }))
-    setDirty(true)
-  }
+  const setField = (key, value) => setValues((prev) => ({ ...prev, [key]: value }))
 
-  const toggleSection = (key) => {
-    setSections((prev) => ({ ...prev, [key]: prev[key] === false }))
-    setDirty(true)
-  }
+  const toggleSection = (key) => setSections((prev) => ({ ...prev, [key]: prev[key] === false }))
 
   const isVisible = (key) => sections[key] !== false
+
+  /*
+   * Derived, not tracked. Editing a box and undoing it leaves the value equal
+   * to the baseline, so the save bar disappears again instead of offering to
+   * save nothing.
+   */
+  const payload = useMemo(
+    () => buildSavePayload({
+      fieldDefs: allFieldDefs(pageKey),
+      baselineValues: baseline.values,
+      values,
+      baselineSections: baseline.sections,
+      sections,
+    }),
+    [pageKey, values, sections, baseline]
+  )
+
+  const dirty = !isEmptyPayload(payload)
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      const fields = {}
-      for (const def of allFieldDefs(pageKey)) {
-        fields[def.key] = def.type === 'image'
-          ? { type: 'image', url: values[def.key] ?? '' }
-          : { type: 'text', value: values[def.key] ?? '' }
-      }
-
-      await api.put(`/page-content/${pageKey}`, { fields, sections })
+      await api.put(`/page-content/${pageKey}`, payload)
       toast.success(pc.savedSuccess || 'Saved — translated into all six languages automatically')
-      setDirty(false)
+      // The save succeeded, so what is on screen is now what the server holds.
+      // A failed save deliberately leaves the baseline alone, so the same delta
+      // is still pending and the admin can simply press Save again.
+      setBaseline({ values, sections })
     } catch (err) {
       toast.error(err?.response?.data?.message || pc.saveFailed || 'Failed to save — your changes are still here but have not reached the server.')
     } finally {

@@ -5,6 +5,8 @@ import ConstructionClipViewer from '../components/three/ConstructionClipViewer'
 import ShowroomCarousel from '../components/ShowroomCarousel'
 import api from '../lib/api'
 import { useLanguage } from '../contexts/LanguageContext'
+import usePageContent from '../lib/usePageContent'
+import { sectionBackground } from '../lib/pageContentResolve'
 import { useSiteSettings } from '../contexts/SiteSettingsContext'
 import { C } from '../contexts/ThemeContext'
 
@@ -52,9 +54,32 @@ const Glow = () => (
   <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 90% 55% at 50% 0%, rgba(var(--vk-green-rgb), 0.22) 0%, transparent 65%)' }} />
 )
 
+const SECTION_ORDER = ['viewer', 'services', 'process', 'seismic', 'showroom', 'cta']
+const DEFAULT_BANDS = {
+  viewer: 'light',
+  services: 'light',
+  process: 'dark',
+  seismic: 'light',
+  showroom: 'dark',
+  cta: 'light',
+}
+
+// Exact colours rendered today; used verbatim while a section keeps its band.
+const SECTION_BG = {
+  viewer: C.softWhite,
+  services: C.softWhite,
+  process: C.charcoal,
+  seismic: C.softWhite,
+  showroom: C.charcoal,
+  cta: C.softWhite,
+}
+const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
+
 export default function ConstructionPage() {
   const { t } = useLanguage()
   const p = t.constructionPage
+  const { get: cms, isSectionVisible, bandFor } = usePageContent('construction', SECTION_ORDER, DEFAULT_BANDS)
+  const bg = (key) => sectionBackground(key, bandFor(key), DEFAULT_BANDS, SECTION_BG, CANONICAL_BG)
   const { settings } = useSiteSettings()
   const [project, setProject] = useState(null)
   const [images, setImages] = useState([])
@@ -90,20 +115,20 @@ export default function ConstructionPage() {
         <motion.div initial="hidden" animate="visible" variants={stagger}
           className="relative z-10 flex flex-col items-center gap-6 max-w-4xl">
           <motion.p variants={fadeUp} style={{ letterSpacing: '0.5em', color: C.gold, fontSize: '0.75rem', textTransform: 'uppercase' }}>
-            {p.label}
+            {cms('heroLabel', p.label)}
           </motion.p>
           <motion.h1 variants={fadeUp}
             style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(3rem, 10vw, 6rem)', lineHeight: 1.05, color: '#ffffff' }}>
-            {p.h1}
+            {cms('heroHeading', p.h1)}
           </motion.h1>
-          <motion.p variants={fadeUp} className="max-w-lg text-lg leading-relaxed" style={{ color: 'rgba(246,243,237,0.6)' }}>{p.subtitle}</motion.p>
+          <motion.p variants={fadeUp} className="max-w-lg text-lg leading-relaxed" style={{ color: 'rgba(246,243,237,0.6)' }}>{cms('heroSubtitle', p.subtitle)}</motion.p>
           <motion.div variants={fadeUp} className="flex flex-wrap gap-4 justify-center mt-4">
             <Link to="/contact" style={{ backgroundColor: C.gold, color: '#000000' }}
               className="px-8 py-3 font-semibold tracking-wider uppercase text-sm transition-opacity hover:opacity-90">
-              {p.ctaPrimary}
+              {cms('heroCtaPrimary', p.ctaPrimary)}
             </Link>
             <a href="#progress" className="px-8 py-3 border border-white/20 text-white tracking-wider uppercase text-sm hover:border-white/50 transition-colors">
-              {p.ctaSecondary}
+              {cms('heroCtaSecondary', p.ctaSecondary)}
             </a>
           </motion.div>
         </motion.div>
@@ -117,17 +142,17 @@ export default function ConstructionPage() {
         </div>
       </section>
 
-      {/* Gold Divider */}
-      <GoldDivider />
+      {isSectionVisible('viewer') && <GoldDivider />}
 
       {/* 2. Construction Viewer + Progress – LIGHT */}
-      <div style={{ backgroundColor: C.softWhite, position: 'relative', overflow: 'hidden' }}>
+      {isSectionVisible('viewer') && (
+      <div style={{ backgroundColor: bg('viewer'), position: 'relative', overflow: 'hidden' }}>
         <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} transition={{ duration: 0.8 }} viewport={{ once: true }}
           className="relative z-10">
           <div className="text-center px-6 py-14">
-            <p style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3">{p.viewerLabel}</p>
-            <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: C.charcoal }}>{p.viewerHeading}</h2>
-            <p className="max-w-xl mx-auto mt-4 leading-relaxed" style={{ color: 'rgba(var(--vk-dark-rgb), 0.55)' }}>{p.viewerDesc}</p>
+            <p style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3">{cms('viewerLabel', p.viewerLabel)}</p>
+            <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: C.charcoal }}>{cms('viewerHeading', p.viewerHeading)}</h2>
+            <p className="max-w-xl mx-auto mt-4 leading-relaxed" style={{ color: 'rgba(var(--vk-dark-rgb), 0.55)' }}>{cms('viewerDesc', p.viewerDesc)}</p>
           </div>
           <ConstructionClipViewer />
         </motion.div>
@@ -137,13 +162,13 @@ export default function ConstructionPage() {
           <div className="max-w-2xl mx-auto">
             <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
               style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3">
-              {p.progressLabel}
+              {cms('progressLabel', p.progressLabel)}
             </motion.p>
             <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
               style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.3rem, 3vw, 1.8rem)', color: C.charcoal, marginBottom: '0.5rem' }}>
               {projectName}
             </motion.h2>
-            <p className="text-sm mb-12 tracking-wide" style={{ color: 'rgba(var(--vk-dark-rgb), 0.45)' }}>{p.completionLabel} {projectCompletion}</p>
+            <p className="text-sm mb-12 tracking-wide" style={{ color: 'rgba(var(--vk-dark-rgb), 0.45)' }}>{cms('completionLabel', p.completionLabel)} {projectCompletion}</p>
             <div className="space-y-6">
               {activePhases.map((phase, i) => (
                 <motion.div key={phase.label} initial={{ opacity: 0, x: -16 }} whileInView={{ opacity: 1, x: 0 }}
@@ -168,19 +193,21 @@ export default function ConstructionPage() {
         </section>
       </div>
 
-      {/* Gold Divider */}
-      <GoldDivider />
+      )}
+
+      {isSectionVisible('services') && <GoldDivider />}
 
       {/* 3. Services – WHITE */}
-      <section style={{ backgroundColor: C.softWhite, color: C.charcoal, position: 'relative' }} className="py-16 md:py-28 px-6">
+      {isSectionVisible('services') && (
+      <section style={{ backgroundColor: bg('services'), color: C.charcoal, position: 'relative' }} className="py-16 md:py-28 px-6">
         <div className="max-w-6xl mx-auto">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3">
-            {p.servicesLabel}
+            {cms('servicesLabel', p.servicesLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
             style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.5rem)', color: C.charcoal, marginBottom: '3rem' }}>
-            {p.servicesHeading}
+            {cms('servicesHeading', p.servicesHeading)}
           </motion.h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {services.map((svc, i) => (
@@ -197,20 +224,22 @@ export default function ConstructionPage() {
         </div>
       </section>
 
-      {/* Gold Divider */}
-      <GoldDivider />
+      )}
+
+      {isSectionVisible('process') && <GoldDivider />}
 
       {/* 4. Process Timeline – DARK */}
-      <section style={{ backgroundColor: C.charcoal, position: 'relative', overflow: 'hidden' }} className="py-16 md:py-28 px-6">
+      {isSectionVisible('process') && (
+      <section style={{ backgroundColor: bg('process'), position: 'relative', overflow: 'hidden' }} className="py-16 md:py-28 px-6">
         <Glow />
         <div className="max-w-5xl mx-auto relative z-10">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
-            {p.processLabel}
+            {cms('processLabel', p.processLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
             style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: '#ffffff', marginBottom: '4rem' }} className="text-center">
-            {p.processHeading}
+            {cms('processHeading', p.processHeading)}
           </motion.h2>
           <div className="relative flex justify-between items-start">
             <div className="absolute top-4 left-0 right-0 h-px" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }} />
@@ -227,23 +256,25 @@ export default function ConstructionPage() {
         </div>
       </section>
 
-      {/* Gold Divider */}
-      <GoldDivider />
+      )}
+
+      {isSectionVisible('seismic') && <GoldDivider />}
 
       {/* 5. Seismic Safety – WHITE */}
-      <section style={{ backgroundColor: C.softWhite, color: C.charcoal, position: 'relative' }} className="py-16 md:py-28 px-6">
+      {isSectionVisible('seismic') && (
+      <section style={{ backgroundColor: bg('seismic'), color: C.charcoal, position: 'relative' }} className="py-16 md:py-28 px-6">
         <div className="max-w-6xl mx-auto">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3">
-            {p.seismicLabel}
+            {cms('seismicLabel', p.seismicLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
             style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.5rem)', color: C.charcoal, marginBottom: '1.5rem' }}>
-            {p.seismicHeading}
+            {cms('seismicHeading', p.seismicHeading)}
           </motion.h2>
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: 'rgba(var(--vk-dark-rgb), 0.6)' }} className="max-w-2xl leading-relaxed mb-12">
-            {p.seismicBody}
+            {cms('seismicBody', p.seismicBody)}
           </motion.p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {seismicItems.map((item, i) => (
@@ -258,42 +289,44 @@ export default function ConstructionPage() {
         </div>
       </section>
 
-      {/* Gold Divider */}
-      <GoldDivider />
+      )}
+
+      {isSectionVisible('showroom') && <GoldDivider />}
 
       {/* 6. Showroom – DARK */}
-      {showroomEnabled && (
-        <section style={{ backgroundColor: C.charcoal, position: 'relative', overflow: 'hidden' }} className="py-20 px-6">
+      {isSectionVisible('showroom') && showroomEnabled && (
+        <section style={{ backgroundColor: bg('showroom'), position: 'relative', overflow: 'hidden' }} className="py-20 px-6">
           <Glow />
           <div className="max-w-6xl mx-auto relative z-10">
             <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
               style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
-              {p.showroomLabel || 'Our Work'}
+              {cms('showroomLabel', p.showroomLabel || 'Our Work')}
             </motion.p>
             <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
               style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: '#ffffff', marginBottom: '2.5rem', textAlign: 'center' }}>
-              {p.showroomHeading || 'Construction Showcase'}
+              {cms('showroomHeading', p.showroomHeading || 'Construction Showcase')}
             </motion.h2>
             <ShowroomCarousel images={images} loading={loadingImages} bgColor='#1E1E1C' />
           </div>
         </section>
       )}
 
-      {/* Gold Divider */}
-      <GoldDivider />
+      {isSectionVisible('cta') && <GoldDivider />}
 
       {/* 7. CTA – LIGHT */}
-      <section style={{ backgroundColor: C.softWhite, position: 'relative', overflow: 'hidden' }} className="py-14 md:py-24 text-center px-6">
+      {isSectionVisible('cta') && (
+      <section style={{ backgroundColor: bg('cta'), position: 'relative', overflow: 'hidden' }} className="py-14 md:py-24 text-center px-6">
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
           className="relative z-10">
-          <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: C.charcoal }} className="mb-4">{p.ctaHeading}</h2>
-          <p style={{ color: 'rgba(var(--vk-dark-rgb), 0.55)' }} className="mb-8 max-w-md mx-auto">{p.ctaBody}</p>
+          <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: C.charcoal }} className="mb-4">{cms('ctaHeading', p.ctaHeading)}</h2>
+          <p style={{ color: 'rgba(var(--vk-dark-rgb), 0.55)' }} className="mb-8 max-w-md mx-auto">{cms('ctaBody', p.ctaBody)}</p>
           <Link to="/contact" style={{ backgroundColor: C.charcoal, color: '#ffffff' }}
             className="inline-block px-10 py-4 text-sm font-semibold uppercase tracking-wider hover:opacity-80 transition-opacity">
-            {p.ctaBtn}
+            {cms('ctaBtn', p.ctaBtn)}
           </Link>
         </motion.div>
       </section>
+      )}
 
     </div>
   )

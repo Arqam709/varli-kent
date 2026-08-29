@@ -8,23 +8,12 @@ export const PAGE_CONTENT_REGISTRY = {
         { key: 'heroHeading1', label: 'Heading — line 1', type: 'text', default: 'We Design, Build' },
         { key: 'heroHeading2', label: 'Heading — line 2', type: 'text', default: '& Deliver Exceptional' },
         { key: 'heroHeading3', label: 'Heading — line 3', type: 'text', default: 'Spaces in Istanbul' },
-        { key: 'heroSubtitle', label: 'Subtitle', type: 'text', default: 'Architecture · Construction · Renovation · Interior Design · Real Estate — all under one roof.' },
         { key: 'heroCtaPrimary', label: 'Primary button text', type: 'text', default: 'Explore Our Services' },
         { key: 'heroCtaSecondary', label: 'Secondary button text', type: 'text', default: 'View Properties' },
         { key: 'heroImage', label: 'Background image', type: 'image', default: '/images/hero-villa.jpg.png' },
       ],
     },
     sections: [
-      {
-        key: 'featured', defaultTitle: 'Featured Properties',
-        fields: [
-          { key: 'featuredLabel', label: 'Label', type: 'text', default: 'Handpicked' },
-          { key: 'featuredHeading', label: 'Heading', type: 'text', default: 'Featured Properties' },
-          { key: 'featuredSubtitle', label: 'Subtitle', type: 'text', default: 'Exclusive homes curated for discerning buyers and renters across Istanbul.' },
-          { key: 'featuredViewAll', label: 'Button text', type: 'text', default: 'View All Properties' },
-          { key: 'featuredEmpty', label: 'Empty-state text', type: 'text', default: 'No featured properties yet.' },
-        ],
-      },
       {
         key: 'services', defaultTitle: 'Five Services. One Company.',
         fields: [
@@ -71,7 +60,15 @@ export const PAGE_CONTENT_REGISTRY = {
         fields: [
           { key: 'processLabel', label: 'Label', type: 'text', default: 'How We Work' },
           { key: 'processHeading', label: 'Heading', type: 'text', default: 'From Vision to Handover' },
-          { key: 'processSubheading', label: 'Subheading', type: 'text', default: 'A clear, proven process that takes your project from concept to completion.' },
+        ],
+      },
+      {
+        key: 'featured', defaultTitle: 'Featured Properties',
+        fields: [
+          { key: 'featuredLabel', label: 'Label', type: 'text', default: 'Handpicked' },
+          { key: 'featuredHeading', label: 'Heading', type: 'text', default: 'Featured Properties' },
+          { key: 'featuredSubtitle', label: 'Subtitle', type: 'text', default: 'Exclusive homes curated for discerning buyers and renters across Istanbul.' },
+          { key: 'featuredViewAll', label: 'Button text', type: 'text', default: 'View All Properties' },
         ],
       },
       {
@@ -86,13 +83,9 @@ export const PAGE_CONTENT_REGISTRY = {
       {
         key: 'stats', defaultTitle: 'Statistics',
         fields: [
-          { key: 'statsValue1', label: 'Stat 1 — number', type: 'text', default: '500+' },
           { key: 'statsLabel1', label: 'Stat 1 — label', type: 'text', default: 'Properties Listed' },
-          { key: 'statsValue2', label: 'Stat 2 — number', type: 'text', default: '10+' },
           { key: 'statsLabel2', label: 'Stat 2 — label', type: 'text', default: 'Years Experience' },
-          { key: 'statsValue3', label: 'Stat 3 — number', type: 'text', default: '120+' },
           { key: 'statsLabel3', label: 'Stat 3 — label', type: 'text', default: 'Happy Clients' },
-          { key: 'statsValue4', label: 'Stat 4 — number', type: 'text', default: '40+' },
           { key: 'statsLabel4', label: 'Stat 4 — label', type: 'text', default: 'Districts Covered' },
         ],
       },
@@ -101,7 +94,6 @@ export const PAGE_CONTENT_REGISTRY = {
         fields: [
           { key: 'testimonialsLabel', label: 'Label', type: 'text', default: 'Client Stories' },
           { key: 'testimonialsHeading', label: 'Heading', type: 'text', default: 'What Our Clients Say' },
-          { key: 'testimonialsDisclaimer', label: 'Disclaimer text', type: 'text', default: 'Website testimonials from verified clients' },
         ],
       },
       {
@@ -135,20 +127,19 @@ export const PAGE_CONTENT_REGISTRY = {
     },
     sections: [
       {
-        key: 'model', defaultTitle: 'Architectural Model Showcase',
-        fields: [
-          { key: 'modelLabel', label: 'Label', type: 'text', default: 'Concept to Form' },
-          { key: 'modelHeading', label: 'Heading', type: 'text', default: 'Architectural Model Showcase' },
-          { key: 'modelDesc', label: 'Description', type: 'text', default: 'Explore a full-scale design concept, rendered in true detail — rotate, zoom, and study every elevation.' },
-          { key: 'modelBtn', label: 'Button text', type: 'text', default: 'View Architectural Model' },
-        ],
-      },
-      {
         key: 'showroom', defaultTitle: 'Architecture Showcase',
         fields: [
           { key: 'showroomLabel', label: 'Label', type: 'text', default: 'Our Work' },
           { key: 'showroomHeading', label: 'Heading', type: 'text', default: 'Architecture Showcase' },
         ],
+      },
+      {
+        // Toggle-only. The four figures are hardcoded in ArchitecturePage's JSX,
+        // not in translations, so there is nothing language-aware to override —
+        // registering eight text fields would invent content rather than
+        // describe it. The section exists here so the real rendered order (and
+        // therefore bandFor's alternation) is correct, and so it can be hidden.
+        key: 'stats', defaultTitle: 'Statistics', fields: [],
       },
       {
         key: 'services', defaultTitle: 'Services',
@@ -210,13 +201,6 @@ export const PAGE_CONTENT_REGISTRY = {
         ],
       },
       {
-        key: 'showroom', defaultTitle: 'Construction Showcase',
-        fields: [
-          { key: 'showroomLabel', label: 'Label', type: 'text', default: 'Our Work' },
-          { key: 'showroomHeading', label: 'Heading', type: 'text', default: 'Construction Showcase' },
-        ],
-      },
-      {
         key: 'services', defaultTitle: 'Construction Services',
         fields: [
           { key: 'servicesLabel', label: 'Label', type: 'text', default: 'What We Build' },
@@ -236,6 +220,13 @@ export const PAGE_CONTENT_REGISTRY = {
           { key: 'seismicLabel', label: 'Label', type: 'text', default: 'Built to Withstand' },
           { key: 'seismicHeading', label: 'Heading', type: 'text', default: 'Earthquake-Resistant Engineering' },
           { key: 'seismicBody', label: 'Body', type: 'text', default: 'Istanbul sits in an active seismic zone. Every structure we deliver is engineered to current Turkish seismic design codes, with safety margins verified at each stage of construction — not assumed.' },
+        ],
+      },
+      {
+        key: 'showroom', defaultTitle: 'Construction Showcase',
+        fields: [
+          { key: 'showroomLabel', label: 'Label', type: 'text', default: 'Our Work' },
+          { key: 'showroomHeading', label: 'Heading', type: 'text', default: 'Construction Showcase' },
         ],
       },
       {
@@ -294,13 +285,6 @@ export const PAGE_CONTENT_REGISTRY = {
         ],
       },
       {
-        key: 'showroom', defaultTitle: 'Renovation Showcase',
-        fields: [
-          { key: 'showroomLabel', label: 'Label', type: 'text', default: 'Our Work' },
-          { key: 'showroomHeading', label: 'Heading', type: 'text', default: 'Renovation Showcase' },
-        ],
-      },
-      {
         key: 'services', defaultTitle: 'Renovation Services',
         fields: [
           { key: 'servicesLabel', label: 'Label', type: 'text', default: 'What We Do' },
@@ -313,6 +297,13 @@ export const PAGE_CONTENT_REGISTRY = {
           { key: 'service3Desc', label: 'Service 3 — description', type: 'text', default: 'Full rewire, smart home integration and bespoke lighting design.' },
           { key: 'service4Title', label: 'Service 4 — title', type: 'text', default: 'Bathroom & Kitchen' },
           { key: 'service4Desc', label: 'Service 4 — description', type: 'text', default: 'Marble wet rooms, bespoke cabinetry and premium appliance fit-out.' },
+        ],
+      },
+      {
+        key: 'showroom', defaultTitle: 'Renovation Showcase',
+        fields: [
+          { key: 'showroomLabel', label: 'Label', type: 'text', default: 'Our Work' },
+          { key: 'showroomHeading', label: 'Heading', type: 'text', default: 'Renovation Showcase' },
         ],
       },
       {
@@ -338,15 +329,6 @@ export const PAGE_CONTENT_REGISTRY = {
       ],
     },
     sections: [
-      {
-        key: 'model', defaultTitle: 'Interior Showcase (3D model)',
-        fields: [
-          { key: 'modelLabel', label: 'Label', type: 'text', default: 'Signature Living Room' },
-          { key: 'modelHeading', label: 'Heading', type: 'text', default: 'Interior Showcase' },
-          { key: 'modelDesc', label: 'Description', type: 'text', default: 'A fully realised interior, rendered in true detail — rotate, zoom, and study every finish.' },
-          { key: 'modelBtn', label: 'Button text', type: 'text', default: 'View Interior Model' },
-        ],
-      },
       {
         key: 'styles', defaultTitle: 'Design Styles',
         fields: [
@@ -424,7 +406,6 @@ export const PAGE_CONTENT_REGISTRY = {
         { key: 'heroHeading', label: 'Heading', type: 'text', default: 'Contact VarliKent' },
         { key: 'heroSubtitle', label: 'Subtitle', type: 'text', default: 'Our team of luxury real estate experts is ready to assist you — whether you are buying, selling, or investing in Istanbul.' },
         { key: 'officeLocationLabel', label: 'Office location label', type: 'text', default: 'Office Location' },
-        { key: 'formHeading', label: 'Form heading', type: 'text', default: 'Send a Message' },
         { key: 'interestLabel', label: '"I am interested in" label', type: 'text', default: 'I am interested in' },
         { key: 'sendBtn', label: 'Send button text', type: 'text', default: 'Send Message' },
         { key: 'successHeading', label: 'Success heading', type: 'text', default: 'Message Sent!' },

@@ -4,7 +4,6 @@ const HOME_FIELDS = {
   heroHeading1: 'text',
   heroHeading2: 'text',
   heroHeading3: 'text',
-  heroSubtitle: 'text',
   heroCtaPrimary: 'text',
   heroCtaSecondary: 'text',
   heroImage: 'image',
@@ -13,7 +12,6 @@ const HOME_FIELDS = {
   featuredHeading: 'text',
   featuredSubtitle: 'text',
   featuredViewAll: 'text',
-  featuredEmpty: 'text',
 
   servicesLabel: 'text',
   servicesHeading: 'text',
@@ -42,25 +40,19 @@ const HOME_FIELDS = {
 
   processLabel: 'text',
   processHeading: 'text',
-  processSubheading: 'text',
 
   projectsLabel: 'text',
   projectsHeading: 'text',
   projectsSubtitle: 'text',
   projectsViewAll: 'text',
 
-  statsValue1: 'text',
   statsLabel1: 'text',
-  statsValue2: 'text',
   statsLabel2: 'text',
-  statsValue3: 'text',
   statsLabel3: 'text',
-  statsValue4: 'text',
   statsLabel4: 'text',
 
   testimonialsLabel: 'text',
   testimonialsHeading: 'text',
-  testimonialsDisclaimer: 'text',
 
   partnersLabel: 'text',
 
@@ -76,11 +68,6 @@ const ARCHITECTURE_FIELDS = {
   heroSubtitle: 'text',
   heroCtaPrimary: 'text',
   heroCtaSecondary: 'text',
-
-  modelLabel: 'text',
-  modelHeading: 'text',
-  modelDesc: 'text',
-  modelBtn: 'text',
 
   showroomLabel: 'text',
   showroomHeading: 'text',
@@ -192,11 +179,6 @@ const INTERIOR_FIELDS = {
   heroCtaPrimary: 'text',
   heroCtaSecondary: 'text',
 
-  modelLabel: 'text',
-  modelHeading: 'text',
-  modelDesc: 'text',
-  modelBtn: 'text',
-
   stylesLabel: 'text',
   stylesHeading: 'text',
   stylesFilterHint: 'text',
@@ -238,7 +220,6 @@ const CONTACT_FIELDS = {
   heroHeading: 'text',
   heroSubtitle: 'text',
   officeLocationLabel: 'text',
-  formHeading: 'text',
   interestLabel: 'text',
   sendBtn: 'text',
   successHeading: 'text',
@@ -255,23 +236,23 @@ const CONTACT_FIELDS = {
 export const PAGE_CONTENT_CONTRACT = {
   home: {
     fields: HOME_FIELDS,
-    sections: ['featured', 'services', 'about', 'browse', 'trust', 'process', 'projects', 'stats', 'testimonials', 'partners', 'cta'],
+    sections: ['services', 'about', 'browse', 'trust', 'process', 'featured', 'projects', 'stats', 'testimonials', 'partners', 'cta'],
   },
   architecture: {
     fields: ARCHITECTURE_FIELDS,
-    sections: ['model', 'showroom', 'services', 'process', 'cta'],
+    sections: ['showroom', 'stats', 'services', 'process', 'cta'],
   },
   construction: {
     fields: CONSTRUCTION_FIELDS,
-    sections: ['viewer', 'showroom', 'services', 'process', 'seismic', 'cta'],
+    sections: ['viewer', 'services', 'process', 'seismic', 'showroom', 'cta'],
   },
   renovation: {
     fields: RENOVATION_FIELDS,
-    sections: ['transform', 'studio', 'palette', 'showroom', 'services', 'cta'],
+    sections: ['transform', 'studio', 'palette', 'services', 'showroom', 'cta'],
   },
   'interior-design': {
     fields: INTERIOR_FIELDS,
-    sections: ['model', 'styles', 'showroom', 'finishes', 'palette', 'services', 'cta'],
+    sections: ['styles', 'showroom', 'finishes', 'palette', 'services', 'cta'],
   },
   team: {
     fields: TEAM_FIELDS,

@@ -7,6 +7,8 @@ import api from '../lib/api'
 import PropertyCard from '../components/PropertyCard'
 import { assets } from '../assets/assets'
 import { useLanguage } from '../contexts/LanguageContext'
+import usePageContent from '../lib/usePageContent'
+import { sectionBackground } from '../lib/pageContentResolve'
 import { C } from '../contexts/ThemeContext'
 
 gsap.registerPlugin(ScrollTrigger)
@@ -91,7 +93,46 @@ const TRUST_PATHS = {
 /* ═══════════════════════════════════════════════════════════════════════════════
    PINNED HERO — GSAP ScrollTrigger
    ═══════════════════════════════════════════════════════════════════════════════ */
-function PinnedHero({ t, prefersReducedMotion }) {
+// Section order and background bands as this page actually renders them.
+// Note the deliberate same-tone runs: process -> projects -> stats are all
+// dark, and testimonials -> partners are both light. computeBands treats an
+// adjacent same-tone pair as intentional and leaves it alone, so with every
+// section visible the page is identical to before.
+const SECTION_ORDER = ['services', 'about', 'browse', 'trust', 'process', 'featured', 'projects', 'stats', 'testimonials', 'partners', 'cta']
+const DEFAULT_BANDS = {
+  services: 'dark',
+  about: 'light',
+  browse: 'dark',
+  trust: 'light',
+  process: 'dark',
+  featured: 'light',
+  projects: 'dark',
+  stats: 'dark',
+  testimonials: 'light',
+  partners: 'light',
+  cta: 'dark',
+}
+
+// The exact colour each section renders today. featured (C.marble) and
+// projects (C.darkGrey) are deliberately NOT the canonical pair — keeping the
+// originals is what stops the CMS from flattening the design when nothing is
+// hidden.
+const SECTION_BG = {
+  services: C.charcoal,
+  about: C.softWhite,
+  browse: C.charcoal,
+  trust: C.softWhite,
+  process: C.charcoal,
+  featured: C.marble,
+  projects: C.darkGrey,
+  stats: C.charcoal,
+  testimonials: C.softWhite,
+  partners: C.softWhite,
+  cta: C.charcoal,
+}
+const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
+
+function PinnedHero({ t, cms, prefersReducedMotion }) {
   const sectionRef  = useRef(null)
   const bgRef       = useRef(null)
   const overlayRef  = useRef(null)
@@ -155,7 +196,7 @@ function PinnedHero({ t, prefersReducedMotion }) {
 
       {/* Villa BG */}
       <div ref={bgRef} style={{ position: 'absolute', inset: 0, transformOrigin: 'center', willChange: 'transform' }}>
-        <img src="/images/hero-villa.jpg.png" onError={e => { e.currentTarget.style.display = 'none' }}
+        <img src={cms('heroImage', '/images/hero-villa.jpg.png')} onError={e => { e.currentTarget.style.display = 'none' }}
           alt="Luxury Istanbul villa" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
       </div>
 
@@ -178,11 +219,11 @@ function PinnedHero({ t, prefersReducedMotion }) {
 
         <div ref={headlineRef} style={{ willChange: 'transform, opacity' }}>
           <h1 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(2rem, 5.5vw, 4.2rem)', lineHeight: 1.12, fontWeight: 700, color: C.marble, maxWidth: '700px' }}>
-            {t.hero?.heading1 || 'We Design, Build'}
+            {cms('heroHeading1', t.hero?.heading1 || 'We Design, Build')}
             <br />
-            <span style={{ color: C.marble }}>{t.hero?.heading2 || '& Deliver Exceptional'}</span>
+            <span style={{ color: C.marble }}>{cms('heroHeading2', t.hero?.heading2 || '& Deliver Exceptional')}</span>
             <br />
-            <span style={{ color: C.green }}>{t.hero?.heading3 || 'Spaces in Istanbul'}</span>
+            <span style={{ color: C.green }}>{cms('heroHeading3', t.hero?.heading3 || 'Spaces in Istanbul')}</span>
           </h1>
         </div>
 
@@ -190,7 +231,7 @@ function PinnedHero({ t, prefersReducedMotion }) {
 
         <div ref={subRef} style={{ willChange: 'transform, opacity' }}>
           <p style={{ color: C.gold, letterSpacing: '0.42em', fontSize: '0.68rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '2rem' }}>
-            {t.hero?.label || 'Istanbul · Architecture · Construction · Real Estate'}
+            {cms('heroLabel', t.hero?.label || 'Istanbul · Architecture · Construction · Real Estate')}
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center' }}>
             <button
@@ -210,10 +251,10 @@ function PinnedHero({ t, prefersReducedMotion }) {
     cursor: 'pointer',
   }}
 >
-  {t.hero?.ctaPrimary || 'Explore Services'}
+  {cms('heroCtaPrimary', t.hero?.ctaPrimary || 'Explore Services')}
 </button>
             <Link to="/properties" style={{ border: `1px solid rgba(246,243,237,0.3)`, color: C.marble, borderRadius: '9999px', padding: '0.9rem 2.4rem', fontSize: '0.68rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.16em', textDecoration: 'none' }}>
-              {t.hero?.ctaSecondary || 'View Properties'}
+              {cms('heroCtaSecondary', t.hero?.ctaSecondary || 'View Properties')}
             </Link>
           </div>
         </div>
@@ -276,7 +317,7 @@ function useFeaturedCards() {
   return cards
 }
 
-function FeaturedCarousel({ loading, featured, t, navigate, C, mv, vp, SectionLabel }) {
+function FeaturedCarousel({ loading, featured, t, cms, navigate, C, mv, vp, SectionLabel, bgColor }) {
   const [idx, setIdx] = useState(0)
   const cardsVisible = useFeaturedCards()
   const maxIdx = Math.max(0, featured.length - Math.floor(cardsVisible))
@@ -296,18 +337,18 @@ function FeaturedCarousel({ loading, featured, t, navigate, C, mv, vp, SectionLa
   const translateX = idx > 0 ? `calc(-${idx} * (${cardWidthPct}% + ${gapPx}px))` : '0'
 
   return (
-    <section aria-label="Featured Properties" style={{ backgroundColor: C.marble }}>
+    <section aria-label="Featured Properties" style={{ backgroundColor: bgColor || C.marble }}>
       <div className="py-20 md:py-28">
         {/* Header */}
         <motion.div initial="hidden" whileInView="show" viewport={vp} variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09 } } }} className="mb-10 md:mb-14 text-center px-4 sm:px-6">
-          <motion.div variants={mv.fadeIn()}><SectionLabel>{t.featured?.label || 'Handpicked'}</SectionLabel></motion.div>
+          <motion.div variants={mv.fadeIn()}><SectionLabel>{cms('featuredLabel', t.featured?.label || 'Handpicked')}</SectionLabel></motion.div>
           <div style={{ overflow: 'hidden' }}>
             <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.8rem)', color: C.charcoal, margin: 0 }}>
-              {t.featured?.heading || 'Featured Properties'}
+              {cms('featuredHeading', t.featured?.heading || 'Featured Properties')}
             </motion.h2>
           </div>
           <motion.p variants={mv.slideUp(0.12)} className="mx-auto mt-4 text-sm leading-relaxed max-w-lg" style={{ color: C.muted }}>
-            {t.featured?.subtitle || 'Exclusive homes curated for discerning buyers and renters across Istanbul.'}
+            {cms('featuredSubtitle', t.featured?.subtitle || 'Exclusive homes curated for discerning buyers and renters across Istanbul.')}
           </motion.p>
         </motion.div>
 
@@ -350,7 +391,7 @@ function FeaturedCarousel({ loading, featured, t, navigate, C, mv, vp, SectionLa
         <div className="mt-10 text-center">
           <button onClick={() => navigate('/properties')} className="inline-flex cursor-pointer items-center gap-2 rounded-full px-8 py-3.5 text-xs font-semibold uppercase tracking-widest transition-all duration-300 hover:opacity-85"
             style={{ backgroundColor: '#4b6741', color: '#ffffff' }}>
-            {t.featured?.viewAll || 'View All Properties'}
+            {cms('featuredViewAll', t.featured?.viewAll || 'View All Properties')}
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
           </button>
         </div>
@@ -413,6 +454,8 @@ export default function HomePage() {
   const navigate = useNavigate()
   const { t }    = useLanguage()
   const mv       = useMotionVariants()
+  const { get: cms, isSectionVisible, bandFor } = usePageContent('home', SECTION_ORDER, DEFAULT_BANDS)
+  const bg = (key) => sectionBackground(key, bandFor(key), DEFAULT_BANDS, SECTION_BG, CANONICAL_BG)
   const prefersReducedMotion = useReducedMotion()
 
   const scrollToServices = () => {
@@ -459,22 +502,23 @@ export default function HomePage() {
       <main className="w-full overflow-x-hidden" style={{ backgroundColor: C.marble }}>
 
         {/* ── HERO ── */}
-        <PinnedHero t={t} prefersReducedMotion={prefersReducedMotion} />
+        <PinnedHero t={t} cms={cms} prefersReducedMotion={prefersReducedMotion} />
 
         {/* ── SERVICES — dark charcoal + green glow ── */}
-        <section id="services" aria-label="Services" style={{ backgroundColor: C.charcoal }} className="relative overflow-hidden">
+        {isSectionVisible('services') && (
+        <section id="services" aria-label="Services" style={{ backgroundColor: bg('services')}} className="relative overflow-hidden">
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(ellipse 90% 60% at 50% 0%, rgba(var(--vk-green-rgb), 0.30) 0%, transparent 65%)' }} />
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.6), transparent)' }} />
           <div className="relative mx-auto max-w-7xl px-6 py-28">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-16 text-center">
-              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{t.services?.label || 'What We Do'}</SectionLabel></motion.div>
+              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{cms('servicesLabel', t.services?.label || 'What We Do')}</SectionLabel></motion.div>
               <div className="overflow-hidden">
                 <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: C.marble, lineHeight: 1.15 }}>
-                  {t.services?.heading || 'Five Services. One Company.'}
+                  {cms('servicesHeading', t.services?.heading || 'Five Services. One Company.')}
                 </motion.h2>
               </div>
               <motion.p variants={mv.slideUp(0.12)} className="mx-auto mt-4 max-w-xl text-sm leading-relaxed" style={{ color: '#9A9A92' }}>
-                {t.services?.subheading || 'From the first sketch to the final sale — we cover every stage of the property lifecycle.'}
+                {cms('servicesSubheading', t.services?.subheading || 'From the first sketch to the final sale — we cover every stage of the property lifecycle.')}
               </motion.p>
             </motion.div>
 
@@ -500,9 +544,11 @@ export default function HomePage() {
           </div>
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.4), transparent)' }} />
         </section>
+        )}
 
         {/* ── ABOUT / WHO WE ARE — soft white bg ── */}
-        <section aria-label="About VarliKent" style={{ backgroundColor: C.softWhite }}>
+        {isSectionVisible('about') && (
+        <section aria-label="About VarliKent" style={{ backgroundColor: bg('about')}}>
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
           <div className="mx-auto max-w-7xl px-6 py-32">
             <div className="grid gap-20 lg:grid-cols-2 items-center">
@@ -523,22 +569,22 @@ export default function HomePage() {
               </div>
 
               <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.08)} className="lg:pl-10">
-                <motion.div variants={mv.fadeIn()}><SectionLabel>{t.about?.label || 'Who We Are'}</SectionLabel></motion.div>
+                <motion.div variants={mv.fadeIn()}><SectionLabel>{cms('aboutLabel', t.about?.label || 'Who We Are')}</SectionLabel></motion.div>
                 <div className="overflow-hidden mb-6">
                   <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', color: C.charcoal, lineHeight: 1.18 }}>
-                    {t.about?.heading || "Istanbul's Complete Property Company"}
+                    {cms('aboutHeading', t.about?.heading || "Istanbul's Complete Property Company")}
                   </motion.h2>
                 </div>
                 <motion.p variants={mv.slideUp(0.1)} className="mb-4 leading-relaxed text-sm" style={{ color: C.muted }}>
-                  {t.about?.body1 || "VarliKent is Istanbul's full-service property company. We don't just find properties — we design them, build them, renovate them, and bring them to life with exceptional interior work."}
+                  {cms('aboutBody1', t.about?.body1 || "VarliKent is Istanbul's full-service property company. We don't just find properties — we design them, build them, renovate them, and bring them to life with exceptional interior work.")}
                 </motion.p>
                 <motion.p variants={mv.slideUp(0.16)} className="mb-10 leading-relaxed text-sm" style={{ color: C.muted }}>
-                  {t.about?.body2 || 'Founded with a vision to unify the property lifecycle under one trusted name, we serve homeowners, developers, and investors seeking excellence at every stage.'}
+                  {cms('aboutBody2', t.about?.body2 || 'Founded with a vision to unify the property lifecycle under one trusted name, we serve homeowners, developers, and investors seeking excellence at every stage.')}
                 </motion.p>
                 <motion.div variants={mv.slideUp(0.22)}>
                   <Link to="/about" className="inline-flex items-center gap-2 rounded-full px-9 py-3.5 text-xs font-semibold uppercase tracking-widest transition-all duration-300 hover:opacity-85"
                     style={{ backgroundColor: C.deepGreen, color: '#fff' }}>
-                    {t.about?.cta || 'Our Story'}
+                    {cms('aboutCta', t.about?.cta || 'Our Story')}
                     <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                   </Link>
                 </motion.div>
@@ -546,17 +592,19 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+        )}
 
         {/* ── FOR SALE / RENT — dark charcoal + green glow ── */}
-        <section aria-label="Buy or Rent" style={{ backgroundColor: C.charcoal }} className="relative overflow-hidden">
+        {isSectionVisible('browse') && (
+        <section aria-label="Buy or Rent" style={{ backgroundColor: bg('browse')}} className="relative overflow-hidden">
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 80% 70% at 50% 50%, rgba(var(--vk-green-rgb), 0.28) 0%, transparent 65%)` }} />
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.6), transparent)' }} />
           <div className="relative mx-auto max-w-7xl px-6 py-28">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-14 text-center">
-              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{t.browse?.label || 'Browse By Type'}</SectionLabel></motion.div>
+              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{cms('browseLabel', t.browse?.label || 'Browse By Type')}</SectionLabel></motion.div>
               <div className="overflow-hidden">
                 <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: C.marble }}>
-                  {t.browse?.heading || 'For Sale or Rent'}
+                  {cms('browseHeading', t.browse?.heading || 'For Sale or Rent')}
                 </motion.h2>
               </div>
             </motion.div>
@@ -568,12 +616,12 @@ export default function HomePage() {
                 style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: `1px solid rgba(var(--vk-green-rgb), 0.25)`, boxShadow: '0 4px 24px rgba(0,0,0,0.3)' }}>
                 <div className="absolute -top-10 -right-10 h-44 w-44 rounded-full opacity-20 blur-3xl transition-opacity duration-300 group-hover:opacity-40" style={{ backgroundColor: C.green }} />
                 <svg className="relative h-10 w-10 mb-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: C.green }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l9-9 9 9M5 10v9a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1v-9" /></svg>
-                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.4rem', color: C.marble }} className="mb-3">{t.browse?.sale?.title || 'Properties for Sale'}</h3>
-                <p className="text-sm leading-relaxed mb-8" style={{ color: '#9A9A92' }}>{t.browse?.sale?.desc || 'Invest in Istanbul — from city apartments to Bosphorus villas.'}</p>
+                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.4rem', color: C.marble }} className="mb-3">{cms('browseSaleTitle', t.browse?.sale?.title || 'Properties for Sale')}</h3>
+                <p className="text-sm leading-relaxed mb-8" style={{ color: '#9A9A92' }}>{cms('browseSaleDesc', t.browse?.sale?.desc || 'Invest in Istanbul — from city apartments to Bosphorus villas.')}</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs" style={{ color: '#7A7A72' }}>{saleCount} {t.browse?.listings || 'listings'}</span>
+                  <span className="text-xs" style={{ color: '#7A7A72' }}>{saleCount} {cms('browseListings', t.browse?.listings || 'listings')}</span>
                   <span className="flex items-center gap-2 rounded-full px-6 py-2.5 text-xs font-semibold uppercase tracking-widest text-white transition-all duration-300 group-hover:opacity-85" style={{ backgroundColor: C.green }}>
-                    {t.browse?.sale?.btn || 'Explore Sales'}
+                    {cms('browseSaleBtn', t.browse?.sale?.btn || 'Explore Sales')}
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                   </span>
                 </div>
@@ -585,12 +633,12 @@ export default function HomePage() {
                 style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: `1px solid rgba(var(--vk-gold-rgb), 0.25)`, boxShadow: '0 4px 24px rgba(0,0,0,0.3)' }}>
                 <div className="absolute -top-10 -right-10 h-44 w-44 rounded-full opacity-20 blur-3xl transition-opacity duration-300 group-hover:opacity-40" style={{ backgroundColor: C.gold }} />
                 <svg className="relative h-10 w-10 mb-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: C.gold }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
-                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.4rem', color: C.marble }} className="mb-3">{t.browse?.rent?.title || 'Properties for Rent'}</h3>
-                <p className="text-sm leading-relaxed mb-8" style={{ color: '#9A9A92' }}>{t.browse?.rent?.desc || "Flexible rental options across Istanbul's most sought-after neighbourhoods."}</p>
+                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.4rem', color: C.marble }} className="mb-3">{cms('browseRentTitle', t.browse?.rent?.title || 'Properties for Rent')}</h3>
+                <p className="text-sm leading-relaxed mb-8" style={{ color: '#9A9A92' }}>{cms('browseRentDesc', t.browse?.rent?.desc || "Flexible rental options across Istanbul's most sought-after neighbourhoods.")}</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs" style={{ color: '#7A7A72' }}>{rentCount} {t.browse?.listings || 'listings'}</span>
+                  <span className="text-xs" style={{ color: '#7A7A72' }}>{rentCount} {cms('browseListings', t.browse?.listings || 'listings')}</span>
                   <span className="flex items-center gap-2 rounded-full px-6 py-2.5 text-xs font-semibold uppercase tracking-widest text-white transition-all duration-300 group-hover:opacity-85" style={{ backgroundColor: C.gold }}>
-                    {t.browse?.rent?.btn || 'Explore Rentals'}
+                    {cms('browseRentBtn', t.browse?.rent?.btn || 'Explore Rentals')}
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                   </span>
                 </div>
@@ -599,16 +647,18 @@ export default function HomePage() {
           </div>
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.4), transparent)' }} />
         </section>
+        )}
 
         {/* ── WHY VARLIKENT — soft white bg ── */}
-        <section aria-label="Why VarliKent" style={{ backgroundColor: C.softWhite }}>
+        {isSectionVisible('trust') && (
+        <section aria-label="Why VarliKent" style={{ backgroundColor: bg('trust')}}>
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
           <div className="mx-auto max-w-7xl px-6 py-32">
             <div className="grid gap-20 lg:grid-cols-2 items-center">
 
               <motion.div initial="hidden" whileInView="show" viewport={vp} variants={mv.slideLeft()} className="relative">
                 <div className="overflow-hidden rounded-2xl" style={{ border: `1px solid rgba(var(--vk-gold-rgb), 0.18)`, boxShadow: '0 8px 40px rgba(var(--vk-dark-rgb), 0.10)' }}>
-                  <img src="/images/why-villa.png" alt="VarliKent luxury property Istanbul" className="h-full w-full object-cover" loading="lazy" />
+                  <img src={cms('trustImage', '/images/why-villa.png')} alt="VarliKent luxury property Istanbul" className="h-full w-full object-cover" loading="lazy" />
                 </div>
                 <div className="absolute -bottom-6 -right-6 hidden lg:block rounded-xl px-6 py-5" style={{ backgroundColor: '#fff', border: `1px solid rgba(var(--vk-gold-rgb), 0.3)`, boxShadow: '0 4px 20px rgba(var(--vk-dark-rgb), 0.1)' }}>
                   <p style={{ fontFamily: 'Cinzel, serif', fontSize: '2rem', color: C.gold, fontWeight: 700, lineHeight: 1 }}>10+</p>
@@ -617,14 +667,14 @@ export default function HomePage() {
               </motion.div>
 
               <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.08)} className="lg:pl-8">
-                <motion.div variants={mv.fadeIn()}><SectionLabel>{t.trust?.label || 'Why VarliKent'}</SectionLabel></motion.div>
+                <motion.div variants={mv.fadeIn()}><SectionLabel>{cms('trustLabel', t.trust?.label || 'Why VarliKent')}</SectionLabel></motion.div>
                 <div className="overflow-hidden mb-6">
                   <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.7rem, 3.6vw, 2.4rem)', color: C.charcoal, lineHeight: 1.22 }}>
-                    {t.trust?.heading || 'A refined approach to property — from design to delivery.'}
+                    {cms('trustHeading', t.trust?.heading || 'A refined approach to property — from design to delivery.')}
                   </motion.h2>
                 </div>
                 <motion.p variants={mv.slideUp(0.10)} className="mb-10 leading-relaxed text-sm" style={{ color: C.muted }}>
-                  {t.trust?.body || 'We bring together market intelligence, architectural expertise, and exceptional service — guiding clients through every stage.'}
+                  {cms('trustBody', t.trust?.body || 'We bring together market intelligence, architectural expertise, and exceptional service — guiding clients through every stage.')}
                 </motion.p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {Object.entries(t.trust?.points || {}).map(([key, pt], i) => (
@@ -642,18 +692,20 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+        )}
 
         {/* ── PROCESS — charcoal bg ── */}
-        <section id="process" aria-label="How We Work" style={{ backgroundColor: C.charcoal }} className="relative overflow-hidden">
+        {isSectionVisible('process') && (
+        <section id="process" aria-label="How We Work" style={{ backgroundColor: bg('process')}} className="relative overflow-hidden">
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.33), transparent)' }} />
           <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: `linear-gradient(rgba(var(--vk-gold-rgb), 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--vk-gold-rgb), 0.04) 1px, transparent 1px)`, backgroundSize: '52px 52px' }} />
 
           <div className="relative mx-auto max-w-7xl px-6 py-32">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-20 text-center">
-              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{t.process?.label || 'How We Work'}</SectionLabel></motion.div>
+              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{cms('processLabel', t.process?.label || 'How We Work')}</SectionLabel></motion.div>
               <div className="overflow-hidden">
                 <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: C.marble }}>
-                  {t.process?.heading || 'From Vision to Handover'}
+                  {cms('processHeading', t.process?.heading || 'From Vision to Handover')}
                 </motion.h2>
               </div>
             </motion.div>
@@ -682,32 +734,38 @@ export default function HomePage() {
           </div>
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
         </section>
+        )}
 
         {/* ── FEATURED PROPERTIES — marble bg carousel ── */}
+        {isSectionVisible('featured') && (
         <FeaturedCarousel
           loading={loading}
           featured={featured}
           t={t}
+          cms={cms}
+          bgColor={bg('featured')}
           navigate={navigate}
           C={C}
           mv={mv}
           vp={vp}
           SectionLabel={SectionLabel}
         />
+        )}
 
         {/* ── FEATURED PROJECTS — dark grey bg ── */}
-        <section aria-label="Selected Projects" style={{ backgroundColor: C.darkGrey }} className="relative overflow-hidden">
+        {isSectionVisible('projects') && (
+        <section aria-label="Selected Projects" style={{ backgroundColor: bg('projects')}} className="relative overflow-hidden">
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
           <div className="mx-auto max-w-7xl px-6 py-32">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-14 text-center">
-              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{t.projects?.label || 'Our Work'}</SectionLabel></motion.div>
+              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{cms('projectsLabel', t.projects?.label || 'Our Work')}</SectionLabel></motion.div>
               <div className="overflow-hidden">
                 <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: C.marble }}>
-                  {t.projects?.heading || 'Selected Projects'}
+                  {cms('projectsHeading', t.projects?.heading || 'Selected Projects')}
                 </motion.h2>
               </div>
               <motion.p variants={mv.slideUp(0.12)} className="mx-auto mt-4 max-w-xl text-sm leading-relaxed" style={{ color: C.muted }}>
-                {t.projects?.subtitle || 'A glimpse into the spaces we have designed, built and transformed across Istanbul.'}
+                {cms('projectsSubtitle', t.projects?.subtitle || 'A glimpse into the spaces we have designed, built and transformed across Istanbul.')}
               </motion.p>
             </motion.div>
 
@@ -740,23 +798,25 @@ export default function HomePage() {
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={mv.slideUp(0.1)} className="mt-14 text-center">
               <Link to="/architecture" className="inline-flex items-center gap-2 rounded-full px-9 py-3.5 text-xs font-semibold uppercase tracking-widest transition-all duration-300 hover:opacity-80"
                 style={{ border: '1px solid rgba(var(--vk-gold-rgb), 0.33)', color: C.marble }}>
-                {t.projects?.viewAll || 'See All Projects'}
+                {cms('projectsViewAll', t.projects?.viewAll || 'See All Projects')}
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </Link>
             </motion.div>
           </div>
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
         </section>
+        )}
 
         {/* ── STATS — charcoal bg ── */}
-        <section aria-label="Statistics" style={{ backgroundColor: C.charcoal }} className="relative py-24">
+        {isSectionVisible('stats') && (
+        <section aria-label="Statistics" style={{ backgroundColor: bg('stats')}} className="relative py-24">
           <div className="mx-auto max-w-5xl px-6">
             <div className="grid grid-cols-2 gap-10 text-center md:grid-cols-4">
               {[
-                { n: '500', s: '+', l: t.stats?.properties || 'Properties Listed' },
-                { n: '10',  s: '+', l: t.stats?.years      || 'Years Experience' },
-                { n: '120', s: '+', l: t.stats?.clients    || 'Happy Clients' },
-                { n: '40',  s: '+', l: t.stats?.districts  || 'Districts Covered' },
+                { n: '500', s: '+', l: cms('statsLabel1', t.stats?.properties || 'Properties Listed') },
+                { n: '10',  s: '+', l: cms('statsLabel2', t.stats?.years      || 'Years Experience') },
+                { n: '120', s: '+', l: cms('statsLabel3', t.stats?.clients    || 'Happy Clients') },
+                { n: '40',  s: '+', l: cms('statsLabel4', t.stats?.districts  || 'Districts Covered') },
               ].map(({ n, s, l }, i) => (
                 <motion.div key={l} initial="hidden" whileInView="show" viewport={vp} variants={mv.slideUp(i * 0.1)}>
                   <div style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(2rem, 3.8vw, 2.8rem)', color: C.gold, fontWeight: 700 }}><CountUp target={n} suffix={s} /></div>
@@ -766,16 +826,18 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+        )}
 
         {/* ── TESTIMONIALS — soft white bg ── */}
-        <section aria-label="Client Testimonials" style={{ backgroundColor: C.softWhite }}>
+        {isSectionVisible('testimonials') && (
+        <section aria-label="Client Testimonials" style={{ backgroundColor: bg('testimonials')}}>
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
           <div className="mx-auto max-w-7xl px-6 py-32">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-14 text-center">
-              <motion.div variants={mv.fadeIn()}><SectionLabel>{t.testimonials?.label || 'Client Stories'}</SectionLabel></motion.div>
+              <motion.div variants={mv.fadeIn()}><SectionLabel>{cms('testimonialsLabel', t.testimonials?.label || 'Client Stories')}</SectionLabel></motion.div>
               <div className="overflow-hidden">
                 <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: C.charcoal }}>
-                  {t.testimonials?.heading || 'What Our Clients Say'}
+                  {cms('testimonialsHeading', t.testimonials?.heading || 'What Our Clients Say')}
                 </motion.h2>
               </div>
             </motion.div>
@@ -813,21 +875,25 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+        )}
 
         {/* ── PARTNERS — scrolling logo strip, white bg bracketed by gold lines ── */}
-        <section aria-label="Partner Companies" style={{ backgroundColor: C.softWhite }} className="relative">
+        {isSectionVisible('partners') && (
+        <section aria-label="Partner Companies" style={{ backgroundColor: bg('partners')}} className="relative">
           <div style={{ height: 2, boxShadow: '0 0 12px rgba(var(--vk-gold-rgb), 0.6)', background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 1), transparent)' }} />
           <div className="mx-auto max-w-6xl px-6 py-20">
             <p className="mb-12 text-center text-sm md:text-base font-semibold uppercase tracking-[0.32em]" style={{ color: C.gold }}>
-              {t.partners?.label || 'Trusted By Leading Companies'}
+              {cms('partnersLabel', t.partners?.label || 'Trusted By Leading Companies')}
             </p>
             <PartnersMarquee dark={false} nameColor={C.gold} />
           </div>
           <div style={{ height: 2, boxShadow: '0 0 12px rgba(var(--vk-gold-rgb), 0.6)', background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 1), transparent)' }} />
         </section>
+        )}
 
         {/* ── CTA — charcoal bg ── */}
-        <section aria-label="Call to Action" className="relative overflow-hidden py-36" style={{ backgroundColor: C.charcoal }}>
+        {isSectionVisible('cta') && (
+        <section aria-label="Call to Action" className="relative overflow-hidden py-36" style={{ backgroundColor: bg('cta')}}>
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 80% 70% at 50% 50%, rgba(var(--vk-green-rgb), 0.28) 0%, transparent 65%)` }} />
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.33), transparent)', position: 'absolute', top: 0, left: 0, right: 0 }} />
 
@@ -836,11 +902,11 @@ export default function HomePage() {
               <motion.div variants={mv.fadeIn()}><SectionLabel dark>{t.cta?.label || 'Get Started'}</SectionLabel></motion.div>
               <div className="overflow-hidden mb-6">
                 <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(2rem, 4.8vw, 3rem)', color: C.marble, lineHeight: 1.16 }}>
-                  {t.cta?.heading || 'Ready to Start Your Project?'}
+                  {cms('ctaHeading', t.cta?.heading || 'Ready to Start Your Project?')}
                 </motion.h2>
               </div>
               <motion.p variants={mv.slideUp(0.12)} className="mx-auto max-w-lg leading-relaxed text-sm" style={{ color: C.muted }}>
-                {t.cta?.body || 'Whether you are buying, building, renovating or designing — our team guides you from the first conversation to final delivery.'}
+                {cms('ctaBody', t.cta?.body || 'Whether you are buying, building, renovating or designing — our team guides you from the first conversation to final delivery.')}
               </motion.p>
               <motion.div variants={mv.slideUp(0.20)} className="mt-12 flex flex-wrap items-center justify-center gap-5">
                 <button
@@ -853,16 +919,17 @@ export default function HomePage() {
     cursor: 'pointer',
   }}
 >
-  {t.cta?.browse || 'Explore Services'}
+  {cms('ctaBrowse', t.cta?.browse || 'Explore Services')}
 </button>
                 <Link to="/contact" className="rounded-full border px-11 py-4 text-xs font-semibold uppercase tracking-widest transition-all duration-300 hover:opacity-75"
                   style={{ borderColor: 'rgba(var(--vk-gold-rgb), 0.38)', color: C.marble }}>
-                  {t.cta?.contact || 'Contact Us'}
+                  {cms('ctaContact', t.cta?.contact || 'Contact Us')}
                 </Link>
               </motion.div>
             </motion.div>
           </div>
         </section>
+        )}
 
       </main>
     </>

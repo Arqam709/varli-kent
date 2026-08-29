@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { resolveCmsField, isSectionVisibleIn, computeBands } from '../src/lib/pageContentResolve.js'
+import { resolveCmsField, isSectionVisibleIn, computeBands, buildSavePayload, isEmptyPayload, sectionBackground } from '../src/lib/pageContentResolve.js'
 import { PAGE_CONTENT_REGISTRY, defaultValues, allFieldDefs } from '../src/lib/pageContentRegistry.js'
 
 const textField = (langs) => ({ type: 'text', sourceLang: 'en', ...langs })
@@ -157,4 +157,198 @@ test('5b. the homepage defaults match the text the site renders today', () => {
 test('5c. an unknown page yields no defaults rather than throwing', () => {
   assert.deepEqual(defaultValues('nope'), {})
   assert.deepEqual(allFieldDefs('nope'), [])
+})
+
+/* ══════════════ 6. Quota-safe admin save (buildSavePayload) ══════════════ */
+
+const homeDefs = allFieldDefs('home')
+const homeBaseline = defaultValues('home')
+
+test('6a. changing ONE field sends one field, not the whole page', () => {
+  // The first save of a page is the case this protects. Sending all ~57
+  // homepage fields would make the server translate every one of them, five
+  // MyMemory calls each, because none is stored yet for isUnchangedSource()
+  // to recognise.
+  assert.ok(homeDefs.length > 40, 'fixture no longer represents a large page')
+
+  const payload = buildSavePayload({
+    fieldDefs: homeDefs,
+    baselineValues: homeBaseline,
+    values: { ...homeBaseline, heroHeading1: 'We Build Istanbul' },
+    baselineSections: {},
+    sections: {},
+  })
+
+  assert.deepEqual(Object.keys(payload.fields), ['heroHeading1'])
+  assert.deepEqual(payload.fields.heroHeading1, { type: 'text', value: 'We Build Istanbul' })
+  assert.deepEqual(payload.sections, {})
+})
+
+test('6b. an image-only edit sends zero text fields', () => {
+  const payload = buildSavePayload({
+    fieldDefs: homeDefs,
+    baselineValues: homeBaseline,
+    values: { ...homeBaseline, heroImage: 'https://cdn.test/new.png' },
+    baselineSections: {},
+    sections: {},
+  })
+
+  assert.deepEqual(Object.keys(payload.fields), ['heroImage'])
+  assert.equal(payload.fields.heroImage.type, 'image')
+  const textFields = Object.values(payload.fields).filter((f) => f.type === 'text')
+  assert.equal(textFields.length, 0, 'an image edit dragged text fields along')
+})
+
+test('6c. a section-only edit sends an empty fields object', () => {
+  const payload = buildSavePayload({
+    fieldDefs: homeDefs,
+    baselineValues: homeBaseline,
+    values: homeBaseline,
+    baselineSections: {},
+    sections: { testimonials: false },
+  })
+
+  assert.deepEqual(payload.fields, {}, 'a section toggle sent text fields')
+  assert.deepEqual(payload.sections, { testimonials: false })
+})
+
+test('6d. an untouched page produces an empty payload', () => {
+  const payload = buildSavePayload({
+    fieldDefs: homeDefs,
+    baselineValues: homeBaseline,
+    values: homeBaseline,
+    baselineSections: { cta: false },
+    sections: { cta: false },
+  })
+
+  assert.deepEqual(payload.fields, {})
+  assert.deepEqual(payload.sections, {})
+  assert.equal(isEmptyPayload(payload), true)
+})
+
+test('6e. changing a value and changing it back sends nothing', () => {
+  const payload = buildSavePayload({
+    fieldDefs: homeDefs,
+    baselineValues: homeBaseline,
+    values: { ...homeBaseline, heroHeading1: homeBaseline.heroHeading1 },
+    baselineSections: {},
+    sections: {},
+  })
+
+  assert.equal(isEmptyPayload(payload), true)
+})
+
+test('6f. toggling a never-configured section on is not a change', () => {
+  // Absent and true both mean visible, so this must normalise to "no change"
+  // rather than writing a redundant `true`.
+  const payload = buildSavePayload({
+    fieldDefs: homeDefs,
+    baselineValues: homeBaseline,
+    values: homeBaseline,
+    baselineSections: {},
+    sections: { services: true },
+  })
+
+  assert.deepEqual(payload.sections, {})
+})
+
+test('6g. re-showing a hidden section IS a change', () => {
+  const payload = buildSavePayload({
+    fieldDefs: homeDefs,
+    baselineValues: homeBaseline,
+    values: homeBaseline,
+    baselineSections: { services: false },
+    sections: { services: true },
+  })
+
+  assert.deepEqual(payload.sections, { services: true })
+})
+
+test('6h. several edits at once are all included', () => {
+  const payload = buildSavePayload({
+    fieldDefs: homeDefs,
+    baselineValues: homeBaseline,
+    values: { ...homeBaseline, heroHeading1: 'A', ctaHeading: 'B', heroImage: '/x.png' },
+    baselineSections: {},
+    sections: { partners: false },
+  })
+
+  assert.deepEqual(Object.keys(payload.fields).sort(), ['ctaHeading', 'heroImage', 'heroHeading1'].sort())
+  assert.deepEqual(payload.sections, { partners: false })
+})
+
+/* ══════════════ 7. sectionBackground — band reaches a real colour ══════════════ */
+
+// Architecture's real values: stats is #252523, which is "dark" but NOT the
+// canonical dark. Keeping it is the whole point of the helper.
+const ARCH_BANDS = { showroom: 'light', stats: 'dark', services: 'light', process: 'dark', cta: 'light' }
+const ARCH_BG = { showroom: '#F6F3ED', stats: '#252523', services: '#F6F3ED', process: '#1E1E1C', cta: '#F6F3ED' }
+const ARCH_CANON = { dark: '#1E1E1C', light: '#F6F3ED' }
+const ARCH_ORDER = ['showroom', 'stats', 'services', 'process', 'cta']
+
+const archBg = (sections) => {
+  const bands = computeBands(ARCH_ORDER, ARCH_BANDS, sections)
+  const out = {}
+  for (const key of ARCH_ORDER) {
+    if (!isSectionVisibleIn(sections, key)) continue
+    out[key] = sectionBackground(key, bands[key], ARCH_BANDS, ARCH_BG, ARCH_CANON)
+  }
+  return out
+}
+
+test('7a. with every section visible, colours are byte-identical to the design', () => {
+  assert.deepEqual(archBg({}), ARCH_BG, 'the CMS altered a colour with nothing hidden')
+})
+
+test('7b. a distinct in-band colour is preserved, not flattened', () => {
+  // stats stays #252523 rather than collapsing to the canonical dark.
+  assert.equal(archBg({}).stats, '#252523')
+})
+
+test('7c. hiding a middle section flips the clash and the new band reaches a colour', () => {
+  // showroom(light) [stats hidden] services(light) — two light bands would meet,
+  // and they were not adjacent by design, so services flips to dark.
+  const bg = archBg({ stats: false })
+
+  assert.equal(bg.showroom, '#F6F3ED')
+  assert.equal(bg.services, ARCH_CANON.dark, 'the flipped band did not reach a colour')
+  assert.ok(!('stats' in bg), 'a hidden section still produced a background')
+})
+
+test('7d. hiding a section leaves every remaining colour defined', () => {
+  for (const hidden of ARCH_ORDER) {
+    const bg = archBg({ [hidden]: false })
+    for (const key of ARCH_ORDER) {
+      if (key === hidden) continue
+      assert.ok(bg[key], `${key} lost its background when ${hidden} was hidden`)
+    }
+  }
+})
+
+test('7e. an intentional same-tone pair survives on the homepage run', () => {
+  // process(dark) projects(dark) stats(dark) are adjacent BY DESIGN, as are
+  // testimonials(light) partners(light). Nothing hidden means nothing flips.
+  const order = ['services', 'about', 'browse', 'trust', 'process', 'featured', 'projects', 'stats', 'testimonials', 'partners', 'cta']
+  const bands = {
+    services: 'dark', about: 'light', browse: 'dark', trust: 'light', process: 'dark',
+    featured: 'light', projects: 'dark', stats: 'dark', testimonials: 'light',
+    partners: 'light', cta: 'dark',
+  }
+
+  assert.deepEqual(computeBands(order, bands, {}), bands, 'a designed pairing was flipped')
+})
+
+test('7f. hiding a homepage section between differing bands repairs the clash', () => {
+  const order = ['services', 'about', 'browse', 'trust', 'process', 'featured', 'projects', 'stats', 'testimonials', 'partners', 'cta']
+  const bands = {
+    services: 'dark', about: 'light', browse: 'dark', trust: 'light', process: 'dark',
+    featured: 'light', projects: 'dark', stats: 'dark', testimonials: 'light',
+    partners: 'light', cta: 'dark',
+  }
+
+  // Hide `about` (light): services(dark) would sit against browse(dark).
+  const out = computeBands(order, bands, { about: false })
+
+  assert.equal(out.services, 'dark')
+  assert.equal(out.browse, 'light', 'two dark bands ended up adjacent')
 })

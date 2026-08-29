@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { useLanguage } from '../contexts/LanguageContext'
+import usePageContent from '../lib/usePageContent'
+import { sectionBackground } from '../lib/pageContentResolve'
 import { useSiteSettings } from '../contexts/SiteSettingsContext'
 import { C } from '../contexts/ThemeContext'
 import ShowroomCarousel from '../components/ShowroomCarousel'
@@ -198,9 +200,31 @@ const GoldDivider = () => (
   <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, var(--vk-gold) 25%, var(--vk-gold) 75%, transparent)', opacity: 0.5 }} />
 )
 
+const SECTION_ORDER = ['transform', 'studio', 'palette', 'services', 'showroom', 'cta']
+const DEFAULT_BANDS = {
+  transform: 'light',
+  studio: 'dark',
+  palette: 'light',
+  services: 'dark',
+  showroom: 'light',
+  cta: 'dark',
+}
+
+const SECTION_BG = {
+  transform: C.softWhite,
+  studio: C.charcoal,
+  palette: C.softWhite,
+  services: C.charcoal,
+  showroom: C.softWhite,
+  cta: C.charcoal,
+}
+const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
+
 export default function RenovationPage() {
   const { t } = useLanguage()
   const p = t.renovationPage
+  const { get: cms, isSectionVisible, bandFor } = usePageContent('renovation', SECTION_ORDER, DEFAULT_BANDS)
+  const bg = (key) => sectionBackground(key, bandFor(key), DEFAULT_BANDS, SECTION_BG, CANONICAL_BG)
   const { settings } = useSiteSettings()
   const [images, setImages] = useState([])
   const [loadingImages, setLoadingImages] = useState(true)
@@ -226,56 +250,57 @@ export default function RenovationPage() {
         <motion.div initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.12 } } }}
           className="relative z-10 flex flex-col items-center gap-6 max-w-4xl">
           <motion.p variants={fadeUp} style={{ letterSpacing: '0.5em', color: C.gold, fontSize: '0.75rem', textTransform: 'uppercase' }}>
-            {p.label}
+            {cms('heroLabel', p.label)}
           </motion.p>
           <motion.h1 variants={fadeUp} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(3rem, 10vw, 6rem)', lineHeight: 1.05, color: '#ffffff' }}>
-            {p.h1}
+            {cms('heroHeading', p.h1)}
           </motion.h1>
-          <motion.p variants={fadeUp} className="max-w-lg text-lg leading-relaxed" style={{ color: 'rgba(246,243,237,0.6)' }}>{p.subtitle}</motion.p>
+          <motion.p variants={fadeUp} className="max-w-lg text-lg leading-relaxed" style={{ color: 'rgba(246,243,237,0.6)' }}>{cms('heroSubtitle', p.subtitle)}</motion.p>
           <motion.div variants={fadeUp} className="flex flex-wrap gap-4 justify-center mt-4">
             <Link to="/contact" style={{ backgroundColor: C.gold, color: '#000' }}
               className="px-8 py-3 font-semibold tracking-wider uppercase text-sm hover:opacity-90 transition-opacity">
-              {p.ctaPrimary}
+              {cms('heroCtaPrimary', p.ctaPrimary)}
             </Link>
             <a href="#renovation-studio" className="px-8 py-3 border border-white/20 text-white tracking-wider uppercase text-sm hover:border-white/50 transition-colors">
-              {p.ctaSecondary}
+              {cms('heroCtaSecondary', p.ctaSecondary)}
             </a>
           </motion.div>
         </motion.div>
       </section>
 
-      <GoldDivider />
+      {isSectionVisible('transform') && <GoldDivider />}
 
       {/* Before / After – WHITE */}
-      <section className="py-16 md:py-28 px-6" style={{ backgroundColor: C.softWhite, color: C.charcoal, position: 'relative' }}>
+      {isSectionVisible('transform') && (
+      <section className="py-16 md:py-28 px-6" style={{ backgroundColor: bg('transform'), color: C.charcoal, position: 'relative' }}>
         <div className="max-w-5xl mx-auto">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
-            {p.transformLabel}
+            {cms('transformLabel', p.transformLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
             style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: C.charcoal, marginBottom: '3rem' }} className="text-center">
-            {p.transformHeading}
+            {cms('transformHeading', p.transformHeading)}
           </motion.h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
               className="p-8 rounded-xl" style={{ backgroundColor: '#fff', border: '1px solid rgba(30,30,28,0.08)' }}>
-              <p className="text-xs tracking-[0.3em] uppercase mb-5" style={{ color: 'rgba(var(--vk-dark-rgb), 0.55)' }}>{p.before}</p>
+              <p className="text-xs tracking-[0.3em] uppercase mb-5" style={{ color: 'rgba(var(--vk-dark-rgb), 0.55)' }}>{cms('beforeTitle', p.before)}</p>
               <ul className="space-y-3">
-                {p.beforeItems.map(item => (
+                {p.beforeItems.map((item, i) => (
                   <li key={item} className="flex items-center gap-3" style={{ color: 'rgba(var(--vk-dark-rgb), 0.55)' }}>
-                    <span className="w-px h-4 block" style={{ backgroundColor: 'rgba(30,30,28,0.2)' }} />{item}
+                    <span className="w-px h-4 block" style={{ backgroundColor: 'rgba(30,30,28,0.2)' }} />{cms(`beforeItem${i + 1}`, item)}
                   </li>
                 ))}
               </ul>
             </motion.div>
             <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
               className="p-8 rounded-xl" style={{ backgroundColor: '#fff', border: `1px solid rgba(var(--vk-gold-rgb), 0.3)` }}>
-              <p className="text-xs tracking-[0.3em] uppercase mb-5" style={{ color: C.gold }}>{p.after}</p>
+              <p className="text-xs tracking-[0.3em] uppercase mb-5" style={{ color: C.gold }}>{cms('afterTitle', p.after)}</p>
               <ul className="space-y-3">
-                {p.afterItems.map(item => (
+                {p.afterItems.map((item, i) => (
                   <li key={item} className="flex items-center gap-3" style={{ color: C.charcoal }}>
-                    <span className="w-px h-4 block" style={{ backgroundColor: C.gold }} />{item}
+                    <span className="w-px h-4 block" style={{ backgroundColor: C.gold }} />{cms(`afterItem${i + 1}`, item)}
                   </li>
                 ))}
               </ul>
@@ -283,41 +308,45 @@ export default function RenovationPage() {
           </div>
         </div>
       </section>
+      )}
 
-      <GoldDivider />
+      {isSectionVisible('studio') && <GoldDivider />}
 
       {/* Renovation Studio – DARK */}
+      {isSectionVisible('studio') && (
       <section id="renovation-studio" className="py-16 md:py-28 px-6"
-        style={{ backgroundColor: C.charcoal, position: 'relative', overflow: 'hidden' }}>
+        style={{ backgroundColor: bg('studio'), position: 'relative', overflow: 'hidden' }}>
         <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 90% 55% at 50% 0%, rgba(var(--vk-green-rgb), 0.22) 0%, transparent 65%)' }} />
         <div className="max-w-4xl mx-auto relative z-10">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
-            {p.studioLabel}
+            {cms('studioLabel', p.studioLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
             style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: '#ffffff', marginBottom: '0.75rem' }} className="text-center">
-            {p.studioHeading}
+            {cms('studioHeading', p.studioHeading)}
           </motion.h2>
-          <p className="text-center text-slate-500 text-sm mb-10">{p.studioDesc}</p>
+          <p className="text-center text-slate-500 text-sm mb-10">{cms('studioDesc', p.studioDesc)}</p>
           <motion.div initial={{ opacity: 0, scale: 0.98 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
             <RenovationStudio p={p} materials={materials} wallFinishes={wallFinishes} floorFinishes={floorFinishes} />
           </motion.div>
         </div>
       </section>
+      )}
 
-      <GoldDivider />
+      {isSectionVisible('palette') && <GoldDivider />}
 
       {/* Material Palette – WHITE */}
-      <section className="py-16 md:py-28 px-6" style={{ backgroundColor: C.softWhite, color: C.charcoal, position: 'relative' }}>
+      {isSectionVisible('palette') && (
+      <section className="py-16 md:py-28 px-6" style={{ backgroundColor: bg('palette'), color: C.charcoal, position: 'relative' }}>
         <div className="max-w-5xl mx-auto">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
-            {p.paletteLabel}
+            {cms('paletteLabel', p.paletteLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
             style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: C.charcoal, marginBottom: '3rem' }} className="text-center">
-            {p.paletteHeading}
+            {cms('paletteHeading', p.paletteHeading)}
           </motion.h2>
           <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
             {materials.map((m, i) => (
@@ -330,19 +359,21 @@ export default function RenovationPage() {
           </div>
         </div>
       </section>
+      )}
 
-      <GoldDivider />
+      {isSectionVisible('services') && <GoldDivider />}
 
       {/* Services – DARK */}
-      <section className="py-16 md:py-28 px-6" style={{ backgroundColor: C.charcoal, position: 'relative', overflow: 'hidden' }}>
+      {isSectionVisible('services') && (
+      <section className="py-16 md:py-28 px-6" style={{ backgroundColor: bg('services'), position: 'relative', overflow: 'hidden' }}>
         <div className="max-w-6xl mx-auto relative z-10">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3">
-            {p.servicesLabel}
+            {cms('servicesLabel', p.servicesLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
             style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.5rem)', color: '#ffffff', marginBottom: '3rem' }}>
-            {p.servicesHeading}
+            {cms('servicesHeading', p.servicesHeading)}
           </motion.h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {p.services.map((svc, i) => (
@@ -351,48 +382,51 @@ export default function RenovationPage() {
                 className="p-8 rounded-xl transition-colors"
                 style={{ border: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(255,255,255,0.04)' }}>
                 <div style={{ fontFamily: 'Cinzel, serif', fontSize: '3.5rem', color: 'rgba(255,255,255,0.07)', lineHeight: 1 }} className="mb-4">{svc.num}</div>
-                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.1rem', color: '#ffffff' }} className="mb-3">{svc.title}</h3>
-                <p style={{ color: 'rgba(246,243,237,0.55)' }} className="leading-relaxed">{svc.desc}</p>
+                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.1rem', color: '#ffffff' }} className="mb-3">{cms(`service${i + 1}Title`, svc.title)}</h3>
+                <p style={{ color: 'rgba(246,243,237,0.55)' }} className="leading-relaxed">{cms(`service${i + 1}Desc`, svc.desc)}</p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
+      )}
 
-      <GoldDivider />
+      {isSectionVisible('showroom') && <GoldDivider />}
 
       {/* Showroom – WHITE */}
-      {showroomEnabled && (
-        <section className="py-20 px-6" style={{ backgroundColor: C.softWhite, color: C.charcoal, position: 'relative' }}>
+      {isSectionVisible('showroom') && showroomEnabled && (
+        <section className="py-20 px-6" style={{ backgroundColor: bg('showroom'), color: C.charcoal, position: 'relative' }}>
           <div className="max-w-6xl mx-auto">
             <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
               style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
-              {p.showroomLabel || 'Our Work'}
+              {cms('showroomLabel', p.showroomLabel || 'Our Work')}
             </motion.p>
             <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
               style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: C.charcoal, marginBottom: '2.5rem', textAlign: 'center' }}>
-              {p.showroomHeading || 'Renovation Showcase'}
+              {cms('showroomHeading', p.showroomHeading || 'Renovation Showcase')}
             </motion.h2>
             <ShowroomCarousel images={images} loading={loadingImages} bgColor='#FCFAF6' />
           </div>
         </section>
       )}
 
-      <GoldDivider />
+      {isSectionVisible('cta') && <GoldDivider />}
 
-      {/* CTA – DARK */}
-      <section className="py-14 md:py-24 text-center px-6" style={{ backgroundColor: C.charcoal, position: 'relative', overflow: 'hidden' }}>
+      {/* Final CTA – DARK */}
+      {isSectionVisible('cta') && (
+      <section className="py-14 md:py-24 text-center px-6" style={{ backgroundColor: bg('cta'), position: 'relative', overflow: 'hidden' }}>
         <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 90% 55% at 50% 0%, rgba(var(--vk-green-rgb), 0.22) 0%, transparent 65%)' }} />
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="relative z-10">
           <span className="section-rule mx-auto block mb-8" />
-          <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: '#ffffff' }} className="mb-4">{p.ctaHeading}</h2>
-          <p style={{ color: 'rgba(246,243,237,0.55)' }} className="mb-8 max-w-md mx-auto">{p.ctaBody}</p>
+          <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: '#ffffff' }} className="mb-4">{cms('ctaHeading', p.ctaHeading)}</h2>
+          <p style={{ color: 'rgba(246,243,237,0.55)' }} className="mb-8 max-w-md mx-auto">{cms('ctaBody', p.ctaBody)}</p>
           <Link to="/contact" style={{ backgroundColor: C.gold, color: '#000' }}
             className="inline-block px-10 py-4 text-sm font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity">
-            {p.ctaBtn}
+            {cms('ctaBtn', p.ctaBtn)}
           </Link>
         </motion.div>
       </section>
+      )}
 
     </div>
   )

@@ -5,6 +5,7 @@ import api from '../lib/api'
 import { useSiteSettings } from '../contexts/SiteSettingsContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import useSeo from '../lib/useSeo'
+import usePageContent from '../lib/usePageContent'
 import { C } from '../contexts/ThemeContext'
 
 const fadeUp = (delay = 0) => ({
@@ -29,6 +30,10 @@ const INTEREST_TYPES = ['Buying', 'Renting', 'Selling', 'Renovation', 'Interior 
 const ContactPage = () => {
   const { t } = useLanguage()
   const c = t.contactPage || {}
+
+  // Contact has no toggleable sections. CMS overrides display copy only —
+  // INTEREST_TYPES below stays the canonical submitted vocabulary.
+  const { get: cms } = usePageContent('contact')
   useSeo({
     title: 'Contact Us — Varlikent Istanbul',
     description: 'Get in touch with the Varlikent team. Enquire about buying, selling, renting or investing in Istanbul luxury real estate.',
@@ -73,11 +78,11 @@ const ContactPage = () => {
         <div className="relative z-10 mx-auto max-w-7xl px-6 text-center">
         <motion.p initial="hidden" animate="show" variants={fadeUp(0)}
           style={{ color: C.gold, letterSpacing: '0.45em', fontSize: '0.68rem' }} className="mb-4 uppercase">
-          {c.label || 'Get in Touch'}
+          {cms('heroLabel', c.label || 'Get in Touch')}
         </motion.p>
         <motion.h1 initial="hidden" animate="show" variants={fadeUp(0.07)}
           style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(2rem, 5vw, 3.5rem)', color: '#f5f0e8' }}>
-          {c.heading || 'Contact VarliKent'}
+          {cms('heroHeading', c.heading || 'Contact VarliKent')}
         </motion.h1>
         <motion.div initial="hidden" animate="show" variants={fadeUp(0.14)}
           className="mx-auto my-6 flex items-center justify-center gap-3">
@@ -87,7 +92,7 @@ const ContactPage = () => {
         </motion.div>
         <motion.p initial="hidden" animate="show" variants={fadeUp(0.2)}
           className="mx-auto max-w-xl text-slate-400 leading-relaxed">
-          {c.subtitle || 'Our team of luxury real estate experts is ready to assist you — whether you are buying, selling, or investing in Istanbul.'}
+          {cms('heroSubtitle', c.subtitle || 'Our team of luxury real estate experts is ready to assist you — whether you are buying, selling, or investing in Istanbul.')}
         </motion.p>
         </div>
       </div>
@@ -112,7 +117,7 @@ const ContactPage = () => {
                   </svg>
                 </span>
                 <div>
-                  <p className="text-xs uppercase tracking-widest text-slate-500 mb-1">{c.officeLocation || 'Main Branch'}</p>
+                  <p className="text-xs uppercase tracking-widest text-slate-500 mb-1">{cms('officeLocationLabel', c.officeLocation || 'Main Branch')}</p>
                   <p className="text-white text-sm leading-relaxed">{address}</p>
                   <a href={mapsUrl} target="_blank" rel="noreferrer"
                     className="mt-3 inline-flex items-center gap-1.5 text-xs text-[#4b6741] hover:text-[#C9A35A] transition-colors cursor-pointer">
@@ -194,8 +199,8 @@ const ContactPage = () => {
                 <svg className="mx-auto h-16 w-16" style={{ color: C.accent }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.6rem', color: '#f5f0e8' }} className="mt-5 mb-3">{c.successHeading || 'Message Sent'}</h2>
-                <p className="text-slate-400 text-sm leading-relaxed">{c.successBody || 'Our team will contact you within 24 hours.'}</p>
+                <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.6rem', color: '#f5f0e8' }} className="mt-5 mb-3">{cms('successHeading', c.successHeading || 'Message Sent')}</h2>
+                <p className="text-slate-400 text-sm leading-relaxed">{cms('successBody', c.successBody || 'Our team will contact you within 24 hours.')}</p>
                 <button
                   onClick={() => { setSubmitted(false); setForm({ name: '', email: '', phone: '', interestType: 'Buying', message: '' }) }}
                   className="mt-8 rounded-full px-8 py-3 text-xs font-semibold uppercase tracking-wider text-white transition hover:opacity-90 cursor-pointer"
@@ -224,7 +229,7 @@ const ContactPage = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400" htmlFor="interestType">{c.interestLabel || 'I am interested in'}</label>
+                  <label className="block mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400" htmlFor="interestType">{cms('interestLabel', c.interestLabel || 'I am interested in')}</label>
                   <select id="interestType" name="interestType" value={form.interestType} onChange={handleChange} className={selectCls}>
                     {INTEREST_TYPES.map((canonical, i) => (
                       <option key={canonical} value={canonical}>{c.interests?.[i] || canonical}</option>
@@ -242,7 +247,7 @@ const ContactPage = () => {
                   className="w-full rounded-full py-4 text-xs font-semibold uppercase tracking-wider text-white transition disabled:opacity-50 cursor-pointer hover:opacity-90"
                   style={{ backgroundColor: loading ? C.deepGreen : C.accent }}
                 >
-                  {loading ? (c.sending || 'Sending...') : (c.sendBtn || 'Send Message')}
+                  {loading ? (c.sending || 'Sending...') : cms('sendBtn', c.sendBtn || 'Send Message')}
                 </button>
                 <p className="text-center text-xs text-slate-600">Your message is saved securely and our team will respond within 24 hours.</p>
               </form>

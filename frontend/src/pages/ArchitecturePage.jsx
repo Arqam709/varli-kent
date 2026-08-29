@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { useLanguage } from '../contexts/LanguageContext'
+import usePageContent from '../lib/usePageContent'
+import { sectionBackground } from '../lib/pageContentResolve'
 import { useSiteSettings } from '../contexts/SiteSettingsContext'
 import { C } from '../contexts/ThemeContext'
 import ShowroomCarousel from '../components/ShowroomCarousel'
@@ -20,9 +22,38 @@ const DarkGlow = () => (
   <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 90% 55% at 50% 0%, rgba(var(--vk-green-rgb), 0.22) 0%, transparent 65%)' }} />
 )
 
+// Section order and bands read off this file's own JSX, top to bottom.
+// With every section visible these reproduce the current design exactly;
+// bandFor only departs from them to repair an adjacency clash caused by
+// hiding a section.
+const SECTION_ORDER = ['showroom', 'stats', 'services', 'process', 'cta']
+const DEFAULT_BANDS = {
+  showroom: 'light',
+  stats: 'dark',
+  services: 'light',
+  process: 'dark',
+  cta: 'light',
+}
+
+// The exact colour each section renders today. While a section keeps its
+// designed band these are used verbatim, so nothing changes visually until an
+// admin actually hides something.
+const SECTION_BG = {
+  showroom: C.softWhite,
+  stats: '#252523',
+  services: C.softWhite,
+  process: C.charcoal,
+  cta: C.softWhite,
+}
+
+// Only reached when computeBands flips a section to repair a clash.
+const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
+
 export default function ArchitecturePage() {
   const { t } = useLanguage()
   const p = t.architecturePage
+  const { get: cms, isSectionVisible, bandFor } = usePageContent('architecture', SECTION_ORDER, DEFAULT_BANDS)
+  const bg = (key) => sectionBackground(key, bandFor(key), DEFAULT_BANDS, SECTION_BG, CANONICAL_BG)
   const { settings } = useSiteSettings()
   const [images, setImages] = useState([])
   const [loadingImages, setLoadingImages] = useState(true)
@@ -50,22 +81,22 @@ export default function ArchitecturePage() {
           className="relative z-10 flex flex-col items-center gap-6 max-w-4xl"
         >
           <motion.p variants={fadeUp(0)} style={{ letterSpacing: '0.5em', color: C.gold, fontSize: '0.75rem', textTransform: 'uppercase' }}>
-            {p.label}
+            {cms('heroLabel', p.label)}
           </motion.p>
           <motion.h1 variants={fadeUp(0.1)}
             style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(3rem, 10vw, 6rem)', lineHeight: 1.05, color: '#ffffff' }}>
-            {p.h1}
+            {cms('heroHeading', p.h1)}
           </motion.h1>
           <motion.p variants={fadeUp(0.2)} className="max-w-lg text-lg leading-relaxed" style={{ color: 'rgba(246,243,237,0.6)' }}>
-            {p.subtitle}
+            {cms('heroSubtitle', p.subtitle)}
           </motion.p>
           <motion.div variants={fadeUp(0.3)} className="flex flex-wrap gap-4 justify-center mt-4">
             <Link to="/contact" style={{ backgroundColor: C.gold, color: '#000000' }}
               className="px-8 py-3 font-semibold tracking-wider uppercase text-sm transition-opacity hover:opacity-90">
-              {p.ctaPrimary}
+              {cms('heroCtaPrimary', p.ctaPrimary)}
             </Link>
             <Link to="/properties" className="px-8 py-3 border border-white/20 text-white tracking-wider uppercase text-sm hover:border-white/50 transition-colors">
-              {p.ctaSecondary}
+              {cms('heroCtaSecondary', p.ctaSecondary)}
             </Link>
           </motion.div>
         </motion.div>
@@ -79,31 +110,30 @@ export default function ArchitecturePage() {
         </div>
       </section>
 
-      {/* Gold Divider */}
-      <GoldDivider />
+      {isSectionVisible('showroom') && <GoldDivider />}
 
       {/* 2. Showroom – WHITE */}
-      {showroomEnabled && (
-        <section style={{ backgroundColor: C.softWhite, color: C.charcoal, position: 'relative' }} className="py-20 px-6">
+      {isSectionVisible('showroom') && showroomEnabled && (
+        <section style={{ backgroundColor: bg('showroom'), color: C.charcoal, position: 'relative' }} className="py-20 px-6">
           <div className="max-w-6xl mx-auto">
             <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
               style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
-              {p.showroomLabel || 'Our Work'}
+              {cms('showroomLabel', p.showroomLabel || 'Our Work')}
             </motion.p>
             <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
               style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: C.charcoal, marginBottom: '2.5rem', textAlign: 'center' }}>
-              {p.showroomHeading || 'Architecture Showcase'}
+              {cms('showroomHeading', p.showroomHeading || 'Architecture Showcase')}
             </motion.h2>
             <ShowroomCarousel images={images} loading={loadingImages} bgColor='#FCFAF6' />
           </div>
         </section>
       )}
 
-      {/* Gold Divider */}
-      <GoldDivider />
+      {isSectionVisible('stats') && <GoldDivider />}
 
       {/* 3. Stats Bar – GREY */}
-      <section style={{ backgroundColor: '#252523', position: 'relative' }} className="py-16">
+      {isSectionVisible('stats') && (
+      <section style={{ backgroundColor: bg('stats'), position: 'relative' }} className="py-16">
         <div className="max-w-5xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-10 text-center">
           {[
             { number: '120+', label: 'Projects' },
@@ -118,20 +148,21 @@ export default function ArchitecturePage() {
           ))}
         </div>
       </section>
+      )}
 
-      {/* Gold Divider */}
-      <GoldDivider />
+      {isSectionVisible('services') && <GoldDivider />}
 
       {/* 4. Services – WHITE */}
-      <section style={{ backgroundColor: C.softWhite, color: C.charcoal, position: 'relative' }} className="py-16 md:py-28 px-6">
+      {isSectionVisible('services') && (
+      <section style={{ backgroundColor: bg('services'), color: C.charcoal, position: 'relative' }} className="py-16 md:py-28 px-6">
         <div className="max-w-6xl mx-auto">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3">
-            {p.servicesLabel}
+            {cms('servicesLabel', p.servicesLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
             style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.5rem)', color: C.charcoal, marginBottom: '3rem' }}>
-            {p.servicesHeading}
+            {cms('servicesHeading', p.servicesHeading)}
           </motion.h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {p.services.map((svc, i) => (
@@ -140,28 +171,29 @@ export default function ArchitecturePage() {
                 className="relative p-8 rounded-xl transition-colors"
                 style={{ backgroundColor: '#fff', border: '1px solid rgba(var(--vk-green-rgb), 0.15)' }}>
                 <div style={{ fontFamily: 'Cinzel, serif', fontSize: '3.5rem', color: 'rgba(var(--vk-dark-rgb), 0.05)', lineHeight: 1 }} className="mb-4">{svc.num}</div>
-                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.1rem', color: C.charcoal }} className="mb-3">{svc.title}</h3>
-                <p style={{ color: 'rgba(var(--vk-dark-rgb), 0.6)' }} className="leading-relaxed">{svc.desc}</p>
+                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.1rem', color: C.charcoal }} className="mb-3">{cms(`service${i + 1}Title`, svc.title)}</h3>
+                <p style={{ color: 'rgba(var(--vk-dark-rgb), 0.6)' }} className="leading-relaxed">{cms(`service${i + 1}Desc`, svc.desc)}</p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
+      )}
 
-      {/* Gold Divider */}
-      <GoldDivider />
+      {isSectionVisible('process') && <GoldDivider />}
 
       {/* 5. Process Timeline – DARK */}
-      <section style={{ backgroundColor: C.charcoal, position: 'relative', overflow: 'hidden' }} className="py-16 md:py-28 px-6">
+      {isSectionVisible('process') && (
+      <section style={{ backgroundColor: bg('process'), position: 'relative', overflow: 'hidden' }} className="py-16 md:py-28 px-6">
         <DarkGlow />
         <div className="relative z-10 max-w-5xl mx-auto">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
-            {p.processLabel}
+            {cms('processLabel', p.processLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
             style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.5rem)', color: '#ffffff', marginBottom: '4rem', textAlign: 'center' }}>
-            {p.processHeading}
+            {cms('processHeading', p.processHeading)}
           </motion.h2>
           <div className="relative">
             <div className="absolute top-4 left-0 right-0 hidden md:block" style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)' }} />
@@ -176,28 +208,30 @@ export default function ArchitecturePage() {
                     fontFamily: 'Cinzel, serif', color: C.gold, fontSize: '0.8rem',
                     marginBottom: '1.5rem', position: 'relative', zIndex: 1,
                   }}>{i + 1}</div>
-                  <p style={{ color: 'rgba(246,243,237,0.7)' }} className="text-sm leading-snug">{label}</p>
+                  <p style={{ color: 'rgba(246,243,237,0.7)' }} className="text-sm leading-snug">{cms(`processStep${i + 1}`, label)}</p>
                 </motion.div>
               ))}
             </div>
           </div>
         </div>
       </section>
+      )}
 
-      {/* Gold Divider */}
-      <GoldDivider />
+      {isSectionVisible('cta') && <GoldDivider />}
 
       {/* 6. CTA – LIGHT */}
-      <section style={{ backgroundColor: C.softWhite, position: 'relative', overflow: 'hidden' }} className="py-14 md:py-24 px-6 text-center">
+      {isSectionVisible('cta') && (
+      <section style={{ backgroundColor: bg('cta'), position: 'relative', overflow: 'hidden' }} className="py-14 md:py-24 px-6 text-center">
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }} viewport={{ once: true }} className="relative z-10 max-w-xl mx-auto">
-          <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.5rem)', color: C.charcoal, marginBottom: '1rem' }}>{p.ctaHeading}</h2>
-          <p style={{ color: 'rgba(var(--vk-dark-rgb), 0.55)' }} className="mb-8 text-lg">{p.ctaBody}</p>
+          <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.5rem)', color: C.charcoal, marginBottom: '1rem' }}>{cms('ctaHeading', p.ctaHeading)}</h2>
+          <p style={{ color: 'rgba(var(--vk-dark-rgb), 0.55)' }} className="mb-8 text-lg">{cms('ctaBody', p.ctaBody)}</p>
           <Link to="/contact" style={{ backgroundColor: C.charcoal, color: '#ffffff' }}
             className="inline-block px-10 py-4 font-semibold tracking-wider uppercase text-sm hover:opacity-80 transition-opacity">
-            {p.ctaBtn}
+            {cms('ctaBtn', p.ctaBtn)}
           </Link>
         </motion.div>
       </section>
+      )}
 
     </div>
   )

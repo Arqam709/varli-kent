@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useLanguage } from '../contexts/LanguageContext'
 import { localizedText } from '../lib/localizedText'
+import usePageContent from '../lib/usePageContent'
 import api from '../lib/api'
 import { C } from '../contexts/ThemeContext'
 
@@ -16,6 +17,10 @@ const fadeUp = {
 
 export default function TeamPage() {
   const { t, language } = useLanguage()
+
+  // Team has no toggleable sections — its members are records owned by
+  // /admin/team, not CMS content. Only the static page copy is overridable.
+  const { get: cms } = usePageContent('team')
 
   /*
    * Wave 12A2 — role and bio are stored per language and read here.
@@ -47,14 +52,14 @@ export default function TeamPage() {
             style={{ color: C.gold, letterSpacing: '0.5em', fontSize: '0.6rem', fontWeight: 600, textTransform: 'uppercase' }}
             className="mb-5"
           >
-            {t.teamPage?.label || 'The People Behind VarliKent'}
+            {cms('heroLabel', t.teamPage?.label || 'The People Behind VarliKent')}
           </motion.p>
 
           <motion.h1
             variants={fadeUp} initial="hidden" animate="visible" custom={1}
             style={{ fontFamily: 'Cinzel, serif', color: C.marble, fontSize: 'clamp(2.5rem, 7vw, 5rem)', lineHeight: 1.05, fontWeight: 700 }}
           >
-            {t.teamPage?.heading || 'Our Team'}
+            {cms('heroHeading', t.teamPage?.heading || 'Our Team')}
           </motion.h1>
 
           {/* Gold ornament */}
@@ -74,7 +79,7 @@ export default function TeamPage() {
             className="mx-auto max-w-xl text-base leading-relaxed"
             style={{ color: 'rgba(246,243,237,0.55)' }}
           >
-            {t.teamPage?.subtitle || 'Architects, designers, engineers and advisors united by a passion for exceptional spaces.'}
+            {cms('heroSubtitle', t.teamPage?.subtitle || 'Architects, designers, engineers and advisors united by a passion for exceptional spaces.')}
           </motion.p>
         </div>
       </section>
@@ -93,7 +98,7 @@ export default function TeamPage() {
           ) : members.length === 0 ? (
             <div className="py-24 text-center">
               <p style={{ color: 'rgba(246,243,237,0.3)', letterSpacing: '0.3em', fontSize: '0.75rem', textTransform: 'uppercase' }}>
-                {t.teamPage?.empty || 'Team members coming soon.'}
+                {cms('emptyText', t.teamPage?.empty || 'Team members coming soon.')}
               </p>
             </div>
           ) : (
