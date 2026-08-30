@@ -74,7 +74,7 @@ const KNOWN_UNCONSUMED = {}
 /** Strips // and /* *\/ comments so a key named in prose never counts. */
 const stripComments = (src) =>
   src
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, ' ')
     .replace(/^[ \t]*\/\/.*$/gm, ' ')
 
 const loadPage = async (pageKey) => stripComments(await readFile(pagePath(PAGE_FILES[pageKey]), 'utf8'))

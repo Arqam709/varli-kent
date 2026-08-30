@@ -5,8 +5,152 @@ import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
 import { useLanguage } from '../contexts/LanguageContext'
 
-const empty = { name: '', role: '', bio: '', photo: '', order: 0, visible: true }
+const empty = { name: '', role: '', bio: '', photo: '', secondaryPhoto: '', longBio: '', workImages: [], order: 0, visible: true }
 
+// Module scope so the rich-profile field components below share exactly these.
+const inputCls = 'w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4b6741] bg-white'
+const labelCls = 'block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1'
+
+/*
+ * Single-image field, transplanted from the donor's AdminTeam.
+ *
+ * Uploads through the /api/upload route AdminShowroom and AdminPartners
+ * already use — same endpoint, same `image` form field, no new storage
+ * architecture. The text input is kept alongside so an already-hosted URL
+ * can still be pasted, which is how CURRENT's photo field worked before.
+ */
+const MAX_WORK_IMAGES = 24
+
+const ImageUploadField = ({ label, hint, value, onChange, aspect = 'aspect-square', p = {} }) => {
+  const [uploading, setUploading] = useState(false)
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('image', file)
+      const r = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      onChange(r.data.url)
+      toast.success(p.uploaded || 'Uploaded')
+    } catch {
+      toast.error(p.uploadFailed || 'Upload failed')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  return (
+    <div>
+      <label className={labelCls}>{label}</label>
+      <div className="flex items-center gap-3">
+        <div className={`relative flex ${aspect} w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50`}>
+          {value ? (
+            <>
+              <img src={value} alt="" className="h-full w-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+              <button
+                type="button"
+                onClick={() => onChange('')}
+                aria-label={p.removeImage || 'Remove image'}
+                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </>
+          ) : (
+            <span className="px-1 text-center text-[10px] text-slate-400">{p.noImage || 'No image'}</span>
+          )}
+        </div>
+        <label className="flex flex-1 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 py-4 text-xs font-medium text-slate-500 transition hover:border-[#4b6741] hover:text-[#4b6741]">
+          {uploading ? (p.uploading || 'Uploading…') : (p.clickToUpload || 'Click to upload')}
+          <input type="file" accept="image/*" onChange={handleFile} className="hidden" disabled={uploading} />
+        </label>
+      </div>
+      <input
+        className={`${inputCls} mt-2`}
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        placeholder="https://…"
+      />
+      {hint && <p className="mt-1 text-[10px] text-slate-400">{hint}</p>}
+    </div>
+  )
+}
+
+// "Their Work" gallery — add several images at once, remove any of them.
+const WorkGalleryField = ({ images, onChange, p = {} }) => {
+  const [uploading, setUploading] = useState(false)
+  const list = Array.isArray(images) ? images : []
+  const full = list.length >= MAX_WORK_IMAGES
+
+  const handleFiles = async (e) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+
+    // The server caps the array too; stopping here means the admin is told
+    // now rather than by a rejected save after uploading twenty files.
+    const room = MAX_WORK_IMAGES - list.length
+    if (room <= 0) {
+      toast.error((p.galleryFull || 'At most {n} images').replace('{n}', MAX_WORK_IMAGES))
+      e.target.value = ''
+      return
+    }
+
+    setUploading(true)
+    try {
+      const uploaded = []
+      for (const file of files.slice(0, room)) {
+        const fd = new FormData()
+        fd.append('image', file)
+        const r = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+        uploaded.push(r.data.url)
+      }
+      onChange([...list, ...uploaded])
+      toast.success((p.imagesAdded || '{n} image(s) added').replace('{n}', uploaded.length))
+    } catch {
+      toast.error(p.uploadFailed || 'Upload failed')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  return (
+    <div>
+      <label className={labelCls}>{p.workGallery || 'Their Work — Gallery (optional)'}</label>
+      <p className="mb-2 text-[10px] text-slate-400">
+        {p.workGalleryHint || 'Shown under "Their Work" when a visitor opens this person\'s profile.'}
+      </p>
+      <div className="flex flex-wrap gap-3">
+        {list.map((url, i) => (
+          <div key={`${url}-${i}`} className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200">
+            <img src={url} alt="" className="h-full w-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+            <button
+              type="button"
+              onClick={() => onChange(list.filter((_, j) => j !== i))}
+              aria-label={p.removeImage || 'Remove image'}
+              className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        {!full && (
+          <label className="flex h-20 w-20 shrink-0 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-slate-300 text-slate-400 transition hover:border-[#4b6741] hover:text-[#4b6741]">
+            {uploading
+              ? <span className="text-[10px]">…</span>
+              : <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>}
+            <input type="file" accept="image/*" multiple onChange={handleFiles} className="hidden" disabled={uploading} />
+          </label>
+        )}
+      </div>
+      <p className="mt-1 text-[10px] text-slate-400">{list.length}/{MAX_WORK_IMAGES}</p>
+    </div>
+  )
+}
 const ConfirmModal = ({ message, onConfirm, onCancel }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
     <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl text-center">
@@ -54,7 +198,7 @@ const AdminTeam = () => {
    * Sending a plain string is also the signal that the field was edited; an
    * unchanged one is detected server-side and costs no translation quota.
    */
-  const openEdit = (m) => { setForm({ name: m.name, role: editableText(m.role), bio: editableText(m.bio), photo: m.photo || '', order: m.order ?? 0, visible: m.visible ?? true }); setModal(m) }
+  const openEdit = (m) => { setForm({ name: m.name, role: editableText(m.role), bio: editableText(m.bio), photo: m.photo || '', secondaryPhoto: m.secondaryPhoto || '', longBio: editableText(m.longBio), workImages: m.workImages || [], order: m.order ?? 0, visible: m.visible ?? true }); setModal(m) }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -94,8 +238,6 @@ const AdminTeam = () => {
     })
   }
 
-  const inputCls = 'w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4b6741] bg-white'
-  const labelCls = 'block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1'
 
   return (
     <AdminLayout>
@@ -176,9 +318,45 @@ const AdminTeam = () => {
                 <label className={labelCls}>{p.bio || 'Bio'}</label>
                 <textarea rows={3} className={inputCls} value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} placeholder="Short biography..." />
               </div>
-              <div>
-                <label className={labelCls}>{p.photoUrl || 'Photo URL'}</label>
-                <input className={inputCls} value={form.photo} onChange={e => setForm(f => ({ ...f, photo: e.target.value }))} placeholder="https://..." />
+              <ImageUploadField
+                label={p.photoUrl || 'Photo (grid thumbnail)'}
+                value={form.photo}
+                onChange={url => setForm(f => ({ ...f, photo: url }))}
+                aspect="aspect-square"
+                p={p}
+              />
+
+              <div className="border-t border-slate-100 pt-5">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+                  {p.profileSectionLabel || 'Profile — shown when a visitor clicks this person'}
+                </p>
+
+                <ImageUploadField
+                  label={p.profilePhoto || 'Profile Photo (optional)'}
+                  hint={p.profilePhotoHint || 'A separate, larger image for the expanded profile. Falls back to the grid photo if left blank.'}
+                  value={form.secondaryPhoto}
+                  onChange={url => setForm(f => ({ ...f, secondaryPhoto: url }))}
+                  aspect="aspect-[3/4]"
+                  p={p}
+                />
+
+                <div className="mt-4">
+                  <label className={labelCls}>{p.detailedInfo || 'Detailed Info (optional)'}</label>
+                  <textarea
+                    rows={5}
+                    className={inputCls}
+                    value={form.longBio}
+                    onChange={e => setForm(f => ({ ...f, longBio: e.target.value }))}
+                    placeholder={p.detailedInfoPlaceholder || 'Full background, experience, and more about this person...'}
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {p.detailedInfoHint || 'Shown in the "About" tab of the expanded profile. Falls back to the short bio if left blank.'}
+                  </p>
+                </div>
+
+                <div className="mt-4">
+                  <WorkGalleryField images={form.workImages} onChange={imgs => setForm(f => ({ ...f, workImages: imgs }))} p={p} />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

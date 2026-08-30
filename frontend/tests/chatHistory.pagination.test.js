@@ -23,7 +23,7 @@ import { dirname, join } from 'node:path'
 const here = dirname(fileURLToPath(import.meta.url))
 const read = async (...p) =>
   (await readFile(join(here, '..', 'src', ...p), 'utf8'))
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, ' ')
     .replace(/^[ \t]*\/\/.*$/gm, ' ')
 
 /* ── The append reducer, mirroring ChatContext's setConversations updater ── */

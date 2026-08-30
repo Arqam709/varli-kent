@@ -14,31 +14,33 @@ const isValidTeamRole = (value) => {
   return isLocalizedObject(value) && isUsableText(resolveLocalized(value))
 }
 
+
+const MAX_IMAGE_URL_LENGTH = 2048
+
+const isValidImageUrl = (value) => {
+  if (typeof value !== 'string') return false
+  if (value.length > MAX_IMAGE_URL_LENGTH) return false
+  if (value === '') return true
+  if (value.startsWith('/') && !value.startsWith('//')) return true
+
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 /*
- * Wave 12A2 — dynamic content localization, reusing the Wave 12A1 foundation.
- *
- * `role` and `bio` are translated once at admin save time (routes/team.js)
- * and stored as { sourceLang, en, tr, ar, de, ru, ur }. TeamPage reads
- * value[language] with no translation request of its own.
- *
- * localizedField() is Mixed rather than a strict sub-schema, for the reason
- * documented in utils/localizedField.js: every TeamMember row in this
- * database stores these as plain strings today, and Mongoose cannot cast a
- * string to a subdocument — pointing a sub-schema at them would empty the
- * Team page out. Both shapes hydrate; resolveLocalized() gives them one
- * meaning, so no migration is required for correctness.
- *
- * Deliberately NOT localized:
- *   `name`   a person's name is not translated
- *   `photo`  a URL
- *   `order`  a number
- *   `visible` a boolean
- *
- * `role` keeps its old required + trim contract. Mixed needs an explicit
- * validator so an empty, arbitrary, or poison-only object is not accepted
- * merely because it is present. The route trims before translation, while
- * the schema setter preserves trimming for direct model writes.
+ * A portfolio, not an archive. The donor leaves this unbounded, which lets
+ * one member's document grow without limit and the public grid render an
+ * arbitrary number of full-size images. 24 is well beyond any real profile
+ * while keeping both bounded.
  */
+const MAX_WORK_IMAGES = 24
+
+const isValidWorkImages = (value) =>
+  Array.isArray(value) && value.length <= MAX_WORK_IMAGES && value.every(isValidImageUrl)
 const teamMemberSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   role: {
@@ -52,6 +54,23 @@ const teamMemberSchema = new mongoose.Schema({
   },
   bio: localizedField(),
   photo: { type: String, default: '' },
+
+  // ── Wave 14A: rich profile ─────────────────────────────────────────
+  // Every field below is optional and none carries content as a default,
+  // so a member created before this wave stays valid and renders with the
+  // profile areas simply absent. No migration.
+  secondaryPhoto: {
+    type: String,
+    default: '',
+    trim: true,
+    validate: { validator: isValidImageUrl, message: 'Secondary photo must be empty or a valid image URL' },
+  },
+  longBio: localizedField(),
+  workImages: {
+    type: [String],
+    default: undefined,
+    validate: { validator: isValidWorkImages, message: `Work images must be at most ${MAX_WORK_IMAGES} valid image URLs` },
+  },
   order: { type: Number, default: 0 },
   visible: { type: Boolean, default: true },
 }, { timestamps: true })

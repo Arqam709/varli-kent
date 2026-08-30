@@ -20,7 +20,7 @@ const src = (...p) => join(here, '..', 'src', ...p)
 const read = async (...p) => {
   const raw = await readFile(src(...p), 'utf8')
   // Strip comments so prose mentioning an endpoint never satisfies a check.
-  return raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')
+  return raw.replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')
 }
 
 const LANGS = ['en', 'tr', 'ar', 'de', 'ru', 'ur']

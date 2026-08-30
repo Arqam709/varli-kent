@@ -10,7 +10,14 @@ const router = express.Router()
  * Wave 12A2. `name` is a person's name and is never translated; `photo`,
  * `order` and `visible` are not prose.
  */
-export const LOCALIZED_TEAM_FIELDS = ['role', 'bio']
+/*
+ * Wave 14A adds longBio. Because localizeFields() already receives the
+ * stored document on update, adding the key here is all that is needed for
+ * the two properties that matter: an unchanged longBio spends no provider
+ * quota (isUnchangedSource), and a provider failure on one language keeps the
+ * translation that language already had.
+ */
+export const LOCALIZED_TEAM_FIELDS = ['role', 'bio', 'longBio']
 
 export const normalizeTeamRoleBody = (body) => {
   if (!body || typeof body !== 'object' || typeof body.role !== 'string') return body

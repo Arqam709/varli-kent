@@ -153,10 +153,13 @@ test('12A2 correction: existing valid localized role survives unchanged update',
 
 /* ══════════════ 1. Declared field lists ═══════════════════════════════ */
 
-test('12A2: Team localizes role and bio, and nothing else', () => {
-  assert.deepEqual(LOCALIZED_TEAM_FIELDS, ['role', 'bio'])
+test('Team localizes role, bio and longBio — and nothing else', () => {
+  // Wave 14A added longBio: admin-authored prose shown to visitors, so it gets
+  // the same write-time localization as bio. secondaryPhoto and workImages
+  // arrived in the same wave and must NOT, because they are URLs.
+  assert.deepEqual(LOCALIZED_TEAM_FIELDS, ['role', 'bio', 'longBio'])
   // A person's name is not translated, and the rest are not prose.
-  for (const scalar of ['name', 'photo', 'order', 'visible', '_id', 'createdAt']) {
+  for (const scalar of ['name', 'photo', 'secondaryPhoto', 'workImages', 'order', 'visible', '_id', 'createdAt']) {
     assert.ok(!LOCALIZED_TEAM_FIELDS.includes(scalar), `${scalar} must stay scalar`)
   }
 })
@@ -170,12 +173,12 @@ test('12A2: Showroom localizes caption, and nothing else', () => {
   }
 })
 
-test('12A2: later-wave donor fields were NOT smuggled in', () => {
-  // The donor also localizes Team longBio and Showroom title/detailText, and
-  // carries secondaryPhoto/workImages. Those are a later parity wave; 12A2 is
-  // localization wiring only.
-  for (const deferred of ['longBio', 'secondaryPhoto', 'workImages']) {
-    assert.ok(!LOCALIZED_TEAM_FIELDS.includes(deferred), `${deferred} is deferred`)
+test('later-wave donor fields are still deferred', () => {
+  // Wave 14A delivered Team's longBio, secondaryPhoto and workImages, so only
+  // the Showroom half of the donor's parity work remains outstanding (14B).
+  // The two Team image fields stay out of the localized set permanently.
+  for (const scalar of ['secondaryPhoto', 'workImages']) {
+    assert.ok(!LOCALIZED_TEAM_FIELDS.includes(scalar), `${scalar} must stay scalar`)
   }
   for (const deferred of ['title', 'detailText']) {
     assert.ok(!LOCALIZED_SHOWROOM_FIELDS.includes(deferred), `${deferred} is deferred`)
@@ -561,4 +564,70 @@ test('12A2: unwrapping then resaving unchanged text is a no-op round trip', asyn
   assert.equal(inInput, 'Kıdemli Danışman')
   assert.equal(spy.calls, 0, 'opening and saving a form must not spend quota')
   assert.deepEqual(out.role, stored)
+})
+
+/* ============ Wave 14A — rich profile schema validation ============ */
+
+// Asserted against the REAL model (this file mocks nothing), which is why the
+// route-level suite in teamRichProfile.test.js defers schema rules to here.
+
+test('14A: an existing member with no rich fields is still valid', async () => {
+  const member = new TeamMember({ name: 'Legacy Agent', role: 'Senior Agent' })
+
+  assert.equal(member.validateSync(), undefined, 'a pre-14A member became invalid')
+  assert.equal(member.workImages, undefined, 'an absent gallery was materialised as []')
+})
+
+test('14A: role validation is unaffected by the new fields', async () => {
+  // The Wave 12A2 contract, re-asserted now that the schema has grown.
+  for (const bad of [undefined, null, '', '   ', {}, { foo: 'bar' }]) {
+    const member = new TeamMember({ name: 'X', role: bad })
+    assert.ok(member.validateSync()?.errors?.role, `role '${JSON.stringify(bad)}' was accepted`)
+  }
+
+  const ok = new TeamMember({ name: 'X', role: '  Senior Agent  ' })
+  assert.equal(ok.validateSync(), undefined)
+  assert.equal(ok.role, 'Senior Agent', 'role trimming was lost')
+})
+
+test('14A: secondaryPhoto accepts empty, site-relative and http(s)', async () => {
+  for (const url of ['', '/uploads/a.png', 'http://cdn.test/a.png', 'https://cdn.test/a.png']) {
+    const member = new TeamMember({ name: 'X', role: 'Agent', secondaryPhoto: url })
+    assert.equal(member.validateSync(), undefined, `rejected a valid URL: ${JSON.stringify(url)}`)
+  }
+})
+
+test('14A: secondaryPhoto rejects dangerous and malformed URLs', async () => {
+  for (const url of ['javascript:alert(1)', 'data:text/html;base64,PHN2Zz4=', 'file:///etc/passwd', '//evil.test/a.png', 'not a url']) {
+    const member = new TeamMember({ name: 'X', role: 'Agent', secondaryPhoto: url })
+    assert.ok(member.validateSync()?.errors?.secondaryPhoto, `accepted a dangerous URL: ${url}`)
+  }
+})
+
+test('14A: workImages validates every entry and caps the gallery', async () => {
+  const good = new TeamMember({ name: 'X', role: 'Agent', workImages: ['/a.png', 'https://cdn.test/b.png'] })
+  assert.equal(good.validateSync(), undefined)
+
+  const oneBad = new TeamMember({ name: 'X', role: 'Agent', workImages: ['/a.png', 'javascript:alert(1)'] })
+  assert.ok(oneBad.validateSync()?.errors?.workImages, 'a dangerous URL passed inside the array')
+
+  const tooMany = new TeamMember({
+    name: 'X', role: 'Agent',
+    workImages: Array.from({ length: 25 }, (_, i) => `/uploads/${i}.png`),
+  })
+  assert.ok(tooMany.validateSync()?.errors?.workImages, 'the gallery cap is not enforced')
+})
+
+test('14A: longBio stores a localized object and legacy strings still resolve', async () => {
+  const localized = new TeamMember({
+    name: 'X', role: 'Agent',
+    longBio: { sourceLang: 'en', en: 'Long story', tr: 'Uzun hikaye' },
+  })
+  assert.equal(localized.validateSync(), undefined)
+  assert.equal(resolveLocalized(localized.longBio, 'tr'), 'Uzun hikaye')
+
+  // Mixed, so a plain string hydrates too — the reason no migration is needed.
+  const legacy = new TeamMember({ name: 'X', role: 'Agent', longBio: 'Plain legacy text' })
+  assert.equal(legacy.validateSync(), undefined)
+  assert.equal(resolveLocalized(legacy.longBio, 'de'), 'Plain legacy text')
 })
