@@ -28,6 +28,7 @@ const userSchema = new mongoose.Schema({
       'reply_contacts',
       // Chats
       'view_chats',
+      'moderate_chats',
       // Content management
       'manage_reviews',
       'manage_team',

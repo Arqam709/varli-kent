@@ -102,6 +102,24 @@ export const ChatProvider = ({ children }) => {
   const [conversations, setConversations] = useState([])
   const [conversationsLoading, setConversationsLoading] = useState(false)
   const [conversationsError, setConversationsError] = useState(false)
+  const [conversationsPagination, setConversationsPagination] = useState(null)
+  const [conversationsLoadingMore, setConversationsLoadingMore] = useState(false)
+
+  /*
+   * Which page bucket in `chats` currently holds a SAVED conversation's
+   * transcript, set by loadConversation().
+   *
+   * Without this, deleting the open conversation can remove it from the
+   * server and from the history list while its messages stay rendered in the
+   * widget — a transcript for something that no longer exists. Knowing the
+   * key lets deletion clear exactly that bucket and nothing else, so an
+   * unrelated chat the user has open on another page is left alone.
+   */
+  const selectedConversationKeyRef = useRef(null)
+
+  // Guards against out-of-order history responses: a slow page-1 request
+  // must not overwrite a page-2 list that already arrived.
+  const conversationsRequestRef = useRef(0)
 
   const [transcriptLoading, setTranscriptLoading] = useState(false)
   const [transcriptError, setTranscriptError] = useState(false)
@@ -183,23 +201,156 @@ export const ChatProvider = ({ children }) => {
   const startNewConversation = (pageKey, welcomeMessage) => {
     conversationGenerationRef.current += 1
     setSelectedConversationId(null)
+    selectedConversationKeyRef.current = null
     resetChat(pageKey, welcomeMessage)
   }
 
-  // Loads the logged-in user's own conversation list for the history screen.
-  // Read-only — never touches `chats` or `selectedConversationId`.
-  const loadConversations = async () => {
-    setConversationsLoading(true)
+  /*
+   * Loads the user's own conversation list for the history screen.
+   *
+   * The endpoint is paginated and this wave deliberately added no
+   * conversation cap, so a long-standing user WILL have more history than
+   * one server page. `append` walks the pages; the default call shape
+   * loadConversations() still means "reload page 1", so existing callers
+   * are unaffected.
+   *
+   * Read-only with respect to `chats` and `selectedConversationId`.
+   */
+  const loadConversations = async ({ page = 1, append = false } = {}) => {
+    const requestGeneration = ++conversationsRequestRef.current
+
+    if (append) setConversationsLoadingMore(true)
+    else setConversationsLoading(true)
     setConversationsError(false)
 
     try {
-      const res = await api.get('/chat/conversations')
-      setConversations(res.data.conversations || [])
+      const res = await api.get('/chat/conversations', { params: { page } })
+
+      // A newer request has since been issued; this response is stale.
+      if (conversationsRequestRef.current !== requestGeneration) return { success: false }
+
+      const incoming = res.data.conversations || []
+
+      setConversations((prev) => {
+        if (!append) return incoming
+
+        // Appending by id, because a conversation whose lastActivityAt
+        // changed between two page fetches can legitimately appear on both.
+        const seen = new Set(prev.map((c) => c._id))
+        return [...prev, ...incoming.filter((c) => !seen.has(c._id))]
+      })
+
+      setConversationsPagination(res.data.pagination || null)
+
+      return { success: true }
     } catch (err) {
       console.log('Load conversations error:', err)
-      setConversationsError(true)
+
+      if (conversationsRequestRef.current !== requestGeneration) return { success: false }
+
+      // Only a failed FIRST page raises the page-level error state.
+      //
+      // Settings renders its list behind `!conversationsError`, so setting it
+      // here on an append would hide every row already on screen and replace
+      // them with a whole-history error — the opposite of preserving them.
+      // Keeping the array intact is not enough if the UI stops showing it.
+      //
+      // An append failure is reported through the returned { success: false },
+      // which handleLoadMore() already turns into a toast, leaving the loaded
+      // pages visible and Load More retryable.
+      if (!append) setConversationsError(true)
+
+      return { success: false }
     } finally {
-      setConversationsLoading(false)
+      if (conversationsRequestRef.current === requestGeneration) {
+        if (append) setConversationsLoadingMore(false)
+        else setConversationsLoading(false)
+      }
+    }
+  }
+
+  /*
+   * Drops whatever saved transcript is currently loaded.
+   *
+   * Bumping the generation is what stops an in-flight transcript GET or send
+   * from resurrecting a conversation that has just been deleted. The bucket
+   * is emptied rather than seeded with a welcome message because the widget
+   * re-seeds an empty bucket itself, in the correct language for that page.
+   */
+  const clearSelectedTranscript = () => {
+    const key = selectedConversationKeyRef.current
+
+    conversationGenerationRef.current += 1
+    setSelectedConversationId(null)
+    selectedConversationKeyRef.current = null
+
+    if (!key) return
+
+    setChats((prev) => ({ ...prev, [key]: [] }))
+    setFiltersByPage((prev) => ({ ...prev, [key]: {} }))
+  }
+
+  /*
+   * Deletes ONE of the user's own saved chatbot conversations.
+   *
+   * Deliberately NOT optimistic: the row leaves local state only after the
+   * server confirms, so a failed request keeps the conversation visible and
+   * openable rather than vanishing from a list it still exists in.
+   *
+   * If the deleted conversation was the one currently loaded, the selection is
+   * dropped so nothing holds a reference to an id the server no longer knows —
+   * the next message then starts a fresh conversation instead of trying to
+   * continue a deleted one.
+   *
+   * Returns { success } for the same reason loadConversation does: a caller
+   * cannot read the state this sets until after the next render.
+   */
+  const deleteConversation = async (conversationId) => {
+    try {
+      await api.delete(`/chat/conversations/${conversationId}`)
+
+      setConversations((prev) => prev.filter((c) => c._id !== conversationId))
+
+      setConversationsPagination((prev) =>
+        prev ? { ...prev, totalCount: Math.max((prev.totalCount ?? 1) - 1, 0) } : prev
+      )
+
+      // Only when the deleted conversation is the one on screen. Deleting a
+      // different row from the history list must not wipe the chat the user
+      // is currently reading.
+      if (selectedConversationId === conversationId) clearSelectedTranscript()
+
+      return { success: true }
+    } catch (err) {
+      console.log('Delete conversation error:', err)
+      return { success: false }
+    }
+  }
+
+  /*
+   * Clears the user's entire saved chatbot history.
+   *
+   * Only the SAVED history goes; the widget stays usable and a new
+   * conversation can be started immediately. `chats` (the in-memory
+   * transcripts per page) is left alone on purpose — wiping what the user is
+   * currently looking at is not what "clear history" asked for.
+   */
+  const deleteAllConversations = async () => {
+    try {
+      const res = await api.delete('/chat/conversations')
+
+      setConversations([])
+      setConversationsPagination(null)
+
+      // Every saved conversation is gone, so a loaded saved transcript is now
+      // orphaned. An UNSAVED session (no selected id) is not affected — it was
+      // never part of the history that was cleared.
+      if (selectedConversationId) clearSelectedTranscript()
+
+      return { success: true, deletedCount: res.data?.deletedCount ?? 0 }
+    } catch (err) {
+      console.log('Clear conversations error:', err)
+      return { success: false }
     }
   }
 
@@ -235,6 +386,7 @@ export const ChatProvider = ({ children }) => {
       setChats((prev) => ({ ...prev, [key]: mappedMessages }))
       setFiltersByPage((prev) => ({ ...prev, [key]: {} }))
       setSelectedConversationId(res.data.conversation?._id || conversationId)
+      selectedConversationKeyRef.current = key
 
       return { success: true }
     } catch (err) {
@@ -379,6 +531,8 @@ export const ChatProvider = ({ children }) => {
         conversations,
         conversationsLoading,
         conversationsError,
+        conversationsPagination,
+        conversationsLoadingMore,
         transcriptLoading,
         transcriptError,
         openChat,
@@ -391,6 +545,8 @@ export const ChatProvider = ({ children }) => {
         sendMessage,
         loadConversations,
         loadConversation,
+        deleteConversation,
+        deleteAllConversations,
       }}
     >
       {children}

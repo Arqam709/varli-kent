@@ -11,6 +11,7 @@ import '../models/Property.js'
 import { protect } from '../middleware/auth.js'
 import { requireRole, requirePermission } from '../middleware/checkPermission.js'
 import { parsePage, parseLimit } from '../utils/pagination.js'
+import { deleteConversationCascade, deleteConversationsForUser } from '../services/chatPersistence.js'
 
 const router = express.Router()
 
@@ -264,6 +265,76 @@ router.get('/:conversationId', async (req, res, next) => {
       conversation,
       messages: normalizedMessages,
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/*
+ * ── Moderation ───────────────────────────────────────────────────────────
+ *
+ * The router-level guard above already establishes protect + owner/admin +
+ * view_chats. These two routes add requirePermission('moderate_chats') on
+ * top, so an admin who was granted read access to transcripts cannot delete
+ * them without being granted that separately. An owner passes both checks
+ * unconditionally, which is CURRENT's existing requirePermission contract.
+ *
+ * Agents and customers never reach here: requireRole('owner','admin') on the
+ * router rejects them first.
+ *
+ * Both routes target ChatConversation only. Customer/agent threads live in
+ * PropertyConversation and have no delete path here by design — a generic
+ * delete-by-id would risk exactly that confusion.
+ */
+
+// DELETE /api/admin/chats/:conversationId
+router.delete('/:conversationId', requirePermission('moderate_chats'), async (req, res, next) => {
+  try {
+    const { conversationId } = req.params
+
+    if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+      return res.status(400).json({ success: false, message: 'Invalid conversation id' })
+    }
+
+    // Existence is confirmed against ChatConversation specifically, so an id
+    // belonging to some other collection cannot be deleted through this route.
+    const conversation = await ChatConversation.findById(conversationId).select('_id')
+
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: 'Conversation not found' })
+    }
+
+    await deleteConversationCascade(conversation._id)
+
+    res.json({ success: true, deletedCount: 1 })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// DELETE /api/admin/chats/user/:userId — clears one user's AI chat history.
+//
+// Order against the single-segment route above does not matter: `/user/<id>`
+// is two path segments and `/:conversationId` matches exactly one, so this is
+// the only route it can reach.
+router.delete('/user/:userId', requirePermission('moderate_chats'), async (req, res, next) => {
+  try {
+    const { userId } = req.params
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ success: false, message: 'Invalid user id' })
+    }
+
+    const user = await User.findById(userId).select('_id')
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' })
+    }
+
+    // Deletes chat history ONLY. The account, its favourites, its leads and
+    // its property-agent threads are all untouched.
+    const { deletedCount } = await deleteConversationsForUser(user._id)
+
+    res.json({ success: true, deletedCount })
   } catch (err) {
     next(err)
   }

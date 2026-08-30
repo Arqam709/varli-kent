@@ -16,10 +16,18 @@ const SPECIAL_ACTIONS = {
   'users/request-owner-removal': 'requested removal of an owner',
   'users/confirm-owner-removal': 'removed an owner',
   'contact/status': 'updated the status of a lead',
+  'chats': 'deleted a chatbot conversation',
+  'chats/user': "cleared a user's chatbot history",
 }
 
 function describe(method, path) {
   const segments = path.replace(/^\/api\//, '').split('/').filter(Boolean)
+
+  // Everything mounted under /api/admin/* would otherwise report the resource
+  // 'admin', which tells a reader of the activity feed nothing. The segment
+  // after it is the real subject ('chats', 'property-assistant').
+  if (segments[0] === 'admin' && segments[1]) segments.shift()
+
   const resource = segments[0] || 'unknown'
   const rest = segments.slice(1).filter(s => !OBJECT_ID_RE.test(s))
   const specialKey = [resource, ...rest].join('/')

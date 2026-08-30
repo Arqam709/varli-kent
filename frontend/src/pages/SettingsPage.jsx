@@ -1,8 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
+import { useLanguage } from '../contexts/LanguageContext'
+import { useChat } from '../contexts/ChatContext'
 import api from '../lib/api'
 
 const Section = ({ title, description, children }) => (
@@ -58,6 +60,184 @@ const SecondaryBtn = ({ children, ...props }) => (
   </button>
 )
 
+/*
+ * The user's own saved AI chatbot history.
+ *
+ * Reads through the endpoints that already exist — GET /chat/conversations
+ * and GET /chat/conversations/:id, both scoped to req.user server-side — so
+ * this adds no second read API. Opening a conversation reuses ChatContext's
+ * loadConversation, the same path the chat widget itself uses.
+ *
+ * This is the AI assistant only. Messages with a human agent live in the
+ * property-conversation system and are deliberately untouched here, which is
+ * why the copy says "AI chat" everywhere rather than just "messages".
+ */
+const AiChatHistorySection = () => {
+  const { t } = useLanguage()
+  const navigate = useNavigate()
+  const h = t.aiChatHistory || {}
+  const {
+    conversations, conversationsLoading, conversationsError,
+    conversationsPagination, conversationsLoadingMore,
+    loadConversations, loadConversation, deleteConversation, deleteAllConversations,
+    openChat,
+  } = useChat()
+
+  const [confirm, setConfirm] = useState(null)   // { mode: 'one'|'all', id? }
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => { loadConversations() }, [])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The history endpoint is paginated and this wave added no conversation
+  // cap, so a long-standing user can have more history than one page.
+  const hasMore = Boolean(
+    conversationsPagination &&
+    conversationsPagination.page < conversationsPagination.totalPages
+  )
+
+  const handleLoadMore = async () => {
+    const next = (conversationsPagination?.page ?? 1) + 1
+    const result = await loadConversations({ page: next, append: true })
+    // A failed page append leaves everything already loaded on screen.
+    if (!result?.success) toast.error(h.error || 'Could not load more history.')
+  }
+
+  const handleOpen = async (id) => {
+    const result = await loadConversation('/', id)
+    if (!result?.success) { toast.error(h.error || 'Could not load that conversation.'); return }
+    openChat()
+    navigate('/')
+  }
+
+  const handleConfirm = async () => {
+    setBusy(true)
+    try {
+      if (confirm.mode === 'one') {
+        const result = await deleteConversation(confirm.id)
+        // The list is only mutated by ChatContext AFTER the server confirms,
+        // so a failure leaves the conversation exactly where it was.
+        if (result?.success) toast.success(h.deletedOne || 'AI chat deleted')
+        else toast.error(h.deleteFailed || 'Could not delete — please try again.')
+      } else {
+        const result = await deleteAllConversations()
+        if (result?.success) toast.success(h.clearedAll || 'AI chat history cleared')
+        else toast.error(h.deleteFailed || 'Could not delete — please try again.')
+      }
+    } finally {
+      setBusy(false)
+      setConfirm(null)
+    }
+  }
+
+  const rowStyle = { borderColor: 'var(--t-border)' }
+
+  return (
+    <Section title={h.title || 'My AI Chat History'} description={h.description || 'Conversations you have had with the VarliKent AI assistant.'}>
+      {conversationsLoading && (
+        <p className="text-sm" style={{ color: 'var(--t-muted)' }}>{h.loading || 'Loading your chat history…'}</p>
+      )}
+
+      {!conversationsLoading && conversationsError && (
+        <p className="text-sm" style={{ color: '#dc2626' }}>{h.error || 'Could not load your chat history.'}</p>
+      )}
+
+      {!conversationsLoading && !conversationsError && conversations.length === 0 && (
+        <p className="text-sm" style={{ color: 'var(--t-muted)' }}>{h.empty || 'No AI chat history yet.'}</p>
+      )}
+
+      {!conversationsLoading && !conversationsError && conversations.length > 0 && (
+        <>
+          <ul className="divide-y" style={rowStyle}>
+            {conversations.map((c) => (
+              <li key={c._id} className="flex items-center gap-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm" style={{ color: 'var(--t-text)' }}>
+                    {c.lastMessage?.text || (h.title || 'AI chat')}
+                  </p>
+                  <p className="mt-0.5 text-xs" style={{ color: 'var(--t-muted)' }}>
+                    {new Date(c.lastActivityAt || c.createdAt).toLocaleString()}
+                    {typeof c.messageCount === 'number' ? ` · ${c.messageCount} ${h.messages || 'messages'}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleOpen(c._id)}
+                  className="shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition hover:opacity-80 cursor-pointer"
+                  style={{ borderColor: 'var(--t-border)', color: 'var(--t-text)' }}
+                >
+                  {h.open || 'Open'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirm({ mode: 'one', id: c._id })}
+                  disabled={busy}
+                  aria-label={`${h.deleteOne || 'Delete'} — ${new Date(c.lastActivityAt || c.createdAt).toLocaleDateString()}`}
+                  className="shrink-0 rounded-full border border-red-300 px-4 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-40 cursor-pointer"
+                >
+                  {h.deleteOne || 'Delete'}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {hasMore && (
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              disabled={conversationsLoadingMore}
+              className="mt-4 w-full rounded-full border px-5 py-2 text-sm font-semibold transition hover:opacity-80 disabled:opacity-40 cursor-pointer"
+              style={{ borderColor: 'var(--t-border)', color: 'var(--t-text)' }}
+            >
+              {conversationsLoadingMore ? (h.loadingMore || 'Loading…') : (h.loadMore || 'Load More')}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setConfirm({ mode: 'all' })}
+            disabled={busy}
+            className="mt-5 rounded-full bg-red-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-40 cursor-pointer"
+          >
+            {h.clearAll || 'Clear All AI Chats'}
+          </button>
+        </>
+      )}
+
+      {confirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+          <div className="w-full max-w-sm rounded-2xl p-6 text-center" style={{ background: 'var(--t-surface)', boxShadow: 'var(--t-shadow)' }}>
+            <p className="text-sm font-semibold" style={{ color: 'var(--t-text)' }}>
+              {confirm.mode === 'one'
+                ? (h.confirmDeleteOne || 'Delete this AI chat?')
+                : (h.confirmClearAll || 'Clear all AI chat history?')}
+            </p>
+            <p className="mt-2 text-xs" style={{ color: 'var(--t-muted)' }}>{h.cannotUndo || 'This cannot be undone.'}</p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirm(null)}
+                disabled={busy}
+                className="flex-1 rounded-xl border py-2.5 text-sm font-medium transition disabled:opacity-40 cursor-pointer"
+                style={{ borderColor: 'var(--t-border)', color: 'var(--t-text)' }}
+              >
+                {h.cancel || 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={busy}
+                className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-40 cursor-pointer"
+              >
+                {busy
+                  ? (confirm.mode === 'one' ? (h.deleting || 'Deleting…') : (h.clearing || 'Clearing…'))
+                  : (h.confirm || 'Delete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Section>
+  )
+}
 const SettingsPage = () => {
   const { user, portal, updateUser, logout } = useAuth()
   const { theme, setTheme, themes } = useTheme()
@@ -282,6 +462,9 @@ const SettingsPage = () => {
             ))}
           </div>
         </Section>
+
+        {/* Saved AI assistant conversations, with per-item and bulk deletion. */}
+        <AiChatHistorySection />
 
         {/* Quick links */}
         <Section title="Quick Links">

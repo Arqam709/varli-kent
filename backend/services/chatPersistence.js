@@ -167,3 +167,65 @@ export const recordChatExchange = async ({
     return { persisted: false, conversationId: null, error: true }
   }
 }
+
+/*
+ * ── AI chatbot history deletion ──────────────────────────────────────────
+ *
+ * The single authoritative cleanup path. All four delete routes (user
+ * delete-one, user clear-all, admin delete-one, admin clear-user) go through
+ * here, so "what belongs to a conversation" is decided once.
+ *
+ * ── What is deleted, and what deliberately is not ────────────────────────
+ * A ChatConversation owns its ChatMessage rows and nothing else. Two
+ * references point OUT of this data and must survive:
+ *
+ *   ChatConversation.lead  -> ContactSubmission. A captured lead is a real
+ *     business record owned by the leads system (/admin/messages, lead
+ *     routing). A visitor tidying their chat history must not silently
+ *     destroy the enquiry the sales team is working.
+ *
+ *   ChatMessage.propertyIds -> Property. Listings are obviously not owned by
+ *     a chat that mentioned them.
+ *
+ * PropertyConversation / PropertyMessage are a DIFFERENT system (customer to
+ * agent messaging) and are never touched here.
+ *
+ * ── Ordering ─────────────────────────────────────────────────────────────
+ * Messages go first. If message deletion fails the error propagates and the
+ * conversation row survives, so the caller sees a failure and the history is
+ * still reachable — the opposite order would orphan messages behind a
+ * conversation that no longer exists, invisible to every query and to the
+ * user who asked for them to be gone.
+ *
+ * No transaction: this deployment runs against a single connection with no
+ * documented replica set, and Mongo requires one for multi-document
+ * transactions. Sequencing so the recoverable state is the safe state is the
+ * honest alternative.
+ */
+export const deleteConversationCascade = async (conversationId) => {
+  const messages = await ChatMessage.deleteMany({ conversation: conversationId })
+  await ChatConversation.deleteOne({ _id: conversationId })
+
+  return { messagesDeleted: messages.deletedCount ?? 0 }
+}
+
+/**
+ * Deletes every AI chatbot conversation belonging to one user.
+ *
+ * Only _id values are read, never transcripts — clearing a long history must
+ * not pull every message document into memory to do it.
+ *
+ * Returns the number of CONVERSATIONS removed. A user with no history is not
+ * an error; it returns 0.
+ */
+export const deleteConversationsForUser = async (userId) => {
+  const conversations = await ChatConversation.find({ user: userId }).select('_id').lean()
+
+  let deletedCount = 0
+  for (const { _id } of conversations) {
+    await deleteConversationCascade(_id)
+    deletedCount++
+  }
+
+  return { deletedCount }
+}

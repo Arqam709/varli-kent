@@ -29,6 +29,7 @@ const resourceLabel = (resource, a) => {
     about: a.resource?.about || 'the About page', 'page-content': a.resource?.pageContent || 'page content',
     users: a.resource?.users || 'a user account', contact: a.resource?.contact || 'a lead',
     settings: a.resource?.settings || 'site settings', 'lead-routing': a.resource?.leadRouting || 'lead routing',
+    chats: a.resource?.chats || 'a chatbot conversation',
   }
   return map[resource] || resource.replace(/-/g, ' ')
 }

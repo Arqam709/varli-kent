@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { toast } from 'react-toastify'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
 import { useAuth } from '../contexts/AuthContext'
@@ -305,12 +306,32 @@ const ConversationRow = ({ conversation, isSelected, onClick, labels }) => (
   </button>
 )
 
+// Matches the confirmation modal AdminTeam / AdminShowroom / AdminPartners
+// already use, so destructive actions look the same across the admin.
+const ConfirmModal = ({ message, onConfirm, onCancel, busy, labels }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" role="dialog" aria-modal="true">
+    <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl text-center">
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+        <svg className="h-6 w-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+      </div>
+      <p className="text-sm text-slate-700 leading-relaxed">{message}</p>
+      <div className="mt-5 flex gap-3">
+        <button type="button" onClick={onCancel} disabled={busy} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition disabled:opacity-40 cursor-pointer">
+          {labels.cancel || 'Cancel'}
+        </button>
+        <button type="button" onClick={onConfirm} disabled={busy} className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white hover:bg-red-600 transition disabled:opacity-40 cursor-pointer">
+          {busy ? (labels.deleting || 'Deleting…') : (labels.confirm || 'Delete')}
+        </button>
+      </div>
+    </div>
+  </div>
+)
 const AdminUserChats = () => {
   const { hasPermission } = useAuth()
   const { t } = useLanguage()
   const p = t.adminPages?.userChats || {}
-
-  // Level 1 — users
   const [users, setUsers] = useState([])
   const [usersPagination, setUsersPagination] = useState(null)
   const [usersLoading, setUsersLoading] = useState(true)
@@ -338,6 +359,13 @@ const AdminUserChats = () => {
   const [messages, setMessages] = useState([])
   const [transcriptLoading, setTranscriptLoading] = useState(false)
   const [transcriptError, setTranscriptError] = useState(false)
+
+  // Moderation state. Declared with the rest of the component state so the
+  // hook order is unconditional — the handler that uses it lives further
+  // down, next to the values it reads.
+  const [pendingDelete, setPendingDelete] = useState(null)  // { mode: 'one' | 'user' }
+  const [deleting, setDeleting] = useState(false)
+
 
   // Which screen is visible below the `lg` breakpoint, where only one pane
   // shows at a time. Irrelevant at `lg` and above, where panes are governed
@@ -540,6 +568,47 @@ The admin selects a different user. */
   const conversationTotalPages = conversationsPagination?.totalPages || 1
   const transcriptItems = buildTranscriptItems(messages)
   const lastPageContext = getLastPageContext(messages)
+  /*
+   * Moderation. Gated on `moderate_chats`, NOT on `view_chats` — reading a
+   * transcript and erasing it are different powers, and the server enforces
+   * the same split, so hiding these buttons is UX rather than the boundary.
+   *
+   * Both actions touch AI chatbot conversations only. The user's account,
+   * their captured leads and their messages with a human agent are all
+   * separate systems and are unaffected.
+   */
+  const canModerate = hasPermission('moderate_chats')
+
+  const handleModerationConfirm = async () => {
+    setDeleting(true)
+    try {
+      if (pendingDelete.mode === 'one') {
+        await api.delete(`/admin/chats/${selectedConversationId}`)
+        setConversations((prev) => prev.filter((c) => c._id !== selectedConversationId))
+        setSelectedConversationId(null)
+        setSelectedConversation(null)
+        setMessages([])
+        setMobileView('conversations')
+        toast.success(p.deleted || 'Conversation deleted')
+      } else {
+        const res = await api.delete(`/admin/chats/user/${selectedUserId}`)
+        setConversations([])
+        setSelectedConversationId(null)
+        setSelectedConversation(null)
+        setMessages([])
+        setMobileView('conversations')
+        toast.success(`${p.cleared || 'Chat history cleared'} (${res.data?.deletedCount ?? 0})`)
+        // The user list shows a per-user conversation count, so it is now stale.
+        loadUsers()
+      }
+    } catch (err) {
+      console.log('Chat moderation delete error:', err)
+      toast.error(p.deleteFailed || 'Could not delete')
+    } finally {
+      setDeleting(false)
+      setPendingDelete(null)
+    }
+  }
   const selectedUserEntry = users.find((entry) => entry.user._id === selectedUserId)
 
   return (
@@ -710,6 +779,16 @@ The admin selects a different user. */
                       >
                         {p.retry || 'Retry'}
                       </button>
+                  {canModerate && conversations.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete({ mode: 'user' })}
+                      disabled={deleting}
+                      className="mt-3 w-full rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-40 cursor-pointer"
+                    >
+                      {p.clearUserHistory || "Clear this user's AI chats"}
+                    </button>
+                  )}
                     </div>
                   ) : conversations.length === 0 ? (
                     <div className="m-4 rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">
@@ -833,6 +912,16 @@ The admin selects a different user. */
                         )}
                       </div>
                     </div>
+                    {canModerate && (
+                      <button
+                        type="button"
+                        onClick={() => setPendingDelete({ mode: 'one' })}
+                        disabled={deleting}
+                        className="shrink-0 rounded-full border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-40 cursor-pointer"
+                      >
+                        {p.deleteConversation || 'Delete conversation'}
+                      </button>
+                    )}
                   </div>
 
                   {selectedConversation?.lead && (
@@ -861,6 +950,23 @@ The admin selects a different user. */
           </div>
         </div>
       </div>
+
+      {pendingDelete && (
+        <ConfirmModal
+          busy={deleting}
+          labels={p}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={handleModerationConfirm}
+          message={
+            pendingDelete.mode === 'one'
+              ? (p.confirmDeleteConversation || 'Delete this chatbot conversation and all of its messages? This cannot be undone.')
+              : (p.confirmClearUser || 'Clear ALL chatbot conversations for {name}?').replace(
+                  '{name}',
+                  getUserDisplayName(selectedUserEntry?.user, rowLabels)
+                )
+          }
+        />
+      )}
     </AdminLayout>
   )
 }

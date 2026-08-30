@@ -19,6 +19,7 @@ const ALL_PERMISSIONS = [
   { key: 'view_contacts',   group: 'Contacts & Leads', label: 'View Contacts' },
   { key: 'reply_contacts',  group: 'Contacts & Leads', label: 'Reply to Contacts' },
   { key: 'view_chats',      group: 'Contacts & Leads', label: 'View Live Chats' },
+  { key: 'moderate_chats',  group: 'Contacts & Leads', label: 'Moderate AI Chats (delete chatbot history)' },
   // Content
   { key: 'manage_reviews',  group: 'Content',          label: 'Manage Reviews' },
   { key: 'manage_team',     group: 'Content',          label: 'Manage Team Members' },

@@ -1,5 +1,18 @@
 const translations = {
   en: {
+    aiChatHistory: {
+      title: 'My AI Chat History', description: 'Conversations you have had with the VarliKent AI assistant. This does not include messages with an agent.',
+      loading: 'Loading your chat history…', empty: 'No AI chat history yet.', error: 'Could not load your chat history.',
+      open: 'Open', deleteOne: 'Delete', clearAll: 'Clear All AI Chats',
+      messages: 'messages', deleting: 'Deleting…', clearing: 'Clearing…',
+      confirmDeleteOne: 'Delete this AI chat?',
+      confirmClearAll: 'Clear all AI chat history?',
+      cannotUndo: 'This cannot be undone.',
+      cancel: 'Cancel', confirm: 'Delete',
+      deletedOne: 'AI chat deleted', clearedAll: 'AI chat history cleared',
+      loadMore: 'Load More', loadingMore: 'Loading…',
+      deleteFailed: 'Could not delete — please try again.',
+    },
     partners: {
       label: 'Trusted By Leading Companies',
     },
@@ -697,6 +710,7 @@ const translations = {
         replyByEmail: 'Reply by Email', call: 'Call', markReplied: 'Mark Replied', archive: 'Archive',
       },
       userChats: {
+        deleteConversation: 'Delete conversation', clearUserHistory: 'Clear this user\'s AI chats', confirmDeleteConversation: 'Delete this chatbot conversation and all of its messages? This cannot be undone.', confirmClearUser: 'Clear ALL chatbot conversations for {name}? Their account, leads and agent messages are not affected. This cannot be undone.', deleting: 'Deleting…', deleted: 'Conversation deleted', cleared: 'Chat history cleared', deleteFailed: 'Could not delete', cancel: 'Cancel', confirm: 'Delete',
         title: 'User Chats', subtitle: 'Review conversations between logged-in users and the AI assistant.',
         searchPlaceholder: 'Search by name or email...',
         active: 'Active', archived: 'Archived', leadsOnly: 'Leads only',
@@ -827,6 +841,7 @@ const translations = {
         resource: {
           properties: 'a property', partners: 'a partner', showroom: 'a showroom item', team: 'a team member',
           reviews: 'a review', projects: 'a project', about: 'the About page', pageContent: 'page content',
+          chats: 'a chatbot conversation',
           users: 'a user account', contact: 'a lead', settings: 'site settings', leadRouting: 'lead routing',
         },
       },
@@ -983,6 +998,19 @@ const translations = {
   },
 
   tr: {
+    aiChatHistory: {
+      title: 'Yapay Zeka Sohbet Geçmişim', description: 'VarliKent yapay zeka asistanıyla yaptığınız görüşmeler. Danışmanla yapılan mesajlaşmalar buraya dahil değildir.',
+      loading: 'Sohbet geçmişiniz yükleniyor…', empty: 'Henüz yapay zeka sohbet geçmişi yok.', error: 'Sohbet geçmişiniz yüklenemedi.',
+      open: 'Aç', deleteOne: 'Sil', clearAll: 'Tüm Yapay Zeka Sohbetlerini Temizle',
+      messages: 'mesaj', deleting: 'Siliniyor…', clearing: 'Temizleniyor…',
+      confirmDeleteOne: 'Bu yapay zeka sohbeti silinsin mi?',
+      confirmClearAll: 'Tüm yapay zeka sohbet geçmişi temizlensin mi?',
+      cannotUndo: 'Bu işlem geri alınamaz.',
+      cancel: 'İptal', confirm: 'Sil',
+      deletedOne: 'Yapay zeka sohbeti silindi', clearedAll: 'Yapay zeka sohbet geçmişi temizlendi',
+      loadMore: 'Daha Fazla Yükle', loadingMore: 'Yükleniyor…',
+      deleteFailed: 'Silinemedi — lütfen tekrar deneyin.',
+    },
     partners: {
       label: 'Lider Şirketler Tarafından Tercih Edildi',
     },
@@ -1701,6 +1729,7 @@ forgotPasswordPage: {
         replyByEmail: 'E-posta ile Yanıtla', call: 'Ara', markReplied: 'Yanıtlandı İşaretle', archive: 'Arşivle',
       },
       userChats: {
+        deleteConversation: 'Görüşmeyi sil', clearUserHistory: 'Bu kullanıcının yapay zeka sohbetlerini temizle', confirmDeleteConversation: 'Bu sohbet ve tüm mesajları silinsin mi? Bu işlem geri alınamaz.', confirmClearUser: '{name} kullanıcısının TÜM yapay zeka sohbetleri silinsin mi? Hesabı, talepleri ve danışman mesajları etkilenmez. Bu işlem geri alınamaz.', deleting: 'Siliniyor…', deleted: 'Görüşme silindi', cleared: 'Sohbet geçmişi temizlendi', deleteFailed: 'Silinemedi', cancel: 'İptal', confirm: 'Sil',
         title: 'Kullanıcı Sohbetleri', subtitle: 'Kayıtlı kullanıcılar ile yapay zeka asistanı arasındaki görüşmeleri inceleyin.',
         searchPlaceholder: 'Ad veya e-posta ile ara...',
         active: 'Aktif', archived: 'Arşivlendi', leadsOnly: 'Yalnızca müşteri adayları',
@@ -1831,6 +1860,7 @@ forgotPasswordPage: {
         resource: {
           properties: 'bir mülk', partners: 'bir partner', showroom: 'bir showroom öğesi', team: 'bir ekip üyesi',
           reviews: 'bir yorum', projects: 'bir proje', about: 'Hakkımızda sayfası', pageContent: 'sayfa içeriği',
+          chats: 'bir sohbet görüşmesi',
           users: 'bir kullanıcı hesabı', contact: 'bir talep', settings: 'site ayarları', leadRouting: 'talep yönlendirme',
         },
       },
@@ -1987,6 +2017,19 @@ forgotPasswordPage: {
   },
 
   ar: {
+    aiChatHistory: {
+      title: 'سجل محادثاتي مع الذكاء الاصطناعي', description: 'المحادثات التي أجريتها مع مساعد VarliKent الذكي. لا يشمل ذلك الرسائل المتبادلة مع أحد المستشارين.',
+      loading: 'جارٍ تحميل سجل محادثاتك…', empty: 'لا يوجد سجل محادثات بعد.', error: 'تعذّر تحميل سجل محادثاتك.',
+      open: 'فتح', deleteOne: 'حذف', clearAll: 'مسح كل محادثات الذكاء الاصطناعي',
+      messages: 'رسالة', deleting: 'جارٍ الحذف…', clearing: 'جارٍ المسح…',
+      confirmDeleteOne: 'هل تريد حذف هذه المحادثة؟',
+      confirmClearAll: 'هل تريد مسح كل سجل محادثات الذكاء الاصطناعي؟',
+      cannotUndo: 'لا يمكن التراجع عن هذا الإجراء.',
+      cancel: 'إلغاء', confirm: 'حذف',
+      deletedOne: 'تم حذف المحادثة', clearedAll: 'تم مسح سجل المحادثات',
+      loadMore: 'تحميل المزيد', loadingMore: 'جارٍ التحميل…',
+      deleteFailed: 'تعذّر الحذف — يرجى المحاولة مرة أخرى.',
+    },
     partners: {
       label: 'موثوق به من كبرى الشركات',
     },
@@ -2706,6 +2749,7 @@ forgotPasswordPage: {
         replyByEmail: 'الرد بالبريد', call: 'اتصل', markReplied: 'تحديد كمُجاب', archive: 'أرشفة',
       },
       userChats: {
+        deleteConversation: 'حذف المحادثة', clearUserHistory: 'مسح محادثات هذا المستخدم', confirmDeleteConversation: 'هل تريد حذف هذه المحادثة وكل رسائلها؟ لا يمكن التراجع عن ذلك.', confirmClearUser: 'هل تريد مسح كل محادثات {name} مع الذكاء الاصطناعي؟ لن يتأثر حسابه أو طلباته أو رسائله مع المستشار. لا يمكن التراجع عن ذلك.', deleting: 'جارٍ الحذف…', deleted: 'تم حذف المحادثة', cleared: 'تم مسح سجل المحادثات', deleteFailed: 'تعذّر الحذف', cancel: 'إلغاء', confirm: 'حذف',
         title: 'محادثات المستخدمين', subtitle: 'مراجعة المحادثات بين المستخدمين المسجّلين والمساعد الذكي.',
         searchPlaceholder: 'بحث بالاسم أو البريد...',
         active: 'نشط', archived: 'مؤرشف', leadsOnly: 'العملاء المحتملون فقط',
@@ -2836,6 +2880,7 @@ forgotPasswordPage: {
         resource: {
           properties: 'عقار', partners: 'شريك', showroom: 'عنصر صالة عرض', team: 'عضو فريق',
           reviews: 'تقييم', projects: 'مشروع', about: 'صفحة من نحن', pageContent: 'محتوى الصفحة',
+          chats: 'محادثة مع الذكاء الاصطناعي',
           users: 'حساب مستخدم', contact: 'عميل محتمل', settings: 'إعدادات الموقع', leadRouting: 'توجيه العملاء',
         },
       },
@@ -2991,6 +3036,19 @@ forgotPasswordPage: {
     },
   },
   de: {
+    aiChatHistory: {
+      title: 'Mein KI-Chatverlauf', description: 'Ihre Unterhaltungen mit dem VarliKent-KI-Assistenten. Nachrichten mit einem Berater sind hier nicht enthalten.',
+      loading: 'Chatverlauf wird geladen…', empty: 'Noch kein KI-Chatverlauf vorhanden.', error: 'Ihr Chatverlauf konnte nicht geladen werden.',
+      open: 'Öffnen', deleteOne: 'Löschen', clearAll: 'Alle KI-Chats löschen',
+      messages: 'Nachrichten', deleting: 'Wird gelöscht…', clearing: 'Wird geleert…',
+      confirmDeleteOne: 'Diesen KI-Chat löschen?',
+      confirmClearAll: 'Den gesamten KI-Chatverlauf löschen?',
+      cannotUndo: 'Dies kann nicht rückgängig gemacht werden.',
+      cancel: 'Abbrechen', confirm: 'Löschen',
+      deletedOne: 'KI-Chat gelöscht', clearedAll: 'KI-Chatverlauf gelöscht',
+      loadMore: 'Mehr laden', loadingMore: 'Wird geladen…',
+      deleteFailed: 'Löschen fehlgeschlagen — bitte erneut versuchen.',
+    },
     aboutPageContent: {
       heroLabel: 'Unsere Geschichte',
       heroHeading: 'Über Varlikent',
@@ -3805,6 +3863,7 @@ forgotPasswordPage: {
         markedAs: 'Als {status} markiert', updateStatusFailed: 'Status konnte nicht aktualisiert werden',
       },
       userChats: {
+        deleteConversation: 'Unterhaltung löschen', clearUserHistory: 'KI-Chats dieses Nutzers löschen', confirmDeleteConversation: 'Diese Unterhaltung und alle ihre Nachrichten löschen? Dies kann nicht rückgängig gemacht werden.', confirmClearUser: 'ALLE KI-Unterhaltungen von {name} löschen? Konto, Anfragen und Beraternachrichten bleiben unberührt. Dies kann nicht rückgängig gemacht werden.', deleting: 'Wird gelöscht…', deleted: 'Unterhaltung gelöscht', cleared: 'Chatverlauf gelöscht', deleteFailed: 'Löschen fehlgeschlagen', cancel: 'Abbrechen', confirm: 'Löschen',
         title: 'Nutzer-Chats', subtitle: 'Überprüfen Sie Gespräche zwischen angemeldeten Nutzern und dem KI-Assistenten.',
         searchPlaceholder: 'Nach Name oder E-Mail suchen...',
         active: 'Aktiv', archived: 'Archiviert', leadsOnly: 'Nur Interessenten',
@@ -3951,6 +4010,7 @@ forgotPasswordPage: {
         resource: {
           properties: 'eine Immobilie', partners: 'einen Partner', showroom: 'ein Showroom-Element', team: 'ein Teammitglied',
           reviews: 'eine Bewertung', projects: 'ein Projekt', about: 'die Über-uns-Seite', pageContent: 'Seiteninhalt',
+          chats: 'eine Chatbot-Unterhaltung',
           users: 'ein Benutzerkonto', contact: 'einen Lead', settings: 'Website-Einstellungen', leadRouting: 'Lead-Weiterleitung',
         },
       },
@@ -4160,6 +4220,19 @@ forgotPasswordPage: {
     },
   },
   ru: {
+    aiChatHistory: {
+      title: 'История моих ИИ-чатов', description: 'Ваши беседы с ИИ-ассистентом VarliKent. Сообщения с консультантом сюда не входят.',
+      loading: 'Загрузка истории чатов…', empty: 'История ИИ-чатов пока пуста.', error: 'Не удалось загрузить историю чатов.',
+      open: 'Открыть', deleteOne: 'Удалить', clearAll: 'Очистить все ИИ-чаты',
+      messages: 'сообщений', deleting: 'Удаление…', clearing: 'Очистка…',
+      confirmDeleteOne: 'Удалить этот ИИ-чат?',
+      confirmClearAll: 'Очистить всю историю ИИ-чатов?',
+      cannotUndo: 'Это действие нельзя отменить.',
+      cancel: 'Отмена', confirm: 'Удалить',
+      deletedOne: 'ИИ-чат удалён', clearedAll: 'История ИИ-чатов очищена',
+      loadMore: 'Загрузить ещё', loadingMore: 'Загрузка…',
+      deleteFailed: 'Не удалось удалить — попробуйте ещё раз.',
+    },
     aboutPageContent: {
       heroLabel: 'Наша история',
       heroHeading: 'О компании Varlikent',
@@ -4974,6 +5047,7 @@ forgotPasswordPage: {
         markedAs: 'Отмечено как {status}', updateStatusFailed: 'Не удалось обновить статус',
       },
       userChats: {
+        deleteConversation: 'Удалить беседу', clearUserHistory: 'Очистить ИИ-чаты этого пользователя', confirmDeleteConversation: 'Удалить эту беседу и все её сообщения? Это действие нельзя отменить.', confirmClearUser: 'Очистить ВСЕ ИИ-беседы пользователя {name}? Аккаунт, заявки и сообщения с консультантом не затрагиваются. Это действие нельзя отменить.', deleting: 'Удаление…', deleted: 'Беседа удалена', cleared: 'История чатов очищена', deleteFailed: 'Не удалось удалить', cancel: 'Отмена', confirm: 'Удалить',
         title: 'Чаты пользователей', subtitle: 'Просматривайте беседы между авторизованными пользователями и ИИ-ассистентом.',
         searchPlaceholder: 'Поиск по имени или почте...',
         active: 'Активные', archived: 'В архиве', leadsOnly: 'Только заявки',
@@ -5120,6 +5194,7 @@ forgotPasswordPage: {
         resource: {
           properties: 'объект недвижимости', partners: 'партнёра', showroom: 'элемент шоурума', team: 'члена команды',
           reviews: 'отзыв', projects: 'проект', about: 'страницу «О нас»', pageContent: 'контент страницы',
+          chats: 'беседа с чат-ботом',
           users: 'учётную запись пользователя', contact: 'заявку', settings: 'настройки сайта', leadRouting: 'маршрутизацию заявок',
         },
       },
@@ -5329,6 +5404,19 @@ forgotPasswordPage: {
     },
   },
   ur: {
+    aiChatHistory: {
+      title: 'میری اے آئی چیٹ ہسٹری', description: 'VarliKent اے آئی اسسٹنٹ کے ساتھ آپ کی گفتگو۔ اس میں ایجنٹ کے ساتھ پیغامات شامل نہیں ہیں۔',
+      loading: 'آپ کی چیٹ ہسٹری لوڈ ہو رہی ہے…', empty: 'ابھی کوئی اے آئی چیٹ ہسٹری نہیں ہے۔', error: 'آپ کی چیٹ ہسٹری لوڈ نہیں ہو سکی۔',
+      open: 'کھولیں', deleteOne: 'حذف کریں', clearAll: 'تمام اے آئی چیٹس صاف کریں',
+      messages: 'پیغامات', deleting: 'حذف ہو رہا ہے…', clearing: 'صاف ہو رہا ہے…',
+      confirmDeleteOne: 'کیا یہ اے آئی چیٹ حذف کریں؟',
+      confirmClearAll: 'کیا تمام اے آئی چیٹ ہسٹری صاف کریں؟',
+      cannotUndo: 'اسے واپس نہیں کیا جا سکتا۔',
+      cancel: 'منسوخ کریں', confirm: 'حذف کریں',
+      deletedOne: 'اے آئی چیٹ حذف ہو گئی', clearedAll: 'اے آئی چیٹ ہسٹری صاف ہو گئی',
+      loadMore: 'مزید لوڈ کریں', loadingMore: 'لوڈ ہو رہا ہے…',
+      deleteFailed: 'حذف نہیں ہو سکا — دوبارہ کوشش کریں۔',
+    },
     aboutPageContent: {
       heroLabel: 'ہماری کہانی',
       heroHeading: 'ورلی کینٹ کے بارے میں',
@@ -6143,6 +6231,7 @@ forgotPasswordPage: {
         markedAs: '{status} کے طور پر نشان زد کیا گیا', updateStatusFailed: 'حالت اپڈیٹ کرنا ناکام ہوا',
       },
       userChats: {
+        deleteConversation: 'گفتگو حذف کریں', clearUserHistory: 'اس صارف کی اے آئی چیٹس صاف کریں', confirmDeleteConversation: 'کیا یہ گفتگو اور اس کے تمام پیغامات حذف کریں؟ اسے واپس نہیں کیا جا سکتا۔', confirmClearUser: 'کیا {name} کی تمام اے آئی گفتگو صاف کریں؟ ان کا اکاؤنٹ، لیڈز اور ایجنٹ پیغامات متاثر نہیں ہوں گے۔ اسے واپس نہیں کیا جا سکتا۔', deleting: 'حذف ہو رہا ہے…', deleted: 'گفتگو حذف ہو گئی', cleared: 'چیٹ ہسٹری صاف ہو گئی', deleteFailed: 'حذف نہیں ہو سکا', cancel: 'منسوخ کریں', confirm: 'حذف کریں',
         title: 'صارف چیٹس', subtitle: 'لاگ ان صارفین اور AI اسسٹنٹ کے درمیان گفتگو کا جائزہ لیں۔',
         searchPlaceholder: 'نام یا ای میل سے تلاش کریں...',
         active: 'فعال', archived: 'محفوظ شدہ', leadsOnly: 'صرف لیڈز',
@@ -6289,6 +6378,7 @@ forgotPasswordPage: {
         resource: {
           properties: 'ایک پراپرٹی', partners: 'ایک پارٹنر', showroom: 'ایک شوروم آئٹم', team: 'ایک ٹیم ممبر',
           reviews: 'ایک جائزہ', projects: 'ایک پروجیکٹ', about: 'ہمارے بارے میں صفحہ', pageContent: 'صفحہ کا مواد',
+          chats: 'ایک چیٹ بوٹ گفتگو',
           users: 'ایک صارف اکاؤنٹ', contact: 'ایک لیڈ', settings: 'سائٹ کی ترتیبات', leadRouting: 'لیڈ روٹنگ',
         },
       },
