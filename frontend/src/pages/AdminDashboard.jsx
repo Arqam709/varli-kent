@@ -5,6 +5,22 @@ import AdminLayout from '../components/AdminLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 
+/*
+ * Wave 14C — the donor's Showroom Media card.
+ *
+ * Donor semantics, kept exactly: every record across all four services,
+ * hidden ones included (that is what `/showroom/:service/all` returns), split
+ * into images and videos by URL. The number answers "how much media have we
+ * uploaded", not "how much is live".
+ *
+ * `isVideoUrl` is the same predicate ShowroomCarousel uses to decide whether
+ * to render a <video>. It is duplicated here rather than exported from that
+ * component — the Wave 14B carousel is not being touched — and a contract
+ * test asserts the two stay identical.
+ */
+const SHOWROOM_SERVICES = ['architecture', 'interior', 'construction', 'renovation']
+const isVideoUrl = (url) => Boolean(url) && (url.includes('/video/') || /\.(mp4|mov|webm|avi)$/i.test(url))
+
 const StatCard = ({ label, value, color = '#202a36' }) => (
   <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
     <p className="text-xs uppercase tracking-widest text-slate-500">{label}</p>
@@ -20,6 +36,10 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState({ total: 0, sale: 0, rent: 0, leads: 0, newLeads: 0 })
   const [recentLeads, setRecentLeads] = useState([])
   const [loading, setLoading] = useState(true)
+  // null until the four requests resolve, so the card appears with a real
+  // number rather than flashing 0. A failed service contributes 0 and the
+  // rest of the card still renders.
+  const [showroomStats, setShowroomStats] = useState(null)
 
   useEffect(() => {
     const fetches = [
@@ -41,6 +61,22 @@ const AdminDashboard = () => {
       })
       setRecentLeads(subs.slice(0, 4))
     }).finally(() => setLoading(false))
+
+    // Gated the way every other admin surface is: someone without
+    // manage_showroom would get four 403s and an empty card, so they are not
+    // requested at all. Separate from the Promise.all above so a slow showroom
+    // response never delays the property stats.
+    if (!hasPermission('manage_showroom')) return
+
+    Promise.all(SHOWROOM_SERVICES.map(s => api.get(`/showroom/${s}/all`).catch(() => ({ data: { images: [] } }))))
+      .then(results => {
+        const all = results.flatMap(r => r.data.images || [])
+        setShowroomStats({
+          images: all.filter(m => !isVideoUrl(m.url)).length,
+          videos: all.filter(m => isVideoUrl(m.url)).length,
+        })
+      })
+      .catch(() => {})
   }, [])
 
   return (
@@ -63,6 +99,29 @@ const AdminDashboard = () => {
             <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 flex items-center justify-center text-sm text-slate-400">{p.noContactsAccess || 'No contacts access'}</div>
           )}
         </div>
+
+        {showroomStats && (
+          <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="absolute inset-x-0 top-0 h-1" style={{ background: '#7c3aed' }} />
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">{p.showroomMedia || 'Showroom Media'}</p>
+                <p className="mt-0.5 text-xs text-slate-400">{p.showroomMediaHint || 'Across Architecture, Interior, Construction & Renovation'}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-5">
+                <span className="flex items-center gap-2 text-sm font-semibold text-[#202a36]">
+                  <span className="h-2.5 w-2.5 rounded-full bg-slate-400" /> {showroomStats.images} {p.imagesLabel || 'images'}
+                </span>
+                <span className="flex items-center gap-2 text-sm font-semibold text-[#202a36]">
+                  <span className="h-2.5 w-2.5 rounded-full bg-purple-500" /> {showroomStats.videos} {p.videosLabel || 'videos'}
+                </span>
+                <button onClick={() => navigate('/admin/showroom')} className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">
+                  {p.viewAll || 'View All'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
           {hasPermission('view_contacts') && (

@@ -547,6 +547,11 @@ const translations = {
       users: 'Users',
       settings: 'Settings',
       logout: 'Logout',
+      groupOverview: 'Overview',
+      groupListings: 'Listings',
+      groupSiteContent: 'Site Content',
+      groupCustomers: 'Customers',
+      groupSystem: 'System',
     },
     adminPages: {
       pageContent: {
@@ -589,6 +594,10 @@ const translations = {
         reviewLeads: 'Review Leads', manageUsers: 'Manage Users & Permissions',
         yourPermissions: 'Your permissions', noPermissions: 'No custom permissions assigned.',
         noContactsAccess: 'No contacts access',
+        showroomMedia: 'Showroom Media',
+        showroomMediaHint: 'Across Architecture, Interior, Construction & Renovation',
+        imagesLabel: 'images',
+        videosLabel: 'videos',
       },
       properties: {
         title: 'Property Management', totalListings: 'total listings',
@@ -701,6 +710,9 @@ const translations = {
           "eligibleForCredit": "Eligible for Credit",
           "exchange": "Open to Exchange",
         },
+        all: 'All',
+        forSale: 'For Sale',
+        forRent: 'For Rent',
       },
       propertyAssistant: {
         title: 'AI Listing Assistant', parseTab: 'Parse Listing', copyTab: 'Suggest Copy',
@@ -1603,6 +1615,11 @@ forgotPasswordPage: {
       users: 'Kullanıcılar',
       settings: 'Ayarlar',
       logout: 'Çıkış Yap',
+      groupOverview: 'Genel Bakış',
+      groupListings: 'İlanlar',
+      groupSiteContent: 'Site İçeriği',
+      groupCustomers: 'Müşteriler',
+      groupSystem: 'Sistem',
     },
     adminPages: {
       pageContent: {
@@ -1645,6 +1662,10 @@ forgotPasswordPage: {
         reviewLeads: 'Müşterileri İncele', manageUsers: 'Kullanıcıları & Yetkileri Yönet',
         yourPermissions: 'Yetkileriniz', noPermissions: 'Özel yetki atanmamış.',
         noContactsAccess: 'İletişim erişimi yok',
+        showroomMedia: 'Showroom Medyası',
+        showroomMediaHint: 'Mimarlık, İç Mimarlık, İnşaat ve Renovasyon genelinde',
+        imagesLabel: 'görsel',
+        videosLabel: 'video',
       },
       properties: {
         title: 'Mülk Yönetimi', totalListings: 'toplam ilan',
@@ -1757,6 +1778,9 @@ forgotPasswordPage: {
           "eligibleForCredit": "Krediye Uygun",
           "exchange": "Takasa Açık",
         },
+        all: 'Tümü',
+        forSale: 'Satılık',
+        forRent: 'Kiralık',
       },
       propertyAssistant: {
         title: 'Yapay Zekâ İlan Asistanı', parseTab: 'İlanı Ayrıştır', copyTab: 'Metin Öner',
@@ -2660,6 +2684,11 @@ forgotPasswordPage: {
       users: 'المستخدمون',
       settings: 'الإعدادات',
       logout: 'تسجيل الخروج',
+      groupOverview: 'نظرة عامة',
+      groupListings: 'القوائم',
+      groupSiteContent: 'محتوى الموقع',
+      groupCustomers: 'العملاء',
+      groupSystem: 'النظام',
     },
     adminPages: {
       pageContent: {
@@ -2702,6 +2731,10 @@ forgotPasswordPage: {
         reviewLeads: 'مراجعة العملاء', manageUsers: 'إدارة المستخدمين والصلاحيات',
         yourPermissions: 'صلاحياتك', noPermissions: 'لا توجد صلاحيات مخصصة.',
         noContactsAccess: 'لا يوجد وصول للاتصالات',
+        showroomMedia: 'وسائط المعرض',
+        showroomMediaHint: 'عبر العمارة والتصميم الداخلي والإنشاءات والتجديد',
+        imagesLabel: 'صورة',
+        videosLabel: 'فيديو',
       },
       properties: {
         title: 'إدارة العقارات', totalListings: 'إجمالي الإعلانات',
@@ -2814,6 +2847,9 @@ forgotPasswordPage: {
           "eligibleForCredit": "قابل للتمويل",
           "exchange": "قابل للمبادلة",
         },
+        all: 'الكل',
+        forSale: 'للبيع',
+        forRent: 'للإيجار',
       },
       propertyAssistant: {
         title: 'مساعد الإعلانات بالذكاء الاصطناعي', parseTab: 'تحليل الإعلان', copyTab: 'اقتراح النص',
@@ -3793,6 +3829,11 @@ forgotPasswordPage: {
       users: 'Nutzer',
       settings: 'Einstellungen',
       logout: 'Abmelden',
+      groupOverview: 'Übersicht',
+      groupListings: 'Angebote',
+      groupSiteContent: 'Seiteninhalt',
+      groupCustomers: 'Kunden',
+      groupSystem: 'System',
     },
     adminPages: {
       studioPalette: {
@@ -3827,6 +3868,10 @@ forgotPasswordPage: {
         reviewLeads: 'Interessenten prüfen', manageUsers: 'Nutzer & Berechtigungen verwalten',
         yourPermissions: 'Ihre Berechtigungen', noPermissions: 'Keine benutzerdefinierten Berechtigungen zugewiesen.',
         noContactsAccess: 'Kein Kontaktzugriff',
+        showroomMedia: 'Showroom-Medien',
+        showroomMediaHint: 'Über Architektur, Innenarchitektur, Bau und Renovierung hinweg',
+        imagesLabel: 'Bilder',
+        videosLabel: 'Videos',
       },
       properties: {
         title: 'Immobilienverwaltung', totalListings: 'Angebote insgesamt',
@@ -3939,6 +3984,9 @@ forgotPasswordPage: {
           "eligibleForCredit": "Kreditfähig",
           "exchange": "Tausch möglich",
         },
+        all: 'Alle',
+        forSale: 'Zu verkaufen',
+        forRent: 'Zu vermieten',
       },
       propertyAssistant: {
         title: 'KI-Anzeigenassistent', noPermission: 'Sie haben keine Berechtigung, den KI-Anzeigenassistenten zu verwenden.',
@@ -4996,6 +5044,11 @@ forgotPasswordPage: {
       users: 'Пользователи',
       settings: 'Настройки',
       logout: 'Выйти',
+      groupOverview: 'Обзор',
+      groupListings: 'Объявления',
+      groupSiteContent: 'Содержимое сайта',
+      groupCustomers: 'Клиенты',
+      groupSystem: 'Система',
     },
     adminPages: {
       studioPalette: {
@@ -5030,6 +5083,10 @@ forgotPasswordPage: {
         reviewLeads: 'Просмотреть заявки', manageUsers: 'Управление пользователями и правами',
         yourPermissions: 'Ваши права', noPermissions: 'Дополнительные права не назначены.',
         noContactsAccess: 'Нет доступа к контактам',
+        showroomMedia: 'Медиа шоурума',
+        showroomMediaHint: 'По архитектуре, интерьеру, строительству и ремонту',
+        imagesLabel: 'изображений',
+        videosLabel: 'видео',
       },
       properties: {
         title: 'Управление объектами', totalListings: 'всего объявлений',
@@ -5142,6 +5199,9 @@ forgotPasswordPage: {
           "eligibleForCredit": "Возможна ипотека",
           "exchange": "Возможен обмен",
         },
+        all: 'Все',
+        forSale: 'Продажа',
+        forRent: 'Аренда',
       },
       propertyAssistant: {
         title: 'ИИ-помощник по объявлениям', noPermission: 'У вас нет разрешения на использование ИИ-помощника по объявлениям.',
@@ -6199,6 +6259,11 @@ forgotPasswordPage: {
       users: 'صارفین',
       settings: 'ترتیبات',
       logout: 'لاگ آؤٹ',
+      groupOverview: 'جائزہ',
+      groupListings: 'فہرستیں',
+      groupSiteContent: 'سائٹ مواد',
+      groupCustomers: 'گاہک',
+      groupSystem: 'سسٹم',
     },
     adminPages: {
       studioPalette: {
@@ -6233,6 +6298,10 @@ forgotPasswordPage: {
         reviewLeads: 'لیڈز کا جائزہ لیں', manageUsers: 'صارفین اور اجازتیں منظم کریں',
         yourPermissions: 'آپ کی اجازتیں', noPermissions: 'کوئی خاص اجازت تفویض نہیں کی گئی۔',
         noContactsAccess: 'رابطوں تک رسائی نہیں',
+        showroomMedia: 'شوروم میڈیا',
+        showroomMediaHint: 'فن تعمیر، انٹیریئر، تعمیرات اور تزئین نو میں',
+        imagesLabel: 'تصاویر',
+        videosLabel: 'ویڈیوز',
       },
       properties: {
         title: 'جائیداد کا انتظام', totalListings: 'کل فہرستیں',
@@ -6345,6 +6414,9 @@ forgotPasswordPage: {
           "eligibleForCredit": "قرض کے قابل",
           "exchange": "تبادلے کے لیے کھلا",
         },
+        all: 'تمام',
+        forSale: 'برائے فروخت',
+        forRent: 'برائے کرایہ',
       },
       propertyAssistant: {
         title: 'AI فہرست اسسٹنٹ', noPermission: 'آپ کو AI فہرست اسسٹنٹ استعمال کرنے کی اجازت نہیں ہے۔',

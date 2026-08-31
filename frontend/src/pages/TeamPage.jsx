@@ -5,6 +5,7 @@ import { localizedText } from '../lib/localizedText'
 import usePageContent from '../lib/usePageContent'
 import api from '../lib/api'
 import { C } from '../contexts/ThemeContext'
+import useSeo from '../lib/useSeo'
 
 const GoldDivider = () => (
   <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, var(--vk-gold) 25%, var(--vk-gold) 75%, transparent)', opacity: 0.5 }} />
@@ -157,6 +158,11 @@ function MemberModal({ member, onClose, t, language }) {
   )
 }
 export default function TeamPage() {
+  useSeo({
+    title: 'Our Team — Varlikent Istanbul',
+    description: "Meet the Varlikent team — the architects, agents and advisors behind Istanbul's premier luxury real estate agency.",
+    path: '/team',
+  })
   const { t, language } = useLanguage()
 
   // Team has no toggleable sections — its members are records owned by

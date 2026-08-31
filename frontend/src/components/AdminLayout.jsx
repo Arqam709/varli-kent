@@ -5,6 +5,33 @@ import { useLanguage } from '../contexts/LanguageContext'
 
 const LANGS = [{ code: 'en', label: 'EN' }, { code: 'tr', label: 'TR' }, { code: 'ar', label: 'AR' }]
 
+/*
+ * Wave 14C — the donor's grouped sidebar, applied as a presentational layer.
+ *
+ * The donor groups its admin links under five headings but has no permission
+ * system; CURRENT gates every link on a specific permission. So rather than
+ * rebuilding the link list inside groups — which is how a gate gets dropped —
+ * the grouping is a map from route to heading, applied over the existing
+ * `navLinks` below. Every link keeps exactly the gate it had, and grouping
+ * changes nothing about who sees what.
+ *
+ * A route not named here still renders, in the last group, so a link added
+ * later is misplaced rather than invisible.
+ */
+const NAV_GROUPS = [
+  { key: 'groupOverview', fallback: 'Overview', routes: ['/admin/dashboard'] },
+  { key: 'groupListings', fallback: 'Listings', routes: ['/admin/properties', '/admin/projects', '/admin/showroom'] },
+  {
+    key: 'groupSiteContent',
+    fallback: 'Site Content',
+    routes: ['/admin/page-content', '/admin/about', '/admin/team', '/admin/partners', '/admin/reviews', '/admin/studio-palette'],
+  },
+  { key: 'groupCustomers', fallback: 'Customers', routes: ['/admin/messages', '/admin/user-chats', '/admin/lead-routing'] },
+  { key: 'groupSystem', fallback: 'System', routes: ['/admin/users', '/admin/settings', '/admin/activity'] },
+]
+
+const isGrouped = (to) => NAV_GROUPS.some((group) => group.routes.includes(to))
+
 const AdminLayout = ({ children }) => {
   const { user, isOwner, hasPermission, logout } = useAuth()
   const navigate = useNavigate()
@@ -63,6 +90,15 @@ const AdminLayout = ({ children }) => {
     ] : []),
   ]
 
+  // Empty groups drop out, so an agent who can only reach Properties sees one
+  // heading rather than five headings and one link.
+  const navGroups = NAV_GROUPS.map((group, i) => ({
+    title: a[group.key] || group.fallback,
+    links: navLinks.filter((l) => (
+      group.routes.includes(l.to) || (i === NAV_GROUPS.length - 1 && !isGrouped(l.to))
+    )),
+  })).filter((group) => group.links.length > 0)
+
   const Sidebar = () => (
     <div className="flex h-full flex-col" style={{ backgroundColor: '#202a36' }}>
       <div className="px-6 py-6 border-b border-slate-700">
@@ -73,8 +109,15 @@ const AdminLayout = ({ children }) => {
         </Link>
         <p className="mt-1 text-xs text-slate-500">{a.adminPortal || 'Admin Portal'}</p>
       </div>
-      <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
-        {navLinks.map(l => <NavLink key={l.to} to={l.to} className={linkCls}>{l.icon}{l.label}</NavLink>)}
+      <nav className="flex-1 space-y-5 px-3 py-4 overflow-y-auto">
+        {navGroups.map(group => (
+          <div key={group.title}>
+            <p className="px-4 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">{group.title}</p>
+            <div className="space-y-1">
+              {group.links.map(l => <NavLink key={l.to} to={l.to} className={linkCls}>{l.icon}{l.label}</NavLink>)}
+            </div>
+          </div>
+        ))}
       </nav>
       <div className="border-t border-slate-700 px-4 py-4">
         <div className="mb-3 flex items-center gap-3">

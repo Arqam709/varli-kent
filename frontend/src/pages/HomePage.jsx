@@ -10,6 +10,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import usePageContent from '../lib/usePageContent'
 import { sectionBackground } from '../lib/pageContentResolve'
 import { C } from '../contexts/ThemeContext'
+import useSeo from '../lib/useSeo'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -451,6 +452,24 @@ function PartnersMarquee({ nameColor }) {
 }
 
 export default function HomePage() {
+  /*
+   * This replaces a hand-rolled document.title + description effect that used
+   * to live further down this component. Two writers on the same tags would
+   * have raced — and only the ad-hoc one ran, so og:/twitter:/canonical never
+   * matched what the tab said.
+   *
+   * The title is the donor's, which composes with the "| VarliKent" suffix
+   * useSeo appends; the old title did not. The description is CURRENT's own,
+   * kept rather than replaced by the donor line: it names the full service
+   * range, and the donor's wording is already this site's default description,
+   * so copying it here would make the home page indistinguishable from every
+   * page that sets none.
+   */
+  useSeo({
+    title: 'Luxury Real Estate in Istanbul',
+    description: "VarliKent is Istanbul's full-service property company — architecture, construction, renovation, interior design and real estate.",
+    path: '/',
+  })
   const navigate = useNavigate()
   const { t }    = useLanguage()
   const mv       = useMotionVariants()
@@ -474,13 +493,6 @@ export default function HomePage() {
   const [rentCount, setRentCount] = useState(0)
   const [loading,   setLoading]   = useState(true)
   const [reviews,   setReviews]   = useState([])
-
-  useEffect(() => {
-    document.title = 'VarliKent — Architecture, Construction, Interior Design & Real Estate Istanbul'
-    let meta = document.querySelector('meta[name="description"]')
-    if (!meta) { meta = document.createElement('meta'); meta.name = 'description'; document.head.appendChild(meta) }
-    meta.content = "VarliKent is Istanbul's full-service property company — architecture, construction, renovation, interior design and real estate."
-  }, [])
 
   useEffect(() => {
     Promise.all([

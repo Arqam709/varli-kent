@@ -9,6 +9,7 @@ import usePageContent from '../lib/usePageContent'
 import { sectionBackground } from '../lib/pageContentResolve'
 import { useSiteSettings } from '../contexts/SiteSettingsContext'
 import { C } from '../contexts/ThemeContext'
+import useSeo from '../lib/useSeo'
 
 const fadeUp = { hidden: { opacity: 0, y: 30 }, visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut' } } }
 const stagger = { visible: { transition: { staggerChildren: 0.12 } } }
@@ -76,6 +77,11 @@ const SECTION_BG = {
 const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
 
 export default function ConstructionPage() {
+  useSeo({
+    title: 'Construction Services — Varlikent Istanbul',
+    description: 'Varlikent manages high-end construction projects across Istanbul, delivering luxury residential and commercial builds with precision.',
+    path: '/construction',
+  })
   const { t } = useLanguage()
   const p = t.constructionPage
   const { get: cms, isSectionVisible, bandFor } = usePageContent('construction', SECTION_ORDER, DEFAULT_BANDS)

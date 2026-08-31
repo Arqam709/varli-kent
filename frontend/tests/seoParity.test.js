@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import { buildPropertyJsonLd } from '../src/lib/propertyJsonLd.js'
@@ -222,3 +222,130 @@ test('sitemap contains unique public www URLs and valid stable lastmod dates', a
   assert.doesNotMatch(sitemap, /\/(admin|agent|settings|messages|login|register|forgot-password|reset-password|favourites)(?:<|\/)/i)
 })
 
+/* ══════════ Wave 14C — page metadata coverage ══════════
+ *
+ * Every route in the sitemap is a page we are asking Google to index. A
+ * page in the sitemap with no useSeo() call gets the site-wide default
+ * title and description, so the crawler sees ten identical pages. These
+ * tests tie the two lists together in both directions.
+ */
+
+const pageSources = async () => {
+  const dir = new URL("../src/pages/", import.meta.url)
+  const files = (await readdir(dir)).filter(name => name.endsWith(".jsx"))
+
+  const entries = await Promise.all(files.map(async name => [
+    name,
+    (await readFile(new URL(name, dir), "utf8"))
+      .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, " ")
+      .replace(/^[ \t]*\/\/.*$/gm, " "),
+  ]))
+
+  return Object.fromEntries(entries)
+}
+
+// Static paths only — PropertyDetails builds its path from the route id.
+const staticSeoPaths = (sources) =>
+  Object.values(sources).flatMap(source =>
+    [...source.matchAll(/^\s*path: '([^']+)',$/gm)].map(match => match[1])
+  )
+
+test('14C: every sitemapped route is a page that sets its own metadata', async () => {
+  const sitemap = await readFile(new URL("../public/sitemap.xml", import.meta.url), "utf8")
+  const routes = [...sitemap.matchAll(/<loc>https:\/\/www\.varlikent\.com(\/[^<]*)?<\/loc>/g)]
+    .map(match => match[1] || "/")
+
+  const covered = new Set(staticSeoPaths(await pageSources()))
+
+  for (const route of routes) {
+    assert.ok(covered.has(route), `${route} is in the sitemap but no page calls useSeo for it`)
+  }
+})
+
+test('14C: every static useSeo path is a real sitemapped route', async () => {
+  const sitemap = await readFile(new URL("../public/sitemap.xml", import.meta.url), "utf8")
+  const routes = new Set(
+    [...sitemap.matchAll(/<loc>https:\/\/www\.varlikent\.com(\/[^<]*)?<\/loc>/g)].map(m => m[1] || "/")
+  )
+
+  const paths = staticSeoPaths(await pageSources())
+  assert.ok(paths.length >= routes.size, "fewer metadata calls than sitemap routes")
+
+  for (const path of paths) {
+    assert.ok(routes.has(path), `a page claims canonical ${path}, which is not in the sitemap`)
+  }
+  // One canonical per route: two pages claiming the same path is a
+  // duplicate-content signal.
+  assert.equal(new Set(paths).size, paths.length, `duplicate canonical paths: ${paths.join(", ")}`)
+})
+
+test('14C: pages use the CURRENT helper and never a second canonical host', async () => {
+  const sources = await pageSources()
+
+  for (const [name, source] of Object.entries(sources)) {
+    if (!source.includes("useSeo(")) continue
+
+    assert.match(source, /import useSeo from '\.\.\/lib\/useSeo'/, `${name} does not import the shared helper`)
+    // The donor helper canonicalises to the bare apex domain. Nothing may
+    // reintroduce it, in an import or a hand-written meta tag.
+    assert.ok(!/https:\/\/varlikent\.com/.test(source), `${name} references the non-www host`)
+    assert.ok(!/setCanonical|document\.title\s*=/.test(source), `${name} sets metadata outside useSeo`)
+  }
+})
+
+test('14C: each page has distinct title and description text', async () => {
+  const sources = await pageSources()
+  const titles = []
+  const descriptions = []
+
+  for (const source of Object.values(sources)) {
+    const call = source.match(/useSeo\(\{[\s\S]*?\n\s*\}\)/)
+    if (!call) continue
+
+    // \\. first, so an escaped apostrophe inside a single-quoted description
+    // does not read as the closing quote.
+    const title = call[0].match(/title: (['"`])((?:\\.|(?!\1).)*)\1/)
+    const description = call[0].match(/description: (['"`])((?:\\.|(?!\1).)*)\1/)
+    if (title) titles.push(title[2])
+    if (description) descriptions.push(description[2])
+  }
+
+  assert.ok(titles.length >= 10, `expected metadata on at least 10 pages, found ${titles.length}`)
+  assert.equal(new Set(titles).size, titles.length, "two pages share a title")
+  assert.equal(new Set(descriptions).size, descriptions.length, "two pages share a description")
+
+  for (const description of descriptions) {
+    assert.ok(description.length >= 50, `a description is too short to be useful: "${description}"`)
+  }
+})
+
+test('14C: private and admin screens are never given indexable metadata', async () => {
+  const sources = await pageSources()
+
+  const isPrivate = (name) =>
+    name.startsWith("Admin") ||
+    name.startsWith("Agent") ||
+    ["LoginPage.jsx", "RegisterPage.jsx", "ForgotPassword.jsx", "ResetPassword.jsx",
+     "SettingsPage.jsx", "FavouritesPage.jsx"].includes(name)
+
+  for (const [name, source] of Object.entries(sources)) {
+    if (!isPrivate(name)) continue
+    assert.ok(!source.includes("useSeo"), `${name} is a private screen but declares SEO metadata`)
+  }
+})
+
+test('14C: no page leaks a coordinate or an address into its metadata', async () => {
+  // Wave 9 privacy, re-asserted at the page level: buildPropertyJsonLd is
+  // already covered above, but a page could pass raw property data into
+  // useSeo directly and bypass it.
+  const sources = await pageSources()
+
+  for (const [name, source] of Object.entries(sources)) {
+    const call = source.match(/useSeo\(\{[\s\S]*?\n\s*\}\)/)
+    if (!call) continue
+
+    for (const leak of ["latitude", "longitude", "coordinates", "exactLocation", "GeoCoordinates"]) {
+      assert.ok(!call[0].includes(leak), `${name} passes ${leak} into its metadata`)
+    }
+  }
+})

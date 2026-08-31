@@ -8,6 +8,7 @@ import { useSiteSettings } from '../contexts/SiteSettingsContext'
 import { C } from '../contexts/ThemeContext'
 import ShowroomCarousel from '../components/ShowroomCarousel'
 import api from '../lib/api'
+import useSeo from '../lib/useSeo'
 
 
 const fadeUp = { hidden: { opacity: 0, y: 30 }, visible: { opacity: 1, y: 0, transition: { duration: 0.7 } } }
@@ -127,6 +128,11 @@ const SECTION_BG = {
 const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
 
 export default function InteriorDesignPage() {
+  useSeo({
+    title: 'Interior Design Studio — Varlikent Istanbul',
+    description: "Varlikent's interior design studio creates bespoke, luxury interiors for homes and commercial spaces across Istanbul.",
+    path: '/interior-design',
+  })
   const { t } = useLanguage()
   const p = t.interiorPage
   const { get: cms, isSectionVisible, bandFor } = usePageContent('interior-design', SECTION_ORDER, DEFAULT_BANDS)

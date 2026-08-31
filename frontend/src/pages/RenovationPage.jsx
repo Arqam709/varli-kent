@@ -8,6 +8,7 @@ import { useSiteSettings } from '../contexts/SiteSettingsContext'
 import { C } from '../contexts/ThemeContext'
 import ShowroomCarousel from '../components/ShowroomCarousel'
 import api from '../lib/api'
+import useSeo from '../lib/useSeo'
 
 
 const DEFAULT_MATERIALS = [
@@ -221,6 +222,11 @@ const SECTION_BG = {
 const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
 
 export default function RenovationPage() {
+  useSeo({
+    title: 'Renovation Services — Varlikent Istanbul',
+    description: 'Varlikent renovates luxury homes and commercial spaces across Istanbul, blending craftsmanship with modern design.',
+    path: '/renovation',
+  })
   const { t } = useLanguage()
   const p = t.renovationPage
   const { get: cms, isSectionVisible, bandFor } = usePageContent('renovation', SECTION_ORDER, DEFAULT_BANDS)

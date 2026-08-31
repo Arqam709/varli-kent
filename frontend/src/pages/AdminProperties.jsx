@@ -275,6 +275,7 @@ const AdminProperties = () => {
   const p = t.adminPages?.properties || {}
   const c = t.adminPages?.common || {}
   const [properties, setProperties] = useState([])
+  const [tab, setTab] = useState('all')
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -703,6 +704,29 @@ const AdminProperties = () => {
     </label>
   )
 
+  /*
+   * Wave 14C — the donor's All / For Sale / For Rent tabs.
+   *
+   * ONE derived list, so anything else that narrows the admin list later
+   * composes with the tab instead of competing with it: add the extra
+   * predicate here and both constraints apply together. `properties` itself
+   * is never mutated, so switching tabs cannot lose a record.
+   *
+   * The counts are the donor's, and they count the WHOLE list — a tab's badge
+   * has to say how many it would show, not how many are showing now.
+   */
+  const visibleProperties = properties.filter(prop => (
+    tab === 'all' ? true : tab === 'sale' ? prop.listingType === 'Sale' : prop.listingType === 'Rent'
+  ))
+  const saleCount = properties.filter(prop => prop.listingType === 'Sale').length
+  const rentCount = properties.filter(prop => prop.listingType === 'Rent').length
+
+  const TABS = [
+    { id: 'all', label: p.all || 'All', count: properties.length },
+    { id: 'sale', label: p.forSale || 'For Sale', count: saleCount },
+    { id: 'rent', label: p.forRent || 'For Rent', count: rentCount },
+  ]
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -714,6 +738,23 @@ const AdminProperties = () => {
           {hasPermission('add_listing') && (
             <button onClick={openAdd} className="rounded-full bg-[#202a36] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#4b6741] transition cursor-pointer">{p.addProperty || '+ Add Property'}</button>
           )}
+        </div>
+
+        {/* Real tabs: a tablist of buttons, so arrow-free keyboard use and
+            screen readers both get the selected state without extra script. */}
+        <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label={p.title || 'Property Management'}>
+          {TABS.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.id}
+              onClick={() => setTab(item.id)}
+              className={`relative rounded-full px-5 py-2 text-sm font-semibold transition cursor-pointer ${tab === item.id ? 'bg-[#202a36] text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+            >
+              {item.label} <span className={`ms-1 text-xs ${tab === item.id ? 'text-white/70' : 'text-slate-400'}`}>{item.count}</span>
+            </button>
+          ))}
         </div>
 
         {formOpen && (
@@ -1066,7 +1107,7 @@ const AdminProperties = () => {
           <div className="flex justify-center py-10"><div className="h-10 w-10 animate-spin rounded-full border-4 border-[#4b6741] border-t-transparent" /></div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
-            {properties.map(prop => (
+            {visibleProperties.map(prop => (
               <div key={prop._id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex gap-4">
                 <img src={prop.mainImage || prop.images?.[0] || 'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=200&q=60'} alt={prop.title} className="h-28 w-40 shrink-0 rounded-xl object-cover" loading="lazy" />
                 <div className="flex-1 min-w-0">

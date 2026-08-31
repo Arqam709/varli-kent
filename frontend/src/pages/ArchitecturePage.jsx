@@ -8,6 +8,7 @@ import { useSiteSettings } from '../contexts/SiteSettingsContext'
 import { C } from '../contexts/ThemeContext'
 import ShowroomCarousel from '../components/ShowroomCarousel'
 import api from '../lib/api'
+import useSeo from '../lib/useSeo'
 
 const fadeUp = (delay = 0) => ({
   hidden: { opacity: 0, y: 30 },
@@ -50,6 +51,11 @@ const SECTION_BG = {
 const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
 
 export default function ArchitecturePage() {
+  useSeo({
+    title: 'Architecture Studio — Varlikent Istanbul',
+    description: "Varlikent's architecture studio designs bespoke residential and commercial projects across Istanbul, from concept to completion.",
+    path: '/architecture',
+  })
   const { t } = useLanguage()
   const p = t.architecturePage
   const { get: cms, isSectionVisible, bandFor } = usePageContent('architecture', SECTION_ORDER, DEFAULT_BANDS)
