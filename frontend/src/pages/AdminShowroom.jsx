@@ -9,7 +9,15 @@ const SERVICES = ['architecture', 'interior', 'construction', 'renovation']
 const SERVICE_LABELS = { architecture: 'Architecture', interior: 'Interior Design', construction: 'Construction', renovation: 'Renovation' }
 const UPLOAD_HINT = 'JPG, PNG, WEBP, GIF — max 10 MB · MP4, MOV, WEBM — max 100 MB'
 
-const empty = { url: '', caption: '', style: '', order: 0, visible: true }
+const empty = { url: '', title: '', caption: '', detailText: '', style: '', order: 0, visible: true }
+
+// Soft guidance, not enforcement — the counter turns amber past these but the
+// save is never blocked, because a caption's right length is an editorial
+// judgement rather than a data constraint.
+const CAPTION_WORDS = 15
+const DETAIL_WORDS = 200
+
+const wordCount = (value) => (value || '').trim().split(/\s+/).filter(Boolean).length
 
 const isVideo = (url) => url && (url.includes('/video/') || /\.(mp4|mov|webm|avi)$/i.test(url))
 
@@ -58,7 +66,7 @@ const AdminShowroom = () => {
   const openEdit = (img) => {
     // Wave 12A2 — caption is stored localized; show the admin their own
     // source text, not the object and not a machine translation of it.
-    setForm({ url: img.url, caption: editableText(img.caption), style: img.style || '', order: img.order ?? 0, visible: img.visible ?? true })
+    setForm({ url: img.url, title: editableText(img.title), caption: editableText(img.caption), detailText: editableText(img.detailText), style: img.style || '', order: img.order ?? 0, visible: img.visible ?? true })
     setModal(img)
   }
 
@@ -173,7 +181,13 @@ const AdminShowroom = () => {
                   )}
                 </div>
                 <div className="p-4">
-                  {editableText(img.caption) && <p className="text-sm font-semibold text-[#202a36] truncate">{editableText(img.caption)}</p>}
+                  {editableText(img.title) && <p className="truncate text-sm font-semibold text-[#202a36]">{editableText(img.title)}</p>}
+                  {editableText(img.caption) && (
+                    <p className={`truncate text-xs ${editableText(img.title) ? 'mt-0.5 text-slate-500' : 'font-semibold text-[#202a36]'}`}>
+                      {editableText(img.caption)}
+                    </p>
+                  )}
+                  {editableText(img.detailText) && <p className="mt-1 line-clamp-2 text-xs text-slate-500">{editableText(img.detailText)}</p>}
                   {img.style && <p className="text-xs text-[#4b6741] font-medium uppercase tracking-wide mt-0.5">{img.style}</p>}
                   <div className="mt-3 flex items-center gap-2 flex-wrap">
                     <button onClick={() => toggleVisible(img)}
@@ -239,8 +253,71 @@ const AdminShowroom = () => {
               </div>
 
               <div>
-                <label className={labelCls}>{p.caption || 'Caption (optional)'}</label>
-                <input className={inputCls} value={form.caption} onChange={e => setForm(f => ({ ...f, caption: e.target.value }))} placeholder="e.g. Bosphorus Villa — 2024" />
+                <label className={labelCls}>{p.titleLabel || 'Title (optional)'}</label>
+                <input
+                  className={inputCls}
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="e.g. Bosphorus Villa"
+                />
+                <p className="mt-1 text-[10px] text-slate-400">
+                  {p.titleHint || 'Heading shown when a visitor expands this media — separate from the caption below.'}
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className={labelCls}>{p.caption || 'Caption (optional)'}</label>
+                  <span className={`text-[10px] ${wordCount(form.caption) > CAPTION_WORDS ? 'text-amber-600 font-semibold' : 'text-slate-400'}`}>
+                    {wordCount(form.caption)}/{CAPTION_WORDS} {p.words || 'words'}
+                  </span>
+                </div>
+                <textarea
+                  rows={2}
+                  className={inputCls}
+                  value={form.caption}
+                  onChange={e => setForm(f => ({ ...f, caption: e.target.value }))}
+                  placeholder="e.g. Bosphorus Villa — 2024, a full renovation completed in six months"
+                />
+                <p className="mt-1 text-[10px] text-slate-400">
+                  {p.captionHint || 'Shown in a small box below the media on the public page. It grows with how much you write.'}
+                </p>
+
+                {/* Live preview of the public caption box, so the admin can see
+                    the short-label vs sentence styling before saving. */}
+                {form.caption.trim() && (
+                  <div className="mt-2">
+                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                      {p.previewLabel || 'Preview on public page'}
+                    </p>
+                    <div className="rounded-lg px-3 py-2" style={{ background: '#C9A35A' }}>
+                      <p
+                        className={wordCount(form.caption) > 8 ? 'text-xs leading-relaxed' : 'text-xs uppercase tracking-wider'}
+                        style={{ color: wordCount(form.caption) > 8 ? 'rgba(255,255,255,0.88)' : '#FFFFFF' }}
+                      >
+                        {form.caption}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className={labelCls}>{p.detailText || 'Detail Text (optional)'}</label>
+                  <span className={`text-[10px] ${wordCount(form.detailText) > DETAIL_WORDS ? 'text-amber-600 font-semibold' : 'text-slate-400'}`}>
+                    {wordCount(form.detailText)}/{DETAIL_WORDS} {p.words || 'words'}
+                  </span>
+                </div>
+                <textarea
+                  rows={5}
+                  className={inputCls}
+                  value={form.detailText}
+                  onChange={e => setForm(f => ({ ...f, detailText: e.target.value }))}
+                  placeholder="Longer description shown when a visitor expands this image or video..."
+                />
+                <p className="mt-1 text-[10px] text-slate-400">
+                  {p.detailHint || 'Fill this in and expanding the media on the public page shows it larger with this text beside it. Leave blank for a simple full-size view.'}
+                </p>
               </div>
 
               {activeTab === 'interior' && (

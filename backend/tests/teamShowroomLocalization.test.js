@@ -37,6 +37,7 @@ import {
 import { LOCALIZED_TEAM_FIELDS, normalizeTeamRoleBody } from '../routes/team.js'
 import { LOCALIZED_SHOWROOM_FIELDS } from '../routes/showroom.js'
 import TeamMember from '../models/TeamMember.js'
+import ShowroomImage from '../models/ShowroomImage.js'
 
 /* ── no-network guard (kept from 12A1) ────────────────────────────────────
  * If a future edit forgets to inject a stub, the call lands here and fails
@@ -164,8 +165,11 @@ test('Team localizes role, bio and longBio — and nothing else', () => {
   }
 })
 
-test('12A2: Showroom localizes caption, and nothing else', () => {
-  assert.deepEqual(LOCALIZED_SHOWROOM_FIELDS, ['caption'])
+test('Showroom localizes its prose fields, and nothing else', () => {
+  // Wave 12A2 shipped `caption` alone; Wave 14B added the donor's `title`
+  // and `detailText`. The invariant this test exists for is unchanged: only
+  // prose is localized.
+  assert.deepEqual(LOCALIZED_SHOWROOM_FIELDS, ['title', 'caption', 'detailText'])
   // `style` looks like a word but the public route matches it EXACTLY against
   // req.query.style — translating it would break that filter.
   for (const scalar of ['serviceType', 'url', 'style', 'order', 'visible', '_id']) {
@@ -173,15 +177,16 @@ test('12A2: Showroom localizes caption, and nothing else', () => {
   }
 })
 
-test('later-wave donor fields are still deferred', () => {
-  // Wave 14A delivered Team's longBio, secondaryPhoto and workImages, so only
-  // the Showroom half of the donor's parity work remains outstanding (14B).
-  // The two Team image fields stay out of the localized set permanently.
-  for (const scalar of ['secondaryPhoto', 'workImages']) {
+test('media and machine fields are permanently out of both localized sets', () => {
+  // Wave 14A delivered Team's longBio, secondaryPhoto and workImages; Wave
+  // 14B delivered Showroom's title and detailText. The donor's parity work
+  // is complete, so nothing is deferred any more — what remains is the
+  // permanent rule that image URLs and machine values are never translated.
+  for (const scalar of ['photo', 'secondaryPhoto', 'workImages']) {
     assert.ok(!LOCALIZED_TEAM_FIELDS.includes(scalar), `${scalar} must stay scalar`)
   }
-  for (const deferred of ['title', 'detailText']) {
-    assert.ok(!LOCALIZED_SHOWROOM_FIELDS.includes(deferred), `${deferred} is deferred`)
+  for (const scalar of ['url', 'style', 'serviceType']) {
+    assert.ok(!LOCALIZED_SHOWROOM_FIELDS.includes(scalar), `${scalar} must stay scalar`)
   }
 })
 
@@ -630,4 +635,56 @@ test('14A: longBio stores a localized object and legacy strings still resolve', 
   const legacy = new TeamMember({ name: 'X', role: 'Agent', longBio: 'Plain legacy text' })
   assert.equal(legacy.validateSync(), undefined)
   assert.equal(resolveLocalized(legacy.longBio, 'de'), 'Plain legacy text')
+})
+
+/* ============ Wave 14B — rich showroom schema validation ============ */
+
+// Also against the REAL model. The whole no-migration claim rests on these:
+// an existing record must stay valid without the two new fields, and must
+// not silently acquire them.
+
+test('14B: a pre-14B showroom record is still valid', () => {
+  const image = new ShowroomImage({ serviceType: 'architecture', url: '/uploads/a.png' })
+
+  assert.equal(image.validateSync(), undefined, 'a pre-14B record became invalid')
+  assert.equal(image.title, undefined, 'an absent title was materialised')
+  assert.equal(image.detailText, undefined, 'absent detail text was materialised')
+})
+
+test('14B: a legacy plain-string caption still hydrates', () => {
+  const legacy = new ShowroomImage({
+    serviceType: 'interior', url: '/uploads/a.png', caption: 'Plain legacy caption',
+  })
+
+  assert.equal(legacy.validateSync(), undefined)
+  assert.equal(resolveLocalized(legacy.caption, 'de'), 'Plain legacy caption')
+})
+
+test('14B: title and detailText store localized objects and legacy strings', () => {
+  const localized = new ShowroomImage({
+    serviceType: 'construction',
+    url: '/uploads/a.png',
+    title: { sourceLang: 'en', en: 'Bosphorus Villa', tr: 'Bogaz Villasi' },
+    detailText: { sourceLang: 'en', en: 'Six months', tr: 'Alti ay' },
+  })
+
+  assert.equal(localized.validateSync(), undefined)
+  assert.equal(resolveLocalized(localized.title, 'tr'), 'Bogaz Villasi')
+  assert.equal(resolveLocalized(localized.detailText, 'tr'), 'Alti ay')
+
+  // Mixed rather than a strict sub-schema, which is what lets an admin who
+  // saves before the translator responds still produce a valid document.
+  const plain = new ShowroomImage({
+    serviceType: 'renovation', url: '/uploads/a.png',
+    title: 'Plain title', detailText: 'Plain detail',
+  })
+  assert.equal(plain.validateSync(), undefined)
+  assert.equal(resolveLocalized(plain.detailText, 'ur'), 'Plain detail')
+})
+
+test('14B: style stays a plain string the public filter can match', () => {
+  const image = new ShowroomImage({ serviceType: 'interior', url: '/uploads/a.png', style: 'coastal' })
+
+  assert.equal(image.validateSync(), undefined)
+  assert.equal(image.style, 'coastal', 'style was coerced away from a plain string')
 })

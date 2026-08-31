@@ -1,5 +1,14 @@
 const translations = {
   en: {
+    common: {
+      noImagesYet: 'No images yet',
+      previous: 'Previous',
+      next: 'Next',
+      explore: 'Expand',
+      close: 'Close',
+      image: 'Image',
+      video: 'Video',
+    },
     aiChatHistory: {
       title: 'My AI Chat History', description: 'Conversations you have had with the VarliKent AI assistant. This does not include messages with an agent.',
       loading: 'Loading your chat history…', empty: 'No AI chat history yet.', error: 'Could not load your chat history.',
@@ -825,6 +834,13 @@ const translations = {
         contemporary: 'Contemporary', warmModern: 'Warm Modern', coastal: 'Coastal', classic: 'Classic',
         orderLabel: 'Order:',
         tabs: { architecture: 'Architecture', interior: 'Interior Design', construction: 'Construction', renovation: 'Renovation' },
+        titleLabel: 'Title (optional)',
+        titleHint: 'Heading shown when a visitor expands this media — separate from the caption below.',
+        captionHint: 'Shown in a small box below the media on the public page. It grows with how much you write.',
+        detailText: 'Detail Text (optional)',
+        detailHint: 'Fill this in and expanding the media on the public page shows it larger with this text beside it. Leave blank for a simple full-size view.',
+        previewLabel: 'Preview on public page',
+        words: 'words',
       },
       settings: {
         title: 'Site Settings', subtitle: 'Contact info and social links shown on all pages.',
@@ -1019,6 +1035,15 @@ const translations = {
   },
 
   tr: {
+    common: {
+      noImagesYet: 'Henüz görsel yok',
+      previous: 'Önceki',
+      next: 'Sonraki',
+      explore: 'Büyüt',
+      close: 'Kapat',
+      image: 'Görsel',
+      video: 'Video',
+    },
     aiChatHistory: {
       title: 'Yapay Zeka Sohbet Geçmişim', description: 'VarliKent yapay zeka asistanıyla yaptığınız görüşmeler. Danışmanla yapılan mesajlaşmalar buraya dahil değildir.',
       loading: 'Sohbet geçmişiniz yükleniyor…', empty: 'Henüz yapay zeka sohbet geçmişi yok.', error: 'Sohbet geçmişiniz yüklenemedi.',
@@ -1865,6 +1890,13 @@ forgotPasswordPage: {
         contemporary: 'Çağdaş', warmModern: 'Sıcak Modern', coastal: 'Sahil', classic: 'Klasik',
         orderLabel: 'Sıra:',
         tabs: { architecture: 'Mimarlık', interior: 'İç Tasarım', construction: 'İnşaat', renovation: 'Renovasyon' },
+        titleLabel: 'Başlık (isteğe bağlı)',
+        titleHint: 'Ziyaretçi bu medyayı büyüttüğünde görünen başlık — aşağıdaki açıklamadan ayrıdır.',
+        captionHint: 'Herkese açık sayfada medyanın altında küçük bir kutuda görünür. Yazdıkça büyür.',
+        detailText: 'Ayrıntı Metni (isteğe bağlı)',
+        detailHint: 'Bunu doldurursanız, medya büyütüldüğünde bu metin yanında görünür. Boş bırakırsanız yalnızca tam boy görünüm açılır.',
+        previewLabel: 'Herkese açık sayfada önizleme',
+        words: 'kelime',
       },
       settings: {
         title: 'Site Ayarları', subtitle: 'Tüm sayfalarda gösterilen iletişim bilgileri ve sosyal bağlantılar.',
@@ -2059,6 +2091,15 @@ forgotPasswordPage: {
   },
 
   ar: {
+    common: {
+      noImagesYet: 'لا توجد صور بعد',
+      previous: 'السابق',
+      next: 'التالي',
+      explore: 'تكبير',
+      close: 'إغلاق',
+      image: 'صورة',
+      video: 'فيديو',
+    },
     aiChatHistory: {
       title: 'سجل محادثاتي مع الذكاء الاصطناعي', description: 'المحادثات التي أجريتها مع مساعد VarliKent الذكي. لا يشمل ذلك الرسائل المتبادلة مع أحد المستشارين.',
       loading: 'جارٍ تحميل سجل محادثاتك…', empty: 'لا يوجد سجل محادثات بعد.', error: 'تعذّر تحميل سجل محادثاتك.',
@@ -2906,6 +2947,13 @@ forgotPasswordPage: {
         contemporary: 'معاصر', warmModern: 'دافئ حديث', coastal: 'ساحلي', classic: 'كلاسيكي',
         orderLabel: 'الترتيب:',
         tabs: { architecture: 'العمارة', interior: 'التصميم الداخلي', construction: 'الإنشاء', renovation: 'التجديد' },
+        titleLabel: 'العنوان (اختياري)',
+        titleHint: 'العنوان الذي يظهر عند تكبير هذه الوسائط — منفصل عن الوصف أدناه.',
+        captionHint: 'يظهر في صندوق صغير أسفل الوسائط في الصفحة العامة، ويتوسّع بحسب ما تكتب.',
+        detailText: 'نص تفصيلي (اختياري)',
+        detailHint: 'إذا ملأت هذا، سيظهر النص بجانب الوسائط عند تكبيرها. اتركه فارغًا لعرض كامل بسيط فقط.',
+        previewLabel: 'معاينة في الصفحة العامة',
+        words: 'كلمة',
       },
       settings: {
         title: 'إعدادات الموقع', subtitle: 'معلومات الاتصال والروابط الاجتماعية المعروضة في جميع الصفحات.',
@@ -4038,6 +4086,13 @@ forgotPasswordPage: {
         contemporary: 'Zeitgenössisch', warmModern: 'Warm Modern', coastal: 'Küstenstil', classic: 'Klassisch',
         orderLabel: 'Reihenfolge:',
         tabs: { architecture: 'Architektur', interior: 'Innenarchitektur', construction: 'Bau', renovation: 'Renovierung' },
+        titleLabel: 'Titel (optional)',
+        titleHint: 'Überschrift beim Vergrößern dieser Medien — getrennt von der Bildunterschrift unten.',
+        captionHint: 'Erscheint in einem kleinen Feld unter den Medien auf der öffentlichen Seite und wächst mit dem Text.',
+        detailText: 'Detailtext (optional)',
+        detailHint: 'Wenn ausgefüllt, wird dieser Text beim Vergrößern neben den Medien angezeigt. Leer lassen für eine einfache Vollbildansicht.',
+        previewLabel: 'Vorschau auf der öffentlichen Seite',
+        words: 'Wörter',
       },
       settings: {
         title: 'Website-Einstellungen', subtitle: 'Kontaktinformationen und soziale Links, die auf allen Seiten angezeigt werden.',
@@ -5234,6 +5289,13 @@ forgotPasswordPage: {
         contemporary: 'Современный', warmModern: 'Тёплый модерн', coastal: 'Прибрежный', classic: 'Классический',
         orderLabel: 'Порядок:',
         tabs: { architecture: 'Архитектура', interior: 'Дизайн интерьера', construction: 'Строительство', renovation: 'Реновация' },
+        titleLabel: 'Заголовок (необязательно)',
+        titleHint: 'Заголовок при увеличении этого медиа — отдельно от подписи ниже.',
+        captionHint: 'Показывается в небольшом блоке под медиа на публичной странице и растёт вместе с текстом.',
+        detailText: 'Подробный текст (необязательно)',
+        detailHint: 'Если заполнить, при увеличении медиа этот текст показывается рядом. Оставьте пустым для простого полноэкранного просмотра.',
+        previewLabel: 'Предпросмотр на публичной странице',
+        words: 'слов',
       },
       settings: {
         title: 'Настройки сайта', subtitle: 'Контактная информация и ссылки на соцсети, показанные на всех страницах.',
@@ -6430,6 +6492,13 @@ forgotPasswordPage: {
         contemporary: 'عصری', warmModern: 'گرم جدید', coastal: 'ساحلی', classic: 'کلاسیکی',
         orderLabel: 'ترتیب:',
         tabs: { architecture: 'تعمیراتی ڈیزائن', interior: 'داخلی ڈیزائن', construction: 'تعمیرات', renovation: 'تزئین و آرائش' },
+        titleLabel: 'عنوان (اختیاری)',
+        titleHint: 'جب وزیٹر اس میڈیا کو بڑا کرے تو دکھایا جانے والا عنوان — نیچے کی تفصیل سے الگ۔',
+        captionHint: 'عوامی صفحہ پر میڈیا کے نیچے چھوٹے خانے میں دکھایا جاتا ہے اور لکھنے کے ساتھ بڑھتا ہے۔',
+        detailText: 'تفصیلی متن (اختیاری)',
+        detailHint: 'اگر یہ بھریں تو میڈیا بڑا کرنے پر یہ متن ساتھ دکھایا جائے گا۔ خالی چھوڑنے پر صرف مکمل سائز کا منظر کھلے گا۔',
+        previewLabel: 'عوامی صفحہ پر پیش منظر',
+        words: 'الفاظ',
       },
       settings: {
         title: 'سائٹ کی ترتیبات', subtitle: 'تمام صفحات پر دکھائی جانے والی رابطہ کی معلومات اور سوشل لنکس۔',

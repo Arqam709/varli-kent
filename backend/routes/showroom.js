@@ -6,7 +6,17 @@ import { localizeFields, sanitizePoisonedTranslations } from '../utils/autoTrans
 
 const router = express.Router()
 
-export const LOCALIZED_SHOWROOM_FIELDS = ['caption']
+/*
+ * Wave 14B adds title and detailText. Both write paths already pass the
+ * stored document into localizeFields on update, so adding the keys here is
+ * all that is needed for the two properties that matter: unchanged prose
+ * spends no provider quota (isUnchangedSource), and a provider failure on
+ * one language keeps the translation that language already had.
+ *
+ * `style` stays out deliberately — the public route matches it EXACTLY
+ * against req.query.style, so translating it would break that filter.
+ */
+export const LOCALIZED_SHOWROOM_FIELDS = ['title', 'caption', 'detailText']
 
 // GET /api/showroom/:service — public, visible images for a service
 router.get('/:service', async (req, res, next) => {

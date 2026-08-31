@@ -31,16 +31,11 @@ const isValidImageUrl = (value) => {
   }
 }
 
-/*
- * A portfolio, not an archive. The donor leaves this unbounded, which lets
- * one member's document grow without limit and the public grid render an
- * arbitrary number of full-size images. 24 is well beyond any real profile
- * while keeping both bounded.
- */
 const MAX_WORK_IMAGES = 24
 
 const isValidWorkImages = (value) =>
   Array.isArray(value) && value.length <= MAX_WORK_IMAGES && value.every(isValidImageUrl)
+
 const teamMemberSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   role: {
@@ -53,12 +48,8 @@ const teamMemberSchema = new mongoose.Schema({
     },
   },
   bio: localizedField(),
-  photo: { type: String, default: '' },
 
-  // ── Wave 14A: rich profile ─────────────────────────────────────────
-  // Every field below is optional and none carries content as a default,
-  // so a member created before this wave stays valid and renders with the
-  // profile areas simply absent. No migration.
+  photo: { type: String, default: '' },
   secondaryPhoto: {
     type: String,
     default: '',
@@ -66,11 +57,13 @@ const teamMemberSchema = new mongoose.Schema({
     validate: { validator: isValidImageUrl, message: 'Secondary photo must be empty or a valid image URL' },
   },
   longBio: localizedField(),
+
   workImages: {
     type: [String],
     default: undefined,
     validate: { validator: isValidWorkImages, message: `Work images must be at most ${MAX_WORK_IMAGES} valid image URLs` },
   },
+  
   order: { type: Number, default: 0 },
   visible: { type: Boolean, default: true },
 }, { timestamps: true })

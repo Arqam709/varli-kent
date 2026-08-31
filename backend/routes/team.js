@@ -6,17 +6,6 @@ import { localizeFields, sanitizePoisonedTranslations } from '../utils/autoTrans
 
 const router = express.Router()
 
-/*
- * Wave 12A2. `name` is a person's name and is never translated; `photo`,
- * `order` and `visible` are not prose.
- */
-/*
- * Wave 14A adds longBio. Because localizeFields() already receives the
- * stored document on update, adding the key here is all that is needed for
- * the two properties that matter: an unchanged longBio spends no provider
- * quota (isUnchangedSource), and a provider failure on one language keeps the
- * translation that language already had.
- */
 export const LOCALIZED_TEAM_FIELDS = ['role', 'bio', 'longBio']
 
 export const normalizeTeamRoleBody = (body) => {
@@ -28,9 +17,6 @@ export const normalizeTeamRoleBody = (body) => {
 router.get('/', async (req, res, next) => {
   try {
     const members = await TeamMember.find({ visible: true }).sort({ order: 1, createdAt: 1 })
-    // Strips any MyMemory warning already stored on a document, so text
-    // poisoned before the write path guarded against it can never render as
-    // content. The client resolver filters the same pattern again.
     res.json({ success: true, members: sanitizePoisonedTranslations(members.map((d) => d.toObject())) })
   } catch (err) {
     next(err)
@@ -61,18 +47,7 @@ router.post('/', protect, requireRole('owner', 'admin'), requirePermission('mana
 // PUT /api/team/:id — update
 router.put('/:id', protect, requireRole('owner', 'admin'), requirePermission('manage_team'), async (req, res, next) => {
   try {
-    /*
-     * The existing document is read BEFORE translating, by _id.
-     *
-     * The donor updates straight through findByIdAndUpdate, so its
-     * localizeText never sees what is already stored — a save made while the
-     * provider is refusing requests overwrites every good translation. Two
-     * round-trips is the price of not doing that.
-     *
-     * Identity is the document's own _id, never a list position: reordering
-     * or deleting a member would otherwise hand one person's translations to
-     * another.
-     */
+    
     const existing = await TeamMember.findById(req.params.id)
     if (!existing) return res.status(404).json({ success: false, message: 'Member not found' })
 
