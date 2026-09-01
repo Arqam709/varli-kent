@@ -123,6 +123,16 @@ export const CHAT_MESSAGES = {
       retryTemplate: 'Sorry, just to confirm — should I keep searching in {district}, or search other districts too?',
       conceptFallback: 'that',
     },
+    dateTime: {
+      now: "It's currently {datetime} in Istanbul.",
+    },
+
+    propertyName: {
+      resolved: "Here's the listing for {title}.",
+      noMatch: "I couldn't find a listing called \"{phrase}\". I can search by district, price, property type or features instead — just tell me what you're looking for.",
+      ambiguous: 'I found more than one listing matching "{phrase}": {list}. Which one did you mean?',
+      lookupFailed: "I couldn't look that listing up just now. Please try again in a moment.",
+    },
   },
 
   tr: {
@@ -226,6 +236,16 @@ export const CHAT_MESSAGES = {
       retryTemplate: 'Üzgünüm, sadece teyit etmek istedim — {district} bölgesinde aramaya devam edeyim mi, yoksa başka bölgelere de bakayım mı?',
       conceptFallback: 'bunu',
     },
+    dateTime: {
+      now: "İstanbul'da şu anda {datetime}.",
+    },
+
+    propertyName: {
+      resolved: '{title} ilanı burada.',
+      noMatch: '"{phrase}" adında bir ilan bulamadım. Dilerseniz bölge, fiyat, mülk tipi veya özelliklere göre arayabilirim — ne aradığınızı söylemeniz yeterli.',
+      ambiguous: '"{phrase}" ile eşleşen birden fazla ilan buldum: {list}. Hangisini kastetmiştiniz?',
+      lookupFailed: 'Bu ilanı şu anda sorgulayamadım. Lütfen birazdan tekrar deneyin.',
+    },
   },
 
   ar: {
@@ -324,6 +344,16 @@ export const CHAT_MESSAGES = {
       questionTemplate: 'هل أستمر في البحث في {district}، أم أشمل مناطق أخرى تحتوي على {typeLabel} {concepts}؟',
       retryTemplate: 'عذراً، أردت فقط التأكد — هل أستمر في البحث في {district}، أم أبحث في مناطق أخرى أيضاً؟',
       conceptFallback: 'ذلك',
+    },
+    dateTime: {
+      now: 'الوقت الآن في إسطنبول {datetime}.',
+    },
+
+    propertyName: {
+      resolved: 'إليك تفاصيل عقار {title}.',
+      noMatch: 'لم أجد عقاراً باسم "{phrase}". يمكنني البحث حسب المنطقة أو السعر أو نوع العقار أو المزايا بدلاً من ذلك — فقط أخبرني بما تبحث عنه.',
+      ambiguous: 'وجدت أكثر من عقار يطابق "{phrase}": {list}. أي واحد تقصد؟',
+      lookupFailed: 'لم أتمكن من البحث عن هذا العقار الآن. يرجى المحاولة بعد قليل.',
     },
   },
 }

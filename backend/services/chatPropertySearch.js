@@ -33,7 +33,17 @@ import {
   buildSemanticHardFilter,
 } from './propertySemanticSearch.js'
 
-const PROPERTY_SELECT =
+/*
+ * The public projection for anything the chatbot may show a visitor.
+ *
+ * Note what is absent and must stay absent: `location` (Wave 9 — exact
+ * coordinates never reach a chat reply), `descriptionEmbedding`, and every
+ * admin-only field.
+ *
+ * Exported since Wave 15A so propertyNameResolver.js can reuse this exact
+ * list rather than keep a second copy that could drift into leaking a field.
+ */
+export const PROPERTY_SELECT =
   'title listingType price priceLabel district description address propertyType beds baths sqm mainImage images featured status pool garden furnished balcony elevator parking floor createdAt'
 
 // ─── Progressive fallback search ──────────────────────────────────────────────

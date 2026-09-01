@@ -25,7 +25,15 @@ import { getRelaxedFeatureIds } from '../services/chatReplyPlan.js'
 import { createOrRetryPendingQuestion } from '../services/chatPendingQuestion.js'
 import { decideTurnAction, decideFollowUp, detectMixedListingTypes } from '../services/chatPolicyEngine.js'
 import { normalizeChatLanguage } from '../utils/chatLanguage.js'
-import { renderNonPropertyPageReply } from '../services/chatReplyRenderer.js'
+import {
+  renderNonPropertyPageReply,
+  renderPropertyNameAmbiguous,
+  renderPropertyNameResolved,
+  renderPropertyNameLookupFailed,
+  renderPropertyNameNoMatch,
+} from '../services/chatReplyRenderer.js'
+import { isLiteralDateTimeQuestion, buildDateTimeAnswer } from '../services/chatDateTimeQuestion.js'
+import { resolvePropertyByName } from '../services/propertyNameResolver.js'
 
 import { runPropertySearch } from '../services/chatPropertySearch.js'
 import {
@@ -128,6 +136,47 @@ router.post('/', optionalAuth, async (req, res, next) => {
       return res.json({
         success: true,
         reply: nonPropertyPageReply,
+        properties: [],
+        parsed: currentFilters,
+        conversationId: responseConversationId,
+        language,
+      })
+    }
+
+    /* Wave 15A — literal "what time/date is it".
+     *
+     * Deterministic, answered from Intl with a real Europe/Istanbul
+     * conversion, and placed here on purpose: before the Gemini parse, so a
+     * clock question costs no model call, no property search and no embedding
+     * lookup. Same convention as the isPropertyPage early return above.
+     *
+     * `parsed: currentFilters` echoes the visitor's existing search criteria
+     * back unchanged — asking the time mid-search must not wipe out what they
+     * were looking for, so "show me more" still works on the next turn.
+     */
+    if (isLiteralDateTimeQuestion(message)) {
+      const dateTimeReply = buildDateTimeAnswer(language)
+      let responseConversationId = null
+
+      if (req.user) {
+        const persistenceResult = await recordChatExchange({
+          userId: req.user._id,
+          conversationId,
+          pageKey,
+          userMessageText: message,
+          assistantReplyText: dateTimeReply,
+          propertyIds: [],
+          event: null,
+          history,
+          parsed: null,
+          lead: null,
+        })
+        responseConversationId = persistenceResult.conversationId || conversationId || null
+      }
+
+      return res.json({
+        success: true,
+        reply: dateTimeReply,
         properties: [],
         parsed: currentFilters,
         conversationId: responseConversationId,
@@ -328,6 +377,87 @@ if (nonPropertyReply) {
     language,
   })
 }
+
+    /* Wave 15A — the visitor named one specific listing.
+     *
+     * Placed HERE, after buildNonPropertyReply, rather than before the Gemini
+     * parse where the date/time check sits. The extraction patterns key on
+     * phrases like "tell me about X", and "tell me about property taxes in
+     * Istanbul" is a Wave 11A knowledge question wearing the same clothes.
+     * Running after the knowledge/service/non-property branch has already
+     * returned means the resolver can only ever see a message that survived
+     * as property intent — knowledge precedence is preserved structurally
+     * rather than by trying to out-pattern it.
+     *
+     * The cost is that a title question still pays for one parse. That is the
+     * right trade: a wrong answer to a tax question is worse than a Gemini
+     * call, and the resolver makes no database query at all unless the
+     * message actually carries specific-listing phrasing.
+     *
+     * Gemini never decides which listing this is. It does not see an id, and
+     * nothing it returns is used here — resolution is title text matched
+     * against our own collection, and the identity that comes back is the
+     * document's own _id.
+     */
+    const nameResolution = await resolvePropertyByName(message)
+
+    if (nameResolution.status !== 'not-a-title-question') {
+      let resolverReply = null
+      let resolvedProperties = []
+
+      if (nameResolution.status === 'resolved') {
+        // Rendered through the ordinary search-result path, so the visitor
+        // sees the same card with the same public fields, drawn from the
+        // database — price, district, beds and features are never authored by
+        // a model.
+        // The listing itself is returned in `properties`, so the visitor gets
+        // the same card the ordinary search renders, with the same public
+        // fields read from the same record. Only the sentence differs.
+        resolvedProperties = [nameResolution.property]
+        resolverReply = renderPropertyNameResolved(nameResolution.property.title, language)
+      } else if (nameResolution.status === 'ambiguous') {
+        resolverReply = renderPropertyNameAmbiguous(
+          nameResolution.phrase,
+          nameResolution.candidates.map((candidate) => candidate.title),
+          language
+        )
+      } else if (nameResolution.status === 'error') {
+        // Not "no such listing" — the lookup itself failed.
+        resolverReply = renderPropertyNameLookupFailed(language)
+      } else {
+        resolverReply = renderPropertyNameNoMatch(nameResolution.phrase, language)
+      }
+
+      let responseConversationId = null
+
+      if (req.user) {
+        const persistenceResult = await recordChatExchange({
+          userId: req.user._id,
+          conversationId,
+          pageKey,
+          userMessageText: message,
+          assistantReplyText: resolverReply,
+          propertyIds: resolvedProperties.map((property) => property._id),
+          event: resolvedProperties.length > 0 ? 'properties_shown' : null,
+          history,
+          parsed,
+          lead: null,
+        })
+        responseConversationId = persistenceResult.conversationId || conversationId || null
+      }
+
+      return res.json({
+        success: true,
+        reply: resolverReply,
+        properties: resolvedProperties,
+        parsed,
+        filterUsed: null,
+        exactMatch: nameResolution.status === 'resolved',
+        aiUsed,
+        conversationId: responseConversationId,
+        language,
+      })
+    }
 
     console.log('Message:', message)
     console.log('Parsed from current message:', parsedFromMessage)

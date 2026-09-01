@@ -193,6 +193,45 @@ export const genericMatchReasonClause = (language = DEFAULT_MESSAGE_LANGUAGE) =>
 }
 
 // ─── Fixed-reply renderers ───────────────────────────────────────────────────
+/* ─── Wave 15A: date/time and specific-listing replies ──────────────────────
+ *
+ * All three go through the same tMessage/format({placeholder}) machinery as
+ * every other fixed reply here — no new interpolation mechanism, and nothing
+ * that could put a model-generated sentence in front of a visitor.
+ */
+
+export const renderDateTimeNow = (datetime, language = DEFAULT_MESSAGE_LANGUAGE) =>
+  format(tMessage(['dateTime', 'now'], language), { datetime })
+
+/*
+ * The visitor named one listing, so the reply names it back and the property
+ * card beside it carries the facts — price, district, beds, features — read
+ * straight from the record, exactly as they render for a search result.
+ *
+ * Deliberately not routed through buildReply: that renders "I found 1
+ * property", which is the right sentence for a search and the wrong one for
+ * someone who asked about a listing by name.
+ */
+export const renderPropertyNameResolved = (title, language = DEFAULT_MESSAGE_LANGUAGE) =>
+  format(tMessage(['propertyName', 'resolved'], language), { title })
+
+export const renderPropertyNameNoMatch = (phrase, language = DEFAULT_MESSAGE_LANGUAGE) =>
+  format(tMessage(['propertyName', 'noMatch'], language), { phrase })
+
+// Candidate titles are property data and are never translated — they are
+// listed verbatim so the visitor picks the one they actually meant.
+export const renderPropertyNameAmbiguous = (phrase, titles = [], language = DEFAULT_MESSAGE_LANGUAGE) =>
+  format(tMessage(['propertyName', 'ambiguous'], language), {
+    phrase,
+    list: joinList(titles, language, 'or'),
+  })
+
+// Said only when the lookup itself failed. Distinct from noMatch on purpose:
+// "no listing by that name" is a claim about our inventory, and it must not
+// be made when the truth is that the query never ran.
+export const renderPropertyNameLookupFailed = (language = DEFAULT_MESSAGE_LANGUAGE) =>
+  tMessage(['propertyName', 'lookupFailed'], language)
+
 export const renderNonPropertyPageReply = (language = DEFAULT_MESSAGE_LANGUAGE) => tMessage(['nonPropertyPage'], language)
 
 export const renderNonPropertyReply = (kind, language = DEFAULT_MESSAGE_LANGUAGE) => tMessage(['nonProperty', kind], language)
