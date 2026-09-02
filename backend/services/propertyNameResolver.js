@@ -41,7 +41,10 @@ import { isShowMoreRequest } from './chatConversationMemory.js'
 
 // Only properties the ordinary public chatbot would already surface. Same
 // literal the fallback ladder in chatPropertySearch.js uses.
-const PUBLIC_STATUS = 'Available'
+// Exported since Wave 15B so services/areaInfoAnswer.js's server-internal
+// location read can re-apply the SAME eligibility rule on its own query,
+// rather than keeping a second literal here that could drift out of step.
+export const PUBLIC_STATUS = 'Available'
 
 // Enough candidates to detect ambiguity, few enough that a pathological
 // message cannot pull the collection into memory.
@@ -192,6 +195,24 @@ export const resolvePropertyByName = async (message, PropertyModel = Property) =
   // no database query at all, so an ordinary search pays nothing for this
   // feature existing.
   if (!phrase) return { status: 'not-a-title-question' }
+
+  return resolvePropertyByPhrase(phrase, PropertyModel)
+}
+
+/*
+ * The resolution half of resolvePropertyByName, split out in Wave 15B.
+ *
+ * A nearby question ("what schools are near Marina Residence?") extracts its
+ * target with different patterns than a "tell me about X" question, but once
+ * a phrase is in hand the lookup, the ambiguity rule, the escaping, the
+ * public-status filter and the projection must all be identical — so 15B
+ * calls this rather than growing a second, drifting copy of them.
+ *
+ * Same tagged result as resolvePropertyByName, minus 'not-a-title-question':
+ * the caller has already decided there is a phrase worth resolving.
+ */
+export const resolvePropertyByPhrase = async (phrase, PropertyModel = Property) => {
+  if (!phrase) return { status: 'none', phrase }
 
   try {
     const anchored = new RegExp(`^\\s*${escapeRegex(phrase)}\\s*$`, 'i')

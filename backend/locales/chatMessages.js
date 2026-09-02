@@ -133,6 +133,14 @@ export const CHAT_MESSAGES = {
       ambiguous: 'I found more than one listing matching "{phrase}": {list}. Which one did you mean?',
       lookupFailed: "I couldn't look that listing up just now. Please try again in a moment.",
     },
+    areaInfo: {
+      intro: 'Here are the closest {category} to {title}:',
+      item: '{name} — about {distance} away',
+      noCategory: "Which kind of place would you like me to look for near {target}? For example a school, a metro station, a hospital, a park or a supermarket.",
+      noLocation: "We don't have enough location information for {title} to check what's nearby.",
+      noResults: 'I could not find any {category} within about {radius} km of {title}.',
+      providerError: "I couldn't check nearby places right now. Please try again in a moment.",
+    },
   },
 
   tr: {
@@ -246,6 +254,14 @@ export const CHAT_MESSAGES = {
       ambiguous: '"{phrase}" ile eşleşen birden fazla ilan buldum: {list}. Hangisini kastetmiştiniz?',
       lookupFailed: 'Bu ilanı şu anda sorgulayamadım. Lütfen birazdan tekrar deneyin.',
     },
+    areaInfo: {
+      intro: '{title} konumuna en yakın {category}:',
+      item: '{name} — yaklaşık {distance}',
+      noCategory: '{target} yakınında ne aramamı istersiniz? Örneğin okul, metro istasyonu, hastane, park veya süpermarket.',
+      noLocation: '{title} için yakındaki yerleri kontrol edecek yeterli konum bilgimiz yok.',
+      noResults: '{title} çevresinde yaklaşık {radius} km içinde {category} bulamadım.',
+      providerError: 'Yakındaki yerleri şu anda kontrol edemedim. Lütfen birazdan tekrar deneyin.',
+    },
   },
 
   ar: {
@@ -354,6 +370,14 @@ export const CHAT_MESSAGES = {
       noMatch: 'لم أجد عقاراً باسم "{phrase}". يمكنني البحث حسب المنطقة أو السعر أو نوع العقار أو المزايا بدلاً من ذلك — فقط أخبرني بما تبحث عنه.',
       ambiguous: 'وجدت أكثر من عقار يطابق "{phrase}": {list}. أي واحد تقصد؟',
       lookupFailed: 'لم أتمكن من البحث عن هذا العقار الآن. يرجى المحاولة بعد قليل.',
+    },
+    areaInfo: {
+      intro: 'إليك أقرب {category} إلى {title}:',
+      item: '{name} — على بعد {distance} تقريباً',
+      noCategory: 'ما نوع المكان الذي تريد أن أبحث عنه بالقرب من {target}؟ مثلاً مدرسة أو محطة مترو أو مستشفى أو حديقة أو سوبر ماركت.',
+      noLocation: 'لا تتوفر لدينا معلومات موقع كافية عن {title} للتحقق من الأماكن القريبة.',
+      noResults: 'لم أعثر على {category} ضمن حوالي {radius} كم من {title}.',
+      providerError: 'لم أتمكن من التحقق من الأماكن القريبة الآن. يرجى المحاولة بعد قليل.',
     },
   },
 }

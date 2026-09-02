@@ -232,6 +232,80 @@ export const renderPropertyNameAmbiguous = (phrase, titles = [], language = DEFA
 export const renderPropertyNameLookupFailed = (language = DEFAULT_MESSAGE_LANGUAGE) =>
   tMessage(['propertyName', 'lookupFailed'], language)
 
+/* ─── Wave 15B: nearby / POI replies ───────────────────────────────────────
+ *
+ * Every sentence here is built from already-computed facts — a real listing
+ * title, a category from the fixed registry, and a real haversine distance.
+ * No model is involved at any point, so no place name or distance can be
+ * invented.
+ */
+
+// Category ids are snake_case registry keys ('transit_station'); shown to a
+// visitor they read as words. Deliberately not translated: the registry is
+// the vocabulary the question was matched against, and inventing a second
+// localized label table for 54 categories is a translation surface this wave
+// does not need.
+export const poiCategoryLabel = (categoryId = '') => String(categoryId).replace(/_/g, ' ')
+
+/*
+ * Distance wording. Under a kilometre reads in metres rounded to the nearest
+ * 50 — "about 450 m" — because "0.4 km" is both less natural and falsely
+ * precise-looking; above that, one decimal of a kilometre. Everything is
+ * prefixed "about" by the templates, since these are straight-line distances
+ * to a mapped point rather than walking routes.
+ */
+export const formatPoiDistance = (distanceKm) => {
+  if (!Number.isFinite(distanceKm) || distanceKm < 0) return null
+
+  if (distanceKm < 1) {
+    const metres = Math.max(50, Math.round((distanceKm * 1000) / 50) * 50)
+    return `${metres} m`
+  }
+  return `${Math.round(distanceKm * 10) / 10} km`
+}
+
+export const renderAreaInfoResults = ({ title, categoryId, matches = [] }, language = DEFAULT_MESSAGE_LANGUAGE) => {
+  const category = poiCategoryLabel(categoryId)
+
+  const lines = matches
+    .map((match) => {
+      const distance = formatPoiDistance(match.distanceKm)
+      if (!distance) return null
+
+      return format(tMessage(['areaInfo', 'item'], language), {
+        // OSM has no name tag for every point; the category word stands in,
+        // rather than printing "Unnamed place" three times.
+        name: match.name || category,
+        distance,
+      })
+    })
+    .filter(Boolean)
+
+  const intro = format(tMessage(['areaInfo', 'intro'], language), { category, title })
+
+  return `${intro}\n${lines.join('\n')}`
+}
+
+export const renderAreaInfoNoCategory = (target, language = DEFAULT_MESSAGE_LANGUAGE) =>
+  format(tMessage(['areaInfo', 'noCategory'], language), { target })
+
+export const renderAreaInfoNoLocation = (title, language = DEFAULT_MESSAGE_LANGUAGE) =>
+  format(tMessage(['areaInfo', 'noLocation'], language), { title })
+
+// Names the radius actually searched, so this never reads as a claim that
+// none exist in the district or the city.
+export const renderAreaInfoNoResults = ({ title, categoryId, radiusKm }, language = DEFAULT_MESSAGE_LANGUAGE) =>
+  format(tMessage(['areaInfo', 'noResults'], language), {
+    category: poiCategoryLabel(categoryId),
+    title,
+    radius: radiusKm,
+  })
+
+// Strictly distinct from noResults: a provider outage is not an absence of
+// hospitals.
+export const renderAreaInfoProviderError = (language = DEFAULT_MESSAGE_LANGUAGE) =>
+  tMessage(['areaInfo', 'providerError'], language)
+
 export const renderNonPropertyPageReply = (language = DEFAULT_MESSAGE_LANGUAGE) => tMessage(['nonPropertyPage'], language)
 
 export const renderNonPropertyReply = (kind, language = DEFAULT_MESSAGE_LANGUAGE) => tMessage(['nonProperty', kind], language)

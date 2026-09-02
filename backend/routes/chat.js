@@ -31,9 +31,15 @@ import {
   renderPropertyNameResolved,
   renderPropertyNameLookupFailed,
   renderPropertyNameNoMatch,
+  renderAreaInfoResults,
+  renderAreaInfoNoCategory,
+  renderAreaInfoNoLocation,
+  renderAreaInfoNoResults,
+  renderAreaInfoProviderError,
 } from '../services/chatReplyRenderer.js'
 import { isLiteralDateTimeQuestion, buildDateTimeAnswer } from '../services/chatDateTimeQuestion.js'
 import { resolvePropertyByName } from '../services/propertyNameResolver.js'
+import { buildAreaInfoAnswer } from '../services/areaInfoAnswer.js'
 
 import { runPropertySearch } from '../services/chatPropertySearch.js'
 import {
@@ -377,6 +383,85 @@ if (nonPropertyReply) {
     language,
   })
 }
+
+    /* Wave 15B — "what schools are near Marina Residence?"
+     *
+     * Placed immediately BEFORE the 15A title resolver and AFTER the
+     * knowledge/service branch, for two separate reasons:
+     *
+     *  - after knowledge, for the same reason 15A is: a nearby question and a
+     *    district-knowledge question can share vocabulary, and Wave 11A keeps
+     *    precedence.
+     *  - before the title resolver, because "what is near Marina Residence"
+     *    names a listing too. Left to 15A it would answer "here's the listing
+     *    for Marina Residence" and quietly drop the actual question.
+     *
+     * It declines unless the message is BOTH a question about a place type
+     * AND names a target, so "find apartments near schools" — a lifestyle
+     * property search — never reaches it and no POI provider is contacted.
+     */
+    const areaInfo = await buildAreaInfoAnswer({ message })
+
+    if (areaInfo.status !== 'not-an-area-question') {
+      let areaReply
+
+      if (areaInfo.status === 'results') {
+        areaReply = renderAreaInfoResults(areaInfo, language)
+      } else if (areaInfo.status === 'no-category') {
+        areaReply = renderAreaInfoNoCategory(areaInfo.targetPhrase, language)
+      } else if (areaInfo.status === 'no-location') {
+        areaReply = renderAreaInfoNoLocation(areaInfo.title, language)
+      } else if (areaInfo.status === 'no-results') {
+        areaReply = renderAreaInfoNoResults(areaInfo, language)
+      } else if (areaInfo.status === 'provider-error') {
+        areaReply = renderAreaInfoProviderError(language)
+      } else if (areaInfo.status === 'ambiguous') {
+        // Reuses 15A's clarification: the visitor has to say which listing
+        // before any distance can be attached to one.
+        areaReply = renderPropertyNameAmbiguous(
+          areaInfo.phrase,
+          areaInfo.candidates.map((candidate) => candidate.title),
+          language
+        )
+      } else if (areaInfo.status === 'lookup-error') {
+        areaReply = renderPropertyNameLookupFailed(language)
+      } else {
+        areaReply = renderPropertyNameNoMatch(areaInfo.phrase, language)
+      }
+
+      let responseConversationId = null
+
+      if (req.user) {
+        const persistenceResult = await recordChatExchange({
+          userId: req.user._id,
+          conversationId,
+          pageKey,
+          userMessageText: message,
+          assistantReplyText: areaReply,
+          // No listing is being shown — this answers a question about the
+          // area, and returning the property here would render a card the
+          // visitor did not ask for.
+          propertyIds: [],
+          event: null,
+          history,
+          parsed,
+          lead: null,
+        })
+        responseConversationId = persistenceResult.conversationId || conversationId || null
+      }
+
+      return res.json({
+        success: true,
+        reply: areaReply,
+        properties: [],
+        parsed,
+        filterUsed: null,
+        exactMatch: null,
+        aiUsed,
+        conversationId: responseConversationId,
+        language,
+      })
+    }
 
     /* Wave 15A — the visitor named one specific listing.
      *
