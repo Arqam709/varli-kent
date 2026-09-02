@@ -143,6 +143,21 @@ export const detectAreaInfoQuestion = (message = '') => {
   const targetPhrase = extractAreaInfoTarget(text)
   if (!targetPhrase) return null
 
+  /*
+   * Wave 17: the target must be a PLACE, not a kind of place.
+   *
+   * "metroya yakın daireler" ("apartments near the metro") extracts "metroya"
+   * as its target — but that is a POI category, not somewhere you can stand.
+   * Read as an area-info question it becomes "which kind of place near the
+   * metro?", which is nonsense; it is a proximity PROPERTY search and belongs
+   * to services/poiProximitySearch.js.
+   *
+   * English and Arabic already fall out here on their property nouns
+   * ("apartments", "شقق"); Turkish needs this because it puts the target
+   * first and needs no verb, so nothing else in the guard above catches it.
+   */
+  if (resolvePoiCategory(targetPhrase)?.categoryId) return null
+
   // Category is resolved from the QUESTION, with the target removed — so a
   // listing called "Marina Park Residence" cannot make every question about
   // it look like a question about parks.

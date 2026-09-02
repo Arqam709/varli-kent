@@ -25,6 +25,7 @@ import {
   evaluatePropertyEvidence,
 } from './descriptionEvidence.js'
 import { hasSoftDescriptionSearch } from './chatMessageParsing.js'
+import { runProximityPass } from './poiProximitySearch.js'
 import { LISTING_TYPE_TERMS, PROPERTY_TYPE_TERMS } from '../locales/chatParsingVocabulary.js'
 import { buildHardFilterForDescriptionSearch } from './chatFilters.js'
 import {
@@ -321,7 +322,15 @@ export const searchByDescription = async ({ parsed, filter, message }) => {
 // logged its error and fell through), and neither is read by chat.js's
 // existing buildReply()/buildMatchReason()/res.json()/persistence calls.
 // Inventing them here would be new behavior, not a move.
-export const runPropertySearch = async ({ parsed, filter, mustHaveFilter, message }) => {
+export const runPropertySearch = async ({
+  parsed,
+  filter,
+  mustHaveFilter,
+  message,
+  // Injectable so tests never reach live Overpass or Nominatim.
+  fetchPoisForCategoryFn,
+  geocodePlaceFn,
+}) => {
   let properties = []
   let fallbackLevel = 0
   let descriptionSearchUsed = false
@@ -452,6 +461,31 @@ export const runPropertySearch = async ({ parsed, filter, mustHaveFilter, messag
   // this stays explicit for callers that only inspect `relaxed`).
   const relaxed = fallbackLevel > 0 || mode === 'fallback' || (mode === 'description' && !softEvidence.descriptionQueryVerified)
 
+  /*
+   * Wave 17 — geographic proximity, deliberately the LAST stage.
+   *
+   * It re-orders and trims the candidate set the waterfall above produced;
+   * it never replaces that waterfall's own logic. Price, listingType, beds,
+   * district, propertyType and mustHave still decide the base inventory —
+   * proximity only refines it.
+   *
+   * A complete no-op for every search that did not ask to be near anything,
+   * which is the overwhelming majority: no provider call, no geocode, no
+   * location read.
+   */
+  const proximity = await runProximityPass({
+    properties,
+    parsed,
+    message,
+    filter,
+    mustHaveFilter,
+    fetchPoisForCategoryFn,
+    geocodePlaceFn,
+    propertySelect: PROPERTY_SELECT,
+  })
+
+  properties = proximity.properties
+
   return {
     properties,
     filter,
@@ -470,6 +504,12 @@ export const runPropertySearch = async ({ parsed, filter, mustHaveFilter, messag
       matchedSoftCriteria: softEvidence.matchedSoftCriteria,
       unmatchedSoftCriteria: softEvidence.unmatchedSoftCriteria,
       descriptionQueryVerified: softEvidence.descriptionQueryVerified,
+      // Wave 17. `proximityVerified` is what stops a reply claiming a
+      // geographic requirement was met when the provider was unreachable.
+      proximityRequested: proximity.applied,
+      proximityVerified: proximity.verified,
+      proximityCategoryId: proximity.nearPoi?.categoryId || null,
+      proximityPlaceName: proximity.nearPoi?.placeName || null,
     },
   }
 }

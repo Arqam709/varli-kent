@@ -339,6 +339,45 @@ export const renderAreaInfoPlaceNotFound = (phrase, language = DEFAULT_MESSAGE_L
 export const renderAreaInfoPlaceError = (language = DEFAULT_MESSAGE_LANGUAGE) =>
   tMessage(['areaInfo', 'placeError'], language)
 
+/* ─── Wave 17: proximity in property-search results ─────────────────────── */
+
+/*
+ * The clause appended to a listing's match reason when its distance was
+ * actually measured.
+ *
+ * Only ever called for a listing whose coordinate `publicLocation` publishes —
+ * a listing with a withheld pin has no `poiProximity` at all, so there is no
+ * path by which it can acquire a proximity claim. The distance is
+ * straight-line to a mapped point, hence "about", and never a walking or
+ * driving time: no routing data exists.
+ */
+export const renderProximityClause = (poiProximity, language = DEFAULT_MESSAGE_LANGUAGE) => {
+  if (!poiProximity) return null
+
+  const distance = formatPoiDistance(poiProximity.distanceKm)
+  if (!distance) return null
+
+  if (poiProximity.categoryId === 'named_place') {
+    const place = poiProximity.placeName || poiProximity.poiName
+    if (!place) return null
+    return format(tMessage(['proximity', 'nearNamed'], language), { distance, place })
+  }
+
+  return format(tMessage(['proximity', 'nearCategory'], language), {
+    distance,
+    category: poiCategoryLabel(poiProximity.categoryId),
+  })
+}
+
+/*
+ * Said when the visitor asked for proximity but the provider could not be
+ * reached, so the results are the ordinary matches with the geographic part
+ * unchecked. Without this the reply would silently imply a requirement was
+ * satisfied that was never actually measured.
+ */
+export const renderProximityUnverified = (language = DEFAULT_MESSAGE_LANGUAGE) =>
+  tMessage(['proximity', 'unverified'], language)
+
 export const renderNonPropertyPageReply = (language = DEFAULT_MESSAGE_LANGUAGE) => tMessage(['nonPropertyPage'], language)
 
 export const renderNonPropertyReply = (kind, language = DEFAULT_MESSAGE_LANGUAGE) => tMessage(['nonProperty', kind], language)

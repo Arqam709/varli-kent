@@ -38,6 +38,9 @@ import {
   renderAreaInfoProviderError,
   renderAreaInfoPlaceNotFound,
   renderAreaInfoPlaceError,
+  renderProximityClause,
+  renderProximityUnverified,
+  osmAttribution,
 } from '../services/chatReplyRenderer.js'
 import { isLiteralDateTimeQuestion, buildDateTimeAnswer } from '../services/chatDateTimeQuestion.js'
 import { resolvePropertyByName } from '../services/propertyNameResolver.js'
@@ -678,9 +681,22 @@ console.log('Search evidence:', searchEvidence)
 properties = properties.map((property) => {
   const plain = typeof property.toObject === 'function' ? property.toObject() : property
 
+  /*
+   * Wave 17. `poiProximity` is transient search metadata, not a property
+   * field: it is read here to phrase the reason and then dropped, so no
+   * measured distance, POI name or landmark reaches the client as data. Only
+   * a listing whose coordinate publicLocation publishes ever carries one, so
+   * a proximity claim cannot attach to a withheld listing.
+   */
+  const { poiProximity, ...card } = plain
+  const reasons = [buildMatchReason(card, parsed, matchedViaDescription, matchedViaSemantic, language)]
+
+  const proximityClause = renderProximityClause(poiProximity, language)
+  if (proximityClause) reasons.push(proximityClause)
+
   return {
-    ...plain,
-    matchReason: buildMatchReason(plain, parsed, matchedViaDescription, matchedViaSemantic, language),
+    ...card,
+    matchReason: reasons.filter(Boolean).join(' — '),
   }
 })
 
@@ -718,6 +734,28 @@ if (followUpDecision.softOutcome) {
   parsed.pendingQuestion = null
 }
 
+/*
+ * Wave 17 reply suffixes.
+ *
+ * Two mutually exclusive cases, and the distinction is the honest one:
+ *
+ *   verified   real OSM-derived distances were measured and may be cited, so
+ *              the licence attribution the OSM data requires is appended —
+ *              the same helper Wave 15B2 uses, not a second wording.
+ *   requested  the visitor asked for proximity but the provider could not be
+ *              reached, so the listings are the ordinary matches and the
+ *              reply says the distance is unconfirmed rather than letting
+ *              the visitor assume it was checked.
+ *
+ * A search that never asked for proximity gets neither.
+ */
+let proximitySuffix = ''
+
+if (searchEvidence?.proximityRequested) {
+  proximitySuffix = searchEvidence.proximityVerified
+    ? `\n\n${osmAttribution(language)}`
+    : `\n\n${renderProximityUnverified(language)}`
+}
 const reply = buildReply({
   properties,
   fallbackLevel,
@@ -761,7 +799,7 @@ if (req.user) {
 
     return res.json({
   success: true,
-  reply,
+  reply: reply + proximitySuffix,
   properties,
   parsed,
   filterUsed: filter,

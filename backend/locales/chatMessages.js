@@ -136,6 +136,7 @@ export const CHAT_MESSAGES = {
     areaInfo: {
       intro: 'Here are the closest {category} to {title}:',
       attribution: '© OpenStreetMap contributors',
+
       item: '{name} — about {distance} away',
       noCategory: "Which kind of place would you like me to look for near {target}? For example a school, a metro station, a hospital, a park or a supermarket.",
       noLocation: "We don't have enough location information for {title} to check what's nearby.",
@@ -143,6 +144,11 @@ export const CHAT_MESSAGES = {
       providerError: "I couldn't check nearby places right now. Please try again in a moment.",
       placeNotFound: "I couldn't find a place called \"{phrase}\" in the Istanbul area. I can also look around one of our listings by name.",
       placeError: "I couldn't look that place up right now. Please try again in a moment.",
+    },
+    proximity: {
+      nearCategory: 'about {distance} from the nearest {category}',
+      nearNamed: 'about {distance} from {place}',
+      unverified: "I couldn't check how close these are right now, so their distance isn't confirmed.",
     },
   },
 
@@ -260,6 +266,7 @@ export const CHAT_MESSAGES = {
     areaInfo: {
       intro: '{title} konumuna en yakın {category}:',
       attribution: '© OpenStreetMap contributors',
+
       item: '{name} — yaklaşık {distance}',
       noCategory: '{target} yakınında ne aramamı istersiniz? Örneğin okul, metro istasyonu, hastane, park veya süpermarket.',
       noLocation: '{title} için yakındaki yerleri kontrol edecek yeterli konum bilgimiz yok.',
@@ -267,6 +274,11 @@ export const CHAT_MESSAGES = {
       providerError: 'Yakındaki yerleri şu anda kontrol edemedim. Lütfen birazdan tekrar deneyin.',
       placeNotFound: 'İstanbul bölgesinde \"{phrase}\" adında bir yer bulamadım. Dilerseniz ilanlarımızdan birinin adıyla da çevresine bakabilirim.',
       placeError: 'Bu yeri şu anda sorgulayamadım. Lütfen birazdan tekrar deneyin.',
+    },
+    proximity: {
+      nearCategory: 'en yakın {category} konumuna yaklaşık {distance}',
+      nearNamed: '{place} konumuna yaklaşık {distance}',
+      unverified: 'Bunların ne kadar yakın olduğunu şu anda kontrol edemedim, bu nedenle mesafeleri teyit edilmiş değil.',
     },
   },
 
@@ -380,6 +392,7 @@ export const CHAT_MESSAGES = {
     areaInfo: {
       intro: 'إليك أقرب {category} إلى {title}:',
       attribution: '© OpenStreetMap contributors',
+
       item: '{name} — على بعد {distance} تقريباً',
       noCategory: 'ما نوع المكان الذي تريد أن أبحث عنه بالقرب من {target}؟ مثلاً مدرسة أو محطة مترو أو مستشفى أو حديقة أو سوبر ماركت.',
       noLocation: 'لا تتوفر لدينا معلومات موقع كافية عن {title} للتحقق من الأماكن القريبة.',
@@ -387,6 +400,11 @@ export const CHAT_MESSAGES = {
       providerError: 'لم أتمكن من التحقق من الأماكن القريبة الآن. يرجى المحاولة بعد قليل.',
       placeNotFound: 'لم أجد مكاناً باسم \"{phrase}\" في منطقة إسطنبول. يمكنني أيضاً البحث حول أحد عقاراتنا بالاسم.',
       placeError: 'لم أتمكن من البحث عن هذا المكان الآن. يرجى المحاولة بعد قليل.',
+    },
+    proximity: {
+      nearCategory: 'على بعد {distance} تقريباً من أقرب {category}',
+      nearNamed: 'على بعد {distance} تقريباً من {place}',
+      unverified: 'لم أتمكن من التحقق من مدى قربها الآن، لذا فإن مسافتها غير مؤكدة.',
     },
   },
 }
