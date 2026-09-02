@@ -13,13 +13,15 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import express from 'express'
 
-const calls = { gemini: 0, search: 0, propertyFind: 0, locationFind: 0, knowledge: 0, poi: 0 }
+const calls = { gemini: 0, search: 0, propertyFind: 0, locationFind: 0, knowledge: 0, poi: 0, geocode: 0 }
 
 let geminiResult = null
 let knowledgeResult = null
 let propertyRows = []
 let poiResult = []
 let poiThrows = false
+let geocodeResult = { status: 'none' }
+let geocodeThrows = false
 
 const emptySearchResult = (properties = []) => ({
   properties,
@@ -140,6 +142,27 @@ mock.module('../services/poiSearch.js', {
   },
 })
 
+/*
+ * Wave 15B2. Mocked for two reasons: a test must never reach live Nominatim,
+ * and counting these calls is how the property paths are proven never to fall
+ * through to a landmark lookup.
+ */
+mock.module('../services/geocodePlace.js', {
+  namedExports: {
+    geocodeIstanbulPlace: async () => {
+      calls.geocode += 1
+      if (geocodeThrows) throw new Error('Nominatim unreachable')
+      return geocodeResult
+    },
+    toNominatimViewbox: () => '28.4,41.3,29.6,40.8',
+    isWithinIstanbul: () => true,
+    MAX_PLACE_QUERY_LENGTH: 120,
+    __clearGeocodeCacheForTests: () => {},
+    __setNominatimMinIntervalForTests: () => {},
+    ISTANBUL_BOUNDS: { south: 40.8, west: 28.4, north: 41.3, east: 29.6 },
+  },
+})
+
 mock.module('../utils/knowledgeAnswer.js', {
   namedExports: {
     buildKnowledgeAnswer: async () => {
@@ -175,10 +198,13 @@ beforeEach(() => {
   calls.locationFind = 0
   calls.knowledge = 0
   calls.poi = 0
+  calls.geocode = 0
+  geocodeResult = { status: 'none' }
   geminiResult = { propertyType: null, district: null }
   knowledgeResult = null
   searchResult = emptySearchResult()
   poiThrows = false
+  geocodeThrows = false
   poiResult = [
     { lat: 41.121, lon: 29.651, name: 'Kadıköy Primary' },
     { lat: 41.125, lon: 29.655, name: 'Bosphorus College' },
@@ -298,7 +324,8 @@ test('2e. a listing we do not carry is reported honestly, with no provider call'
   const res = await ask('What schools are near Atlantis Palace?')
 
   assert.equal(calls.poi, 0)
-  assert.match(res.body.reply, /couldn't find a listing called/i)
+  assert.equal(calls.geocode, 1, 'a neutral unknown name did not try the public-place path')
+  assert.match(res.body.reply, /couldn't find a place called/i)
 })
 
 /* ═══════════ 3. Nothing else was swallowed ═══════════ */

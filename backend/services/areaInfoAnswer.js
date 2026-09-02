@@ -49,6 +49,7 @@ import { publicLocation } from '../routes/properties.js'
 import { resolvePropertyByPhrase, PUBLIC_STATUS } from './propertyNameResolver.js'
 import { isShowMoreRequest } from './chatConversationMemory.js'
 import { fetchPoisForCategory as defaultFetchPoisForCategory } from './poiSearch.js'
+import { geocodeIstanbulPlace as defaultGeocodePlace } from './geocodePlace.js'
 import { resolvePoiCategory, getCategoryRadiusKm } from '../utils/poiCategories.js'
 import { nearestNWithinRadius } from '../utils/geoDistance.js'
 
@@ -156,12 +157,123 @@ export const detectAreaInfoQuestion = (message = '') => {
 }
 
 /*
+ * Wording that CLAIMS the target is one of our listings.
+ *
+ * This is the discriminator that keeps inventory honest. "What is near the
+ * listing Atlantis Palace?" asserts we carry it; if we do not, the answer is
+ * that we do not — never a geocoded landmark dressed up as our listing.
+ * "What schools are near Taksim Square?" claims nothing of the sort, so a
+ * public landmark lookup is a fair reading of it.
+ */
+const PROPERTY_SPECIFIC_PHRASING =
+  /\b(listing|listings|property|properties|the\s+(?:apartment|villa|house|flat|residence))\b|\bilan(?:ı|ımız|ınız)?\b|\bmülk\b|عقار|العقار/i
+
+export const isPropertySpecificPhrasing = (message = '') =>
+  PROPERTY_SPECIFIC_PHRASING.test(typeof message === 'string' ? message : '')
+
+/*
+ * The one POI path. Both a resolved listing and a geocoded landmark arrive
+ * here with nothing but a centre, so the provider call, the radius, the
+ * top-3 rule, the failure semantics and the result shape are written once.
+ *
+ * `center` is a plain { lat, lng }. Where it came from — a published
+ * property pin or a public landmark — was decided before this point, and is
+ * deliberately not knowable from here.
+ */
+const rankNearby = async ({ title, intent, center, fetchPoisForCategoryFn }) => {
+  let pois = []
+  let providerFailed = false
+
+  try {
+    pois = await fetchPoisForCategoryFn({ categoryId: intent.categoryId, brand: intent.brand })
+  } catch {
+    providerFailed = true
+  }
+
+  /*
+   * fetchPoisForCategory is fail-soft and returns [] for both "Overpass is
+   * down" and "this category genuinely has nothing". Those must not read the
+   * same to a visitor, so an empty list is reported as a provider problem
+   * rather than as a confident "there are none" — the honest reading when we
+   * cannot tell the two apart, and Istanbul has at least one of every
+   * category in this registry.
+   */
+  if (providerFailed || !Array.isArray(pois) || pois.length === 0) {
+    return { status: 'provider-error', title, categoryId: intent.categoryId }
+  }
+
+  const radiusKm = getCategoryRadiusKm(intent.categoryId)
+  const ranked = nearestNWithinRadius(center.lat, center.lng, pois, radiusKm, MAX_RESULTS)
+
+  if (ranked.length === 0) {
+    return { status: 'no-results', title, categoryId: intent.categoryId, radiusKm }
+  }
+
+  return {
+    status: 'results',
+    title,
+    categoryId: intent.categoryId,
+    // Name and distance only. POI coordinates were needed to compute the
+    // distance and are dropped here, so nothing the frontend does not need
+    // reaches the wire.
+    matches: ranked.map(({ poi, distanceKm }) => ({
+      // null when OSM has no name tag; the renderer substitutes the category
+      // label, as the donor does, rather than printing "Unnamed place".
+      name: poi?.name || null,
+      distanceKm,
+    })),
+  }
+}
+
+/*
+ * Wave 15B2 — a public landmark, not one of our listings.
+ *
+ * Reached only when nothing in our inventory matched AND the visitor never
+ * claimed the target was a listing. A landmark coordinate is public
+ * geographic fact, so unlike a withheld property pin it can be used to rank
+ * distances — but it still never reaches the response.
+ */
+const resolveGeneralPlace = async ({ intent, geocodePlaceFn, fetchPoisForCategoryFn }) => {
+  let geocoded = null
+
+  try {
+    geocoded = await geocodePlaceFn(intent.targetPhrase)
+  } catch {
+    // geocodeIstanbulPlace is fail-soft and should never throw, but this
+    // pipeline's contract is that nothing reaches the route handler as an
+    // exception — an injected or future implementation must not be able to
+    // turn a landmark question into a 500.
+    return { status: 'place-error', phrase: intent.targetPhrase }
+  }
+
+  // The provider could not be reached. Saying "no such place" here would be
+  // a claim about the world that we did not actually check.
+  if (geocoded?.status === 'error') return { status: 'place-error', phrase: intent.targetPhrase }
+
+  if (geocoded?.status !== 'resolved' || !geocoded.place) {
+    return { status: 'place-not-found', phrase: intent.targetPhrase }
+  }
+
+  const { name, lat, lon } = geocoded.place
+
+  return rankNearby({
+    // The provider's own short label for the place, so the reply names what
+    // was actually found rather than echoing the visitor's spelling.
+    title: name || intent.targetPhrase,
+    intent,
+    center: { lat, lng: lon },
+    fetchPoisForCategoryFn,
+  })
+}
+/*
  * buildAreaInfoAnswer -> a tagged result; routes/chat.js renders it.
  *
  *   { status: 'not-an-area-question' }            not our turn
  *   { status: 'no-category', targetPhrase }       "what's near X" — which kind?
  *   { status: 'ambiguous', candidates, phrase }   several listings match
  *   { status: 'no-property', phrase }             no listing by that name
+ *   { status: 'place-not-found', phrase }         no such public place either
+ *   { status: 'place-error', phrase }             the geocoder was unreachable
  *   { status: 'lookup-error', phrase }            the listing lookup failed
  *   { status: 'no-location', title }              nothing publishable to rank from
  *   { status: 'provider-error', ... }             POI provider unreachable
@@ -174,6 +286,7 @@ export const buildAreaInfoAnswer = async ({
   message = '',
   PropertyModel = Property,
   fetchPoisForCategoryFn = defaultFetchPoisForCategory,
+  geocodePlaceFn = defaultGeocodePlace,
 } = {}) => {
   const intent = detectAreaInfoQuestion(message)
   if (!intent) return { status: 'not-an-area-question' }
@@ -192,8 +305,43 @@ export const buildAreaInfoAnswer = async ({
     // around a guess would attach real distances to the wrong property.
     return { status: 'ambiguous', candidates: resolution.candidates, phrase: intent.targetPhrase }
   }
+  // A failed database read is never a licence to go looking somewhere else.
   if (resolution.status === 'error') return { status: 'lookup-error', phrase: intent.targetPhrase }
-  if (resolution.status !== 'resolved') return { status: 'no-property', phrase: intent.targetPhrase }
+
+  /*
+   * ── Wave 15B2: the one place a general public landmark is allowed in ────
+   *
+   * The donor falls through to Nominatim whenever property resolution fails
+   * for ANY reason — no match, ambiguous, no coordinate. That is wrong here
+   * for two separate reasons:
+   *
+   *   Inventory. "What is near the listing Atlantis Palace?" naming a listing
+   *   we do not carry must say so. Geocoding the same words and answering
+   *   with real distances tells the visitor a listing exists when it does
+   *   not.
+   *
+   *   Privacy. A listing that resolved but whose coordinate is withheld, or
+   *   that stopped being public between reads, has already been decided: no
+   *   distances. Geocoding its title afterwards would reconstruct roughly the
+   *   answer the privacy rule just refused — a fallback straight around Wave
+   *   9.
+   *
+   * So the geocoder is reachable from exactly one state: NOTHING in our
+   * inventory matched, AND the visitor never claimed it was a listing. Every
+   * other path — ambiguous, lookup-error, resolved-but-withheld, resolved-
+   * but-unavailable — returns above or below without ever calling it.
+   */
+  if (resolution.status !== 'resolved') {
+    if (isPropertySpecificPhrasing(message)) {
+      return { status: 'no-property', phrase: intent.targetPhrase }
+    }
+
+    return resolveGeneralPlace({
+      intent,
+      geocodePlaceFn,
+      fetchPoisForCategoryFn,
+    })
+  }
 
   const property = resolution.property
 
@@ -272,55 +420,13 @@ export const buildAreaInfoAnswer = async ({
     return { status: 'no-location', title: property.title }
   }
 
-  // ── 3. POIs for the category, from the provider ─────────────────────────
-  let pois = []
-  let providerFailed = false
-
-  try {
-    pois = await fetchPoisForCategoryFn({ categoryId: intent.categoryId, brand: intent.brand })
-  } catch {
-    providerFailed = true
-  }
-
-  /*
-   * fetchPoisForCategory is fail-soft and returns [] for both "Overpass is
-   * down" and "this category genuinely has nothing". Those must not read the
-   * same to a visitor, so an empty list is reported as a provider problem
-   * rather than as a confident "there are none" — the honest reading when we
-   * cannot tell the two apart, and Istanbul has at least one of every
-   * category in this registry.
-   */
-  if (providerFailed || !Array.isArray(pois) || pois.length === 0) {
-    return { status: 'provider-error', title: property.title, categoryId: intent.categoryId }
-  }
-
-  // ── 4. Rank locally, by real distance ───────────────────────────────────
-  const radiusKm = getCategoryRadiusKm(intent.categoryId)
-  let ranked = nearestNWithinRadius(center.lat, center.lng, pois, radiusKm, MAX_RESULTS)
-
-  if (ranked.length === 0) {
-    return {
-      status: 'no-results',
-      title: property.title,
-      categoryId: intent.categoryId,
-      radiusKm,
-    }
-  }
-
-  return {
-    status: 'results',
+  // ── 3. POIs, ranking and shaping — shared with the general-place path ──
+  return rankNearby({
     title: property.title,
-    categoryId: intent.categoryId,
-    // Name and distance only. POI coordinates were needed to compute the
-    // distance and are dropped here, so nothing the frontend does not need
-    // reaches the wire.
-    matches: ranked.map(({ poi, distanceKm }) => ({
-      // null when OSM has no name tag; the renderer substitutes the category
-      // label, as the donor does, rather than printing "Unnamed place".
-      name: poi?.name || null,
-      distanceKm,
-    })),
-  }
+    intent,
+    center,
+    fetchPoisForCategoryFn,
+  })
 }
 
 /*

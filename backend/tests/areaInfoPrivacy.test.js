@@ -103,6 +103,25 @@ const recordingPoiFetch = (pois = []) => {
   return fn
 }
 
+
+/*
+ * Wave 15B2: the geocoder is always injected here. Two reasons — a test
+ * must never reach live Nominatim, and counting its calls is how "a failed
+ * property lookup does not silently become a landmark lookup" is asserted.
+ */
+const recordingGeocode = (result = { status: 'none' }) => {
+  const calls = []
+  const fn = async (phrase) => { calls.push(phrase); return result }
+  fn.calls = calls
+  return fn
+}
+
+// Used where the geocoder must never be reached: calling it fails the test
+// rather than silently reaching the network.
+const unusedGeocode = async (phrase) => {
+  throw new Error(`the geocoder was called unexpectedly with: ${phrase}`)
+}
+
 const SCHOOLS = [
   { lat: 41.121, lon: 29.651, name: 'Kadıköy Primary' },
   { lat: 41.125, lon: 29.655, name: 'Bosphorus College' },
@@ -139,6 +158,7 @@ test('2a. the provider is handed a category — never a property coordinate', as
     message: 'What schools are near Marina Residence?',
     PropertyModel: modelWith([propertyRow('Marina Residence', PUBLISHED_EXACT)]),
     fetchPoisForCategoryFn: fetchPois,
+    geocodePlaceFn: unusedGeocode,
   })
 
   assert.equal(result.status, 'results')
@@ -159,6 +179,7 @@ test('2b. an approximate listing stops BEFORE the provider is contacted', async 
     message: 'What schools are near Marina Residence?',
     PropertyModel: modelWith([propertyRow('Marina Residence', PRIVATE_EXACT)]),
     fetchPoisForCategoryFn: fetchPois,
+    geocodePlaceFn: unusedGeocode,
   })
 
   assert.equal(result.status, 'no-location', 'a withheld coordinate was used anyway')
@@ -171,6 +192,7 @@ test('2c. the private exact pair never appears in the result, in any form', asyn
       message: 'What schools are near Marina Residence?',
       PropertyModel: modelWith([propertyRow('Marina Residence', location)]),
       fetchPoisForCategoryFn: recordingPoiFetch(SCHOOLS),
+      geocodePlaceFn: unusedGeocode,
     })
 
     const serialized = JSON.stringify(result)
@@ -187,6 +209,7 @@ test('2d. a rendered reply carries names and distances, never coordinates', asyn
     message: 'What schools are near Marina Residence?',
     PropertyModel: modelWith([propertyRow('Marina Residence', PUBLISHED_EXACT)]),
     fetchPoisForCategoryFn: recordingPoiFetch(SCHOOLS),
+    geocodePlaceFn: unusedGeocode,
   })
 
   const reply = renderAreaInfoResults(result, 'en')
@@ -204,6 +227,7 @@ test('2e. a listing with an unusable stored location is handled, not guessed at'
       message: 'What schools are near Marina Residence?',
       PropertyModel: modelWith([propertyRow('Marina Residence', broken)]),
       fetchPoisForCategoryFn: fetchPois,
+      geocodePlaceFn: unusedGeocode,
     })
 
     assert.equal(result.status, 'no-location', `bad location ${JSON.stringify(broken)} was not caught`)
@@ -223,6 +247,7 @@ test('3a. an ambiguous listing name makes no provider call', async () => {
       { _id: 'p2', title: 'Bosphorus Residence B', status: 'Available', location: PUBLISHED_EXACT },
     ]),
     fetchPoisForCategoryFn: fetchPois,
+    geocodePlaceFn: unusedGeocode,
   })
 
   assert.equal(result.status, 'ambiguous')
@@ -230,19 +255,52 @@ test('3a. an ambiguous listing name makes no provider call', async () => {
   assert.equal(result.candidates.length, 2)
 })
 
-test('3b. a name we do not carry makes no provider call and invents nothing', async () => {
+test('3b. an unknown neutral name is tried as a public place, and invented nothing', async () => {
+  // Wave 15B2: neutral phrasing carries no claim that this is our listing, so
+  // falling through to the public-place lookup is honest. With the geocoder
+  // finding nothing, the answer says so — it never fabricates a coordinate.
   const fetchPois = recordingPoiFetch(SCHOOLS)
+  const geocode = recordingGeocode({ status: 'none' })
 
   const result = await buildAreaInfoAnswer({
     message: 'What schools are near Atlantis Palace?',
     PropertyModel: modelWith([]),
     fetchPoisForCategoryFn: fetchPois,
+    geocodePlaceFn: geocode,
   })
 
-  assert.equal(result.status, 'no-property')
-  assert.equal(fetchPois.calls.length, 0)
-  // The unknown name is never geocoded into a coordinate and presented as ours.
-  assert.ok(!('title' in result), 'a listing title was produced for a name we do not have')
+  assert.equal(result.status, 'place-not-found')
+  assert.deepEqual(geocode.calls, ['Atlantis Palace'], 'the place lookup got the wrong phrase')
+  assert.equal(fetchPois.calls.length, 0, 'POIs were fetched around a place that was never found')
+  assert.ok(!('title' in result), 'a title was produced for something we never located')
+})
+
+test('3b2. property-specific phrasing is NEVER geocoded after a failed lookup', async () => {
+  /*
+   * The rule the donor breaks. "the listing Atlantis Palace" asserts we carry
+   * it; if we do not, the answer is that we do not. Geocoding the same words
+   * and replying with real distances would tell the visitor a listing exists
+   * when it does not.
+   */
+  for (const message of [
+    'What schools are near the listing Atlantis Palace?',
+    'What schools are near the Atlantis Palace property?',
+    'Atlantis Palace ilanı yakınında okul var mı?',
+  ]) {
+    const fetchPois = recordingPoiFetch(SCHOOLS)
+    const geocode = recordingGeocode({ status: 'resolved', place: { name: 'Somewhere', lat: 41.0, lon: 29.0 } })
+
+    const result = await buildAreaInfoAnswer({
+      message,
+      PropertyModel: modelWith([]),
+      fetchPoisForCategoryFn: fetchPois,
+      geocodePlaceFn: geocode,
+    })
+
+    assert.equal(result.status, 'no-property', `wrong outcome for: ${message}`)
+    assert.equal(geocode.calls.length, 0, `a failed listing was geocoded: ${message}`)
+    assert.equal(fetchPois.calls.length, 0)
+  }
 })
 
 test('3c. only publicly available listings can be targeted', async () => {
@@ -262,13 +320,18 @@ test('3c. only publicly available listings can be targeted', async () => {
     },
   }
 
+  const geocode = recordingGeocode({ status: 'none' })
+
   const result = await buildAreaInfoAnswer({
     message: 'What schools are near Sold Villa?',
     PropertyModel: model,
     fetchPoisForCategoryFn: fetchPois,
+    geocodePlaceFn: geocode,
   })
 
-  assert.equal(result.status, 'no-property')
+  // Not resolvable as a listing (the status filter excluded it), so it falls
+  // through to the public-place path and finds nothing there either.
+  assert.equal(result.status, 'place-not-found')
   assert.equal(fetchPois.calls.length, 0)
 })
 

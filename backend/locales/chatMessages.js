@@ -135,11 +135,14 @@ export const CHAT_MESSAGES = {
     },
     areaInfo: {
       intro: 'Here are the closest {category} to {title}:',
+      attribution: '© OpenStreetMap contributors',
       item: '{name} — about {distance} away',
       noCategory: "Which kind of place would you like me to look for near {target}? For example a school, a metro station, a hospital, a park or a supermarket.",
       noLocation: "We don't have enough location information for {title} to check what's nearby.",
       noResults: 'I could not find any {category} within about {radius} km of {title}.',
       providerError: "I couldn't check nearby places right now. Please try again in a moment.",
+      placeNotFound: "I couldn't find a place called \"{phrase}\" in the Istanbul area. I can also look around one of our listings by name.",
+      placeError: "I couldn't look that place up right now. Please try again in a moment.",
     },
   },
 
@@ -256,11 +259,14 @@ export const CHAT_MESSAGES = {
     },
     areaInfo: {
       intro: '{title} konumuna en yakın {category}:',
+      attribution: '© OpenStreetMap contributors',
       item: '{name} — yaklaşık {distance}',
       noCategory: '{target} yakınında ne aramamı istersiniz? Örneğin okul, metro istasyonu, hastane, park veya süpermarket.',
       noLocation: '{title} için yakındaki yerleri kontrol edecek yeterli konum bilgimiz yok.',
       noResults: '{title} çevresinde yaklaşık {radius} km içinde {category} bulamadım.',
       providerError: 'Yakındaki yerleri şu anda kontrol edemedim. Lütfen birazdan tekrar deneyin.',
+      placeNotFound: 'İstanbul bölgesinde \"{phrase}\" adında bir yer bulamadım. Dilerseniz ilanlarımızdan birinin adıyla da çevresine bakabilirim.',
+      placeError: 'Bu yeri şu anda sorgulayamadım. Lütfen birazdan tekrar deneyin.',
     },
   },
 
@@ -373,11 +379,14 @@ export const CHAT_MESSAGES = {
     },
     areaInfo: {
       intro: 'إليك أقرب {category} إلى {title}:',
+      attribution: '© OpenStreetMap contributors',
       item: '{name} — على بعد {distance} تقريباً',
       noCategory: 'ما نوع المكان الذي تريد أن أبحث عنه بالقرب من {target}؟ مثلاً مدرسة أو محطة مترو أو مستشفى أو حديقة أو سوبر ماركت.',
       noLocation: 'لا تتوفر لدينا معلومات موقع كافية عن {title} للتحقق من الأماكن القريبة.',
       noResults: 'لم أعثر على {category} ضمن حوالي {radius} كم من {title}.',
       providerError: 'لم أتمكن من التحقق من الأماكن القريبة الآن. يرجى المحاولة بعد قليل.',
+      placeNotFound: 'لم أجد مكاناً باسم \"{phrase}\" في منطقة إسطنبول. يمكنني أيضاً البحث حول أحد عقاراتنا بالاسم.',
+      placeError: 'لم أتمكن من البحث عن هذا المكان الآن. يرجى المحاولة بعد قليل.',
     },
   },
 }

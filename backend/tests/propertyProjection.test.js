@@ -94,6 +94,9 @@ const recordingPoiFetch = (pois = []) => {
   return fn
 }
 
+// Wave 15B2: injected everywhere, so no test can reach live Nominatim.
+const noPlaceFound = async () => ({ status: 'none' })
+
 const SCHOOLS = [
   { lat: 41.121, lon: 29.651, name: 'Kadıköy Primary' },
   { lat: 41.125, lon: 29.655, name: 'Bosphorus College' },
@@ -161,6 +164,7 @@ test('3a. a published exact location produces real POI results', async () => {
     message: 'What schools are near Marina Residence?',
     PropertyModel: model,
     fetchPoisForCategoryFn: fetchPois,
+    geocodePlaceFn: noPlaceFound,
   })
 
   assert.equal(result.status, 'results', `expected results, got '${result.status}'`)
@@ -176,6 +180,7 @@ test('3b. the location read is one bounded, location-only, still-public lookup',
     message: 'What schools are near Marina Residence?',
     PropertyModel: model,
     fetchPoisForCategoryFn: recordingPoiFetch(SCHOOLS),
+    geocodePlaceFn: noPlaceFound,
   })
 
   const locationQueries = model.queries.filter((query) => query.kind === 'findOne')
@@ -215,6 +220,7 @@ test('3f. a listing that stops being public between the two reads is refused', a
     message: 'What schools are near Marina Residence?',
     PropertyModel: model,
     fetchPoisForCategoryFn: fetchPois,
+    geocodePlaceFn: noPlaceFound,
   })
 
   assert.equal(result.status, 'no-property', `a no-longer-public listing produced '${result.status}'`)
@@ -242,6 +248,7 @@ test('3g. the same refusal covers a listing deleted between the two reads', asyn
     message: 'What schools are near Marina Residence?',
     PropertyModel: model,
     fetchPoisForCategoryFn: fetchPois,
+    geocodePlaceFn: noPlaceFound,
   })
 
   assert.equal(result.status, 'no-property')
@@ -256,6 +263,7 @@ test('3c. an approximate listing still yields no coordinate and no provider call
     message: 'What schools are near Marina Residence?',
     PropertyModel: model,
     fetchPoisForCategoryFn: fetchPois,
+    geocodePlaceFn: noPlaceFound,
   })
 
   // Reading the stored value server-side is fine; publishing anything derived
@@ -279,6 +287,7 @@ test('3d. a listing that genuinely has no stored location is handled', async () 
       message: 'What schools are near Marina Residence?',
       PropertyModel: model,
       fetchPoisForCategoryFn: fetchPois,
+      geocodePlaceFn: noPlaceFound,
     })
 
     assert.equal(result.status, 'no-location', `not handled: ${JSON.stringify(location)}`)
@@ -298,6 +307,7 @@ test('3e. a failed location lookup is not reported as "no location"', async () =
     message: 'What schools are near Marina Residence?',
     PropertyModel: model,
     fetchPoisForCategoryFn: fetchPois,
+    geocodePlaceFn: noPlaceFound,
   })
 
   assert.equal(result.status, 'lookup-error', `a database failure was reported as '${result.status}'`)
@@ -316,6 +326,7 @@ test('4a. an ambiguous or unknown target never reaches the location lookup', asy
     message: 'What schools are near Bosphorus Residence?',
     PropertyModel: ambiguous,
     fetchPoisForCategoryFn: recordingPoiFetch(SCHOOLS),
+    geocodePlaceFn: noPlaceFound,
   })
 
   assert.equal(ambiguousResult.status, 'ambiguous')
@@ -326,9 +337,12 @@ test('4a. an ambiguous or unknown target never reaches the location lookup', asy
     message: 'What schools are near Atlantis Palace?',
     PropertyModel: missing,
     fetchPoisForCategoryFn: recordingPoiFetch(SCHOOLS),
+    geocodePlaceFn: noPlaceFound,
   })
 
-  assert.equal(missingResult.status, 'no-property')
+  // Wave 15B2: neutral phrasing now continues to the public-place lookup,
+  // which finds nothing here — but it still never read a stored location.
+  assert.equal(missingResult.status, 'place-not-found')
   assert.equal(missing.queries.filter((q) => q.kind === 'findOne').length, 0)
 })
 
@@ -339,6 +353,7 @@ test('4b. an ordinary message costs no query at all', async () => {
     message: 'Find apartments near schools',
     PropertyModel: model,
     fetchPoisForCategoryFn: recordingPoiFetch(SCHOOLS),
+    geocodePlaceFn: noPlaceFound,
   })
 
   assert.equal(result.status, 'not-an-area-question')
@@ -355,6 +370,7 @@ test('5. no coordinate survives into a 15B result, under a real projection', asy
       message: 'What schools are near Marina Residence?',
       PropertyModel: model,
       fetchPoisForCategoryFn: recordingPoiFetch(SCHOOLS),
+      geocodePlaceFn: noPlaceFound,
     })
 
     const serialized = JSON.stringify(result)

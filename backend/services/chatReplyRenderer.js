@@ -264,6 +264,26 @@ export const formatPoiDistance = (distanceKm) => {
   return `${Math.round(distanceKm * 10) / 10} km`
 }
 
+/*
+ * OpenStreetMap attribution.
+ *
+ * Every nearby result in this codebase is derived from OSM data — Overpass for
+ * the POIs, Nominatim for a landmark's coordinate — and OSM's licence asks for
+ * attribution appropriate to the medium. The map components carry it on their
+ * tile layer, but a chat reply is a different surface and was carrying none.
+ *
+ * Appended HERE, in the one renderer both the property and the general-place
+ * paths pass through, so neither branch can be extended later and quietly lose
+ * it. It is scoped to results only: an error or an empty radius contains no OSM
+ * data to attribute, and nothing outside this renderer gets it at all.
+ *
+ * The brand and the canonical phrase stay in English in all three languages —
+ * "OpenStreetMap" is a proper noun and "© OpenStreetMap contributors" is the
+ * form the licence asks for.
+ */
+export const osmAttribution = (language = DEFAULT_MESSAGE_LANGUAGE) =>
+  tMessage(['areaInfo', 'attribution'], language)
+
 export const renderAreaInfoResults = ({ title, categoryId, matches = [] }, language = DEFAULT_MESSAGE_LANGUAGE) => {
   const category = poiCategoryLabel(categoryId)
 
@@ -283,7 +303,7 @@ export const renderAreaInfoResults = ({ title, categoryId, matches = [] }, langu
 
   const intro = format(tMessage(['areaInfo', 'intro'], language), { category, title })
 
-  return `${intro}\n${lines.join('\n')}`
+  return `${intro}\n${lines.join('\n')}\n\n${osmAttribution(language)}`
 }
 
 export const renderAreaInfoNoCategory = (target, language = DEFAULT_MESSAGE_LANGUAGE) =>
@@ -305,6 +325,19 @@ export const renderAreaInfoNoResults = ({ title, categoryId, radiusKm }, languag
 // hospitals.
 export const renderAreaInfoProviderError = (language = DEFAULT_MESSAGE_LANGUAGE) =>
   tMessage(['areaInfo', 'providerError'], language)
+
+/* ─── Wave 15B2: general public places ──────────────────────────────────── */
+
+// The geocoder answered and had nothing in the Istanbul area. Distinct from
+// placeError below, and distinct again from "no listing by that name" — three
+// different facts, three different sentences.
+export const renderAreaInfoPlaceNotFound = (phrase, language = DEFAULT_MESSAGE_LANGUAGE) =>
+  format(tMessage(['areaInfo', 'placeNotFound'], language), { phrase })
+
+// The geocoder itself could not be reached. Never phrased as "that place does
+// not exist" — we did not actually check.
+export const renderAreaInfoPlaceError = (language = DEFAULT_MESSAGE_LANGUAGE) =>
+  tMessage(['areaInfo', 'placeError'], language)
 
 export const renderNonPropertyPageReply = (language = DEFAULT_MESSAGE_LANGUAGE) => tMessage(['nonPropertyPage'], language)
 

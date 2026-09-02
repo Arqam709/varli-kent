@@ -36,6 +36,8 @@ import {
   renderAreaInfoNoLocation,
   renderAreaInfoNoResults,
   renderAreaInfoProviderError,
+  renderAreaInfoPlaceNotFound,
+  renderAreaInfoPlaceError,
 } from '../services/chatReplyRenderer.js'
 import { isLiteralDateTimeQuestion, buildDateTimeAnswer } from '../services/chatDateTimeQuestion.js'
 import { resolvePropertyByName } from '../services/propertyNameResolver.js'
@@ -415,6 +417,13 @@ if (nonPropertyReply) {
         areaReply = renderAreaInfoNoResults(areaInfo, language)
       } else if (areaInfo.status === 'provider-error') {
         areaReply = renderAreaInfoProviderError(language)
+      } else if (areaInfo.status === 'place-not-found') {
+        // Wave 15B2 — not one of our listings and not a public place either.
+        areaReply = renderAreaInfoPlaceNotFound(areaInfo.phrase, language)
+      } else if (areaInfo.status === 'place-error') {
+        // The geocoder was unreachable. Kept apart from provider-error so a
+        // Nominatim outage is never blamed on Overpass, or vice versa.
+        areaReply = renderAreaInfoPlaceError(language)
       } else if (areaInfo.status === 'ambiguous') {
         // Reuses 15A's clarification: the visitor has to say which listing
         // before any distance can be attached to one.
