@@ -508,6 +508,15 @@ html {
   }
 }
 
+/* Hero "Scroll" cue: on short viewports (laptops at 100% zoom, landscape
+   phones/tablets) there simply isn't room for it below the centered hero
+   content without overlapping — hide it rather than let it collide. */
+@media (max-height: 700px) {
+  .vk-scroll-cue {
+    display: none !important;
+  }
+}
+
 /* Partner logos strip: seamless infinite marquee — the track is the list
    duplicated once, so translating exactly -50% loops with no visible seam. */
 @keyframes vk-marquee {

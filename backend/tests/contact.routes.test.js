@@ -9,8 +9,9 @@
 // Mongoose on save.
 //
 // So the assertions below are deliberately about AGREEMENT between those four
-// lists, not just about Construction. Adding a ninth reason later fails here
-// until every list knows about it.
+// lists, not just about Construction. That paid off: 'Troubleshoot' was added
+// as the ninth reason and had to be threaded through all four before the
+// agreement test below would pass again.
 //
 // Only the genuine externals are replaced: MongoDB (the two models), the email
 // sender, and JWT verification. The route logic and the express-validator
@@ -49,7 +50,7 @@ const calls = { create: [], notify: [], routingUpsert: [] }
  */
 const CONTACT_ENUM = [
   'Buying', 'Selling', 'Renting', 'Renovation',
-  'Interior Design', 'Architecture', 'Construction', 'General',
+  'Interior Design', 'Architecture', 'Construction', 'General', 'Troubleshoot',
 ]
 
 mock.module('../models/ContactSubmission.js', {
@@ -144,7 +145,7 @@ const VALID = {
 // The list both the website select and the mobile chips render.
 const REASONS = [
   'Buying', 'Selling', 'Renting', 'Renovation',
-  'Interior Design', 'Architecture', 'Construction', 'General',
+  'Interior Design', 'Architecture', 'Construction', 'General', 'Troubleshoot',
 ]
 
 for (const interestType of REASONS) {
@@ -169,6 +170,31 @@ test('Construction specifically: accepted by the validator AND storable by the m
 
   assert.equal(res.status, 201)
   assert.equal(calls.create[0].interestType, 'Construction')
+})
+
+test('Troubleshoot specifically: accepted by the validator AND storable by the model', async () => {
+  // The technical-support reason. Same two-layer check as Construction: the
+  // validator must let it through AND the model enum must be able to store it.
+  const res = await request('POST', '/api/contact', { ...VALID, interestType: 'Troubleshoot' })
+
+  assert.equal(res.status, 201)
+  assert.equal(calls.create[0].interestType, 'Troubleshoot',
+    'the canonical English value is stored, never a localized label')
+  assert.equal(calls.notify[0].interestType, 'Troubleshoot',
+    'the notifier receives the same string it will use as the LeadRouting key')
+})
+
+test('Construction and Troubleshoot are separate reasons, not aliases', async () => {
+  // The business distinction this feature exists for: Construction is a visitor
+  // commissioning a new build; Troubleshoot is a visitor reporting a problem with
+  // something already built. They must be able to carry different recipients, so
+  // neither may be silently folded into the other.
+  assert.ok(REASONS.includes('Construction'), 'Construction was dropped')
+  assert.ok(REASONS.includes('Troubleshoot'), 'Troubleshoot is missing')
+
+  await request('POST', '/api/contact', { ...VALID, interestType: 'Construction' })
+  const stored = calls.create[0].interestType
+  assert.equal(stored, 'Construction', 'a Construction lead must not be rewritten to Troubleshoot')
 })
 
 /* ══════════════ 2. The four lists agree ══════════════ */
@@ -202,12 +228,59 @@ test('a reason can be given recipients and routed', async () => {
   assert.equal(calls.routingUpsert[0].filter.interestType, 'Construction')
 })
 
+test('Troubleshoot can be given its own technical recipients', async () => {
+  // This IS the "routes to the technical department" mechanism: there is no
+  // department model and no technical role — an owner types addresses into the
+  // Troubleshoot row and sendContactNotification() looks them up by this key.
+  currentUser = { _id: 'owner-id', role: 'owner', permissions: [] }
+
+  const res = await request('PUT', '/api/lead-routing', {
+    routing: [{
+      interestType: 'Troubleshoot',
+      recipients: [{ email: 'technical@example.test', label: 'Technical' }],
+    }],
+  })
+
+  assert.equal(res.status, 200)
+  assert.equal(calls.routingUpsert.length, 1)
+  assert.equal(calls.routingUpsert[0].filter.interestType, 'Troubleshoot',
+    'the upsert keys off the canonical value the contact form submits')
+  assert.deepEqual(calls.routingUpsert[0].update.recipients,
+    [{ email: 'technical@example.test', label: 'Technical' }])
+})
+
+test('Construction and Troubleshoot hold independent recipient lists', async () => {
+  currentUser = { _id: 'owner-id', role: 'owner', permissions: [] }
+
+  await request('PUT', '/api/lead-routing', {
+    routing: [
+      { interestType: 'Construction', recipients: [{ email: 'build@example.test', label: 'Build' }] },
+      { interestType: 'Troubleshoot', recipients: [{ email: 'technical@example.test', label: 'Technical' }] },
+    ],
+  })
+
+  assert.equal(calls.routingUpsert.length, 2, 'both rows are written, neither collapsed into the other')
+  const byType = Object.fromEntries(
+    calls.routingUpsert.map((c) => [c.filter.interestType, c.update.recipients[0].email])
+  )
+  assert.equal(byType.Construction, 'build@example.test')
+  assert.equal(byType.Troubleshoot, 'technical@example.test')
+})
+
 /* ══════════════ 3. Validation still rejects what it should ══════════════ */
 
 const REJECTED = [
   ['an unknown reason', { interestType: 'Gardening' }],
   ['a translated reason', { interestType: 'İnşaat' }],
   ['a lowercased reason', { interestType: 'construction' }],
+  // The near-miss spellings of the newest reason. Each is a plausible typo in a
+  // client that hardcodes the string instead of reading it from the shared list,
+  // and each must fail loudly rather than be stored as a category nothing routes.
+  ['a lowercased Troubleshoot', { interestType: 'troubleshoot' }],
+  ['the gerund spelling', { interestType: 'Troubleshooting' }],
+  ['the department name instead of the reason', { interestType: 'Technical Support' }],
+  ['a bare department name', { interestType: 'Technical' }],
+  ['a translated Troubleshoot label', { interestType: 'Sorun Giderme' }],
   ['a missing name', { name: '' }],
   ['a malformed email', { email: 'not-an-email' }],
   ['a missing phone', { phone: '' }],

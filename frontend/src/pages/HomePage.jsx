@@ -99,7 +99,7 @@ const TRUST_PATHS = {
 // dark, and testimonials -> partners are both light. computeBands treats an
 // adjacent same-tone pair as intentional and leaves it alone, so with every
 // section visible the page is identical to before.
-const SECTION_ORDER = ['services', 'about', 'browse', 'trust', 'process', 'featured', 'projects', 'stats', 'testimonials', 'partners', 'cta']
+const SECTION_ORDER = ['services', 'about', 'process', 'trust', 'browse', 'featured', 'projects', 'stats', 'testimonials', 'partners', 'cta']
 const DEFAULT_BANDS = {
   services: 'dark',
   about: 'light',
@@ -163,7 +163,7 @@ function PinnedHero({ t, cms, prefersReducedMotion }) {
         .to(subRef.current,      { opacity: 0, y: -60, duration: 0.24, ease: 'power2.in' }, 0.04)
         .to(statsRef.current,    { opacity: 0, y: -40, duration: 0.20, ease: 'power2.in' }, 0.08)
         .to(bgRef.current,       { scale: 1.20, duration: 1.00, ease: 'none' }, 0.00)
-        .to(overlayRef.current,  { opacity: 0.72, duration: 0.28 }, 0.28)
+        .to(overlayRef.current,  { opacity: 0.85, duration: 0.28 }, 0.28)
         .fromTo(brandRef.current,
           { opacity: 0, y: 70, scale: 0.96 },
           { opacity: 1, y: 0, scale: 1, duration: 0.36, ease: 'power3.out' }, 0.34)
@@ -176,7 +176,22 @@ function PinnedHero({ t, cms, prefersReducedMotion }) {
         .fromTo(fogRef.current,
           { opacity: 0, y: 50 },
           { opacity: 1, y: 0, duration: 0.36 }, 0.52)
-        .to(sectionRef.current, { opacity: 0, duration: 0.20 }, 0.82)
+        // Hero EXIT — fade the FOREGROUND only, never the section itself.
+        //
+        // This used to be `.to(sectionRef.current, { opacity: 0 }, 0.82)`,
+        // which faded the whole pinned <section> — villa image, the two
+        // static gradient overlays, the animated dark overlay and the green
+        // fog all went transparent together. Nothing behind the pin is dark:
+        // the pin spacer is transparent and <body> has no background rule, so
+        // it falls back to the browser default white. The result was a
+        // full-screen white/cream wash right before the dark services
+        // section arrived.
+        //
+        // Fading brand + tagline instead leaves the dark charcoal overlay and
+        // the green fog painted at full strength until the pin releases, so
+        // the handoff reads dark hero -> dark services with no pale frame.
+        .to(brandRef.current,   { opacity: 0, duration: 0.16, ease: 'power1.in' }, 0.86)
+        .to(taglineRef.current, { opacity: 0, duration: 0.14 }, 0.86)
     }, sectionRef)
     return () => ctx.revert()
   }, [prefersReducedMotion])
@@ -216,10 +231,10 @@ function PinnedHero({ t, cms, prefersReducedMotion }) {
       }} />
 
       {/* Stage 1 — headline content */}
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 1.5rem', paddingTop: '9rem' }}>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 1.5rem', paddingTop: 'clamp(3.5rem, 12vh, 9rem)', paddingBottom: 'clamp(3.5rem, 10vh, 7rem)' }}>
 
         <div ref={headlineRef} style={{ willChange: 'transform, opacity' }}>
-          <h1 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(2rem, 5.5vw, 4.2rem)', lineHeight: 1.12, fontWeight: 700, color: C.marble, maxWidth: '700px' }}>
+          <h1 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.7rem, 5vw, 4.2rem)', lineHeight: 1.14, fontWeight: 700, color: C.marble, maxWidth: 'min(94vw, 960px)' }}>
             {cms('heroHeading1', t.hero?.heading1 || 'We Design, Build')}
             <br />
             <span style={{ color: C.marble }}>{cms('heroHeading2', t.hero?.heading2 || '& Deliver Exceptional')}</span>
@@ -228,10 +243,10 @@ function PinnedHero({ t, cms, prefersReducedMotion }) {
           </h1>
         </div>
 
-        <GoldRule dark className="my-7" />
+        <GoldRule dark className="my-4 sm:my-5" />
 
         <div ref={subRef} style={{ willChange: 'transform, opacity' }}>
-          <p style={{ color: C.gold, letterSpacing: '0.42em', fontSize: '0.68rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '2rem' }}>
+          <p style={{ color: C.gold, letterSpacing: '0.42em', fontSize: '0.68rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: 'clamp(1rem, 3vh, 2rem)' }}>
             {cms('heroLabel', t.hero?.label || 'Istanbul · Architecture · Construction · Real Estate')}
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center' }}>
@@ -260,7 +275,7 @@ function PinnedHero({ t, cms, prefersReducedMotion }) {
           </div>
         </div>
 
-        <div ref={statsRef} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 'clamp(1rem, 4vw, 3rem)', marginTop: '3rem', willChange: 'transform, opacity' }}>
+        <div ref={statsRef} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 'clamp(1rem, 4vw, 3rem)', marginTop: 'clamp(1.25rem, 4vh, 3rem)', willChange: 'transform, opacity' }}>
           {[
             { n: '500', s: '+', l: t.hero?.stats?.properties  || 'Properties' },
             { n: '10',  s: '+', l: t.hero?.stats?.years       || 'Years' },
@@ -273,11 +288,49 @@ function PinnedHero({ t, cms, prefersReducedMotion }) {
             </div>
           ))}
         </div>
+
+        {/* Scroll cue — lives inside the same centered flow as the rest of
+            the hero content, so however tall the translated heading turns
+            out to be, this always sits right after it with a fixed gap
+            instead of floating at an independent, collision-prone offset.
+            (Transplanted from the donor hero, which already solved this.) */}
+        <div ref={scrollRef} className="vk-scroll-cue" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginTop: 'clamp(1.5rem, 4vh, 3rem)' }}>
+          <span style={{ fontSize: '0.58rem', letterSpacing: '0.4em', textTransform: 'uppercase', color: 'rgba(246,243,237,0.35)' }}>{t.hero?.scroll || 'Scroll'}</span>
+          <div style={{ width: 1, height: 44, backgroundColor: C.gold, opacity: 0.65, animation: 'vk-pulse 1.8s ease-in-out infinite' }} />
+        </div>
       </div>
 
       {/* Stage 3 — Brand reveal */}
       <div ref={brandRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0, pointerEvents: 'none', textAlign: 'center', padding: '0 1.5rem' }}>
-        <p style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(4rem, 16vw, 14rem)', fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(246,243,237,0.05)', lineHeight: 1, userSelect: 'none', whiteSpace: 'nowrap' }}>
+        {/*
+          Sized so the whole wordmark always fits, with margin to spare.
+
+          Measured from the real Cinzel 700 metrics rather than guessed:
+          V A R L I K E N T advance to 6.117em, and CSS letter-spacing adds
+          0.12em after EVERY character including the last, so the rendered
+          line is 6.117 + 9 x 0.12 = 7.197em wide. That multiplier is what
+          makes the font-size ceiling load-bearing:
+
+            clamp(4rem, 16vw, 14rem)  ->  224px x 7.197 = 1612px
+                                          overflows every viewport below
+                                          1612 + 48px padding, i.e. 115% of
+                                          a 1366 screen -- the word was
+                                          clipped outside the hero.
+
+            clamp(2rem, 9vw, 8rem)    ->  64.8% of the viewport across the
+                                          vw band and 48% once the 8rem
+                                          ceiling engages above 1422px.
+
+          9vw is not arbitrary: 7.197 x 9 = 64.8, so the slope IS the
+          percentage of the viewport the word occupies. Changing the
+          tracking below changes that multiplier and must be re-measured.
+
+          whiteSpace: 'nowrap' is safe precisely because the width is
+          bounded -- it is what keeps the wordmark on one line rather than
+          breaking mid-brand, and it can stay only while the maths above
+          holds.
+        */}
+        <p style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(2rem, 9vw, 8rem)', fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(246,243,237,0.05)', lineHeight: 1, userSelect: 'none', whiteSpace: 'nowrap' }}>
           VARLIKENT
         </p>
         <div ref={taglineRef} style={{ opacity: 0, marginTop: '1.5rem', willChange: 'transform, opacity' }}>
@@ -288,10 +341,6 @@ function PinnedHero({ t, cms, prefersReducedMotion }) {
       </div>
 
       {/* Scroll cue */}
-      <div ref={scrollRef} style={{ position: 'absolute', bottom: '2.5rem', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-        <span style={{ fontSize: '0.58rem', letterSpacing: '0.4em', textTransform: 'uppercase', color: 'rgba(246,243,237,0.35)' }}>{t.hero?.scroll || 'Scroll'}</span>
-        <div style={{ width: 1, height: 44, backgroundColor: C.gold, opacity: 0.65, animation: 'vk-pulse 1.8s ease-in-out infinite' }} />
-      </div>
 
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.33), transparent)' }} />
     </section>
@@ -606,6 +655,93 @@ export default function HomePage() {
         </section>
         )}
 
+        {/* ── PROCESS — charcoal bg ── */}
+        {isSectionVisible('process') && (
+        <section id="process" aria-label="How We Work" style={{ backgroundColor: bg('process')}} className="relative overflow-hidden">
+          <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.33), transparent)' }} />
+          <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: `linear-gradient(rgba(var(--vk-gold-rgb), 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--vk-gold-rgb), 0.04) 1px, transparent 1px)`, backgroundSize: '52px 52px' }} />
+
+          <div className="relative mx-auto max-w-7xl px-6 py-32">
+            <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-20 text-center">
+              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{cms('processLabel', t.process?.label || 'How We Work')}</SectionLabel></motion.div>
+              <div className="overflow-hidden">
+                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: C.marble }}>
+                  {cms('processHeading', t.process?.heading || 'From Vision to Handover')}
+                </motion.h2>
+              </div>
+            </motion.div>
+
+            <div className="relative">
+              <div className="absolute top-10 left-0 right-0 hidden lg:block h-px" style={{ background: 'linear-gradient(to right, transparent 3%, rgba(var(--vk-gold-rgb), 0.2) 12%, rgba(var(--vk-gold-rgb), 0.2) 88%, transparent 97%)' }} />
+              <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-5">
+                {(t.process?.steps || [
+                  { num: '01', title: 'Consult',           desc: 'We listen to your vision, brief and budget — then map a clear path forward.' },
+                  { num: '02', title: 'Design',            desc: 'Our architects craft plans balancing beauty, function and long-term value.' },
+                  { num: '03', title: 'Build',             desc: "Our construction teams deliver to Istanbul's highest quality standards." },
+                  { num: '04', title: 'Renovate & Finish', desc: 'Precision renovation and premium interior fit-out transforms every space.' },
+                  { num: '05', title: 'Sell or Rent',      desc: 'Our real estate team places your property with the right buyers and tenants.' },
+                ]).map((step, i) => (
+                  <motion.article key={step.num} initial="hidden" whileInView="show" viewport={vp} variants={mv.slideUp(i * 0.1)} className="relative flex flex-col">
+                    <div className="relative mb-7">
+                      <span style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(3rem, 5.5vw, 4.5rem)', fontWeight: 700, lineHeight: 1, color: 'rgba(var(--vk-gold-rgb), 0.13)', userSelect: 'none', display: 'block' }}>{step.num}</span>
+                      <div className="absolute bottom-2 left-0 h-px w-8" style={{ backgroundColor: C.gold, opacity: 0.55 }} />
+                    </div>
+                    <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '0.85rem', color: C.marble }} className="mb-3">{step.title}</h3>
+                    <p className="text-xs leading-relaxed" style={{ color: C.muted }}>{step.desc}</p>
+                  </motion.article>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
+        </section>
+        )}
+
+        {/* ── WHY VARLIKENT — soft white bg ── */}
+        {isSectionVisible('trust') && (
+        <section aria-label="Why VarliKent" style={{ backgroundColor: bg('trust')}}>
+          <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
+          <div className="mx-auto max-w-7xl px-6 py-32">
+            <div className="grid gap-20 lg:grid-cols-2 items-center">
+
+              <motion.div initial="hidden" whileInView="show" viewport={vp} variants={mv.slideLeft()} className="relative">
+                <div className="overflow-hidden rounded-2xl" style={{ border: `1px solid rgba(var(--vk-gold-rgb), 0.18)`, boxShadow: '0 8px 40px rgba(var(--vk-dark-rgb), 0.10)' }}>
+                  <img src={cms('trustImage', '/images/why-villa.png')} alt="VarliKent luxury property Istanbul" className="h-full w-full object-cover" loading="lazy" />
+                </div>
+                <div className="absolute -bottom-6 -right-6 hidden lg:block rounded-xl px-6 py-5" style={{ backgroundColor: '#fff', border: `1px solid rgba(var(--vk-gold-rgb), 0.3)`, boxShadow: '0 4px 20px rgba(var(--vk-dark-rgb), 0.1)' }}>
+                  <p style={{ fontFamily: 'Cinzel, serif', fontSize: '2rem', color: C.gold, fontWeight: 700, lineHeight: 1 }}>10+</p>
+                  <p className="text-xs tracking-widest uppercase mt-1.5" style={{ color: C.muted }}>{t.trust?.stat || 'Years of Excellence'}</p>
+                </div>
+              </motion.div>
+
+              <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.08)} className="lg:pl-8">
+                <motion.div variants={mv.fadeIn()}><SectionLabel>{cms('trustLabel', t.trust?.label || 'Why VarliKent')}</SectionLabel></motion.div>
+                <div className="overflow-hidden mb-6">
+                  <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.7rem, 3.6vw, 2.4rem)', color: C.charcoal, lineHeight: 1.22 }}>
+                    {cms('trustHeading', t.trust?.heading || 'A refined approach to property — from design to delivery.')}
+                  </motion.h2>
+                </div>
+                <motion.p variants={mv.slideUp(0.10)} className="mb-10 leading-relaxed text-sm" style={{ color: C.muted }}>
+                  {cms('trustBody', t.trust?.body || 'We bring together market intelligence, architectural expertise, and exceptional service — guiding clients through every stage.')}
+                </motion.p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {Object.entries(t.trust?.points || {}).map(([key, pt], i) => (
+                    <motion.div key={key} variants={mv.slideUp(i * 0.07)} className="flex gap-4 p-5 rounded-xl transition-all duration-300 hover:shadow-md"
+                      style={{ backgroundColor: '#fff', border: `1px solid rgba(var(--vk-green-rgb), 0.12)`, boxShadow: '0 1px 8px rgba(var(--vk-dark-rgb), 0.04)' }}>
+                      <svg className="h-5 w-5 shrink-0 mt-0.5" style={{ color: C.green }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={TRUST_PATHS[key]} /></svg>
+                      <div>
+                        <h4 style={{ fontFamily: 'Cinzel, serif', fontSize: '0.78rem', color: C.charcoal }} className="mb-1">{pt.title}</h4>
+                        <p className="text-xs leading-relaxed" style={{ color: C.muted }}>{pt.desc}</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+        )}
+
         {/* ── FOR SALE / RENT — dark charcoal + green glow ── */}
         {isSectionVisible('browse') && (
         <section aria-label="Buy or Rent" style={{ backgroundColor: bg('browse')}} className="relative overflow-hidden">
@@ -658,93 +794,6 @@ export default function HomePage() {
             </div>
           </div>
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.4), transparent)' }} />
-        </section>
-        )}
-
-        {/* ── WHY VARLIKENT — soft white bg ── */}
-        {isSectionVisible('trust') && (
-        <section aria-label="Why VarliKent" style={{ backgroundColor: bg('trust')}}>
-          <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
-          <div className="mx-auto max-w-7xl px-6 py-32">
-            <div className="grid gap-20 lg:grid-cols-2 items-center">
-
-              <motion.div initial="hidden" whileInView="show" viewport={vp} variants={mv.slideLeft()} className="relative">
-                <div className="overflow-hidden rounded-2xl" style={{ border: `1px solid rgba(var(--vk-gold-rgb), 0.18)`, boxShadow: '0 8px 40px rgba(var(--vk-dark-rgb), 0.10)' }}>
-                  <img src={cms('trustImage', '/images/why-villa.png')} alt="VarliKent luxury property Istanbul" className="h-full w-full object-cover" loading="lazy" />
-                </div>
-                <div className="absolute -bottom-6 -right-6 hidden lg:block rounded-xl px-6 py-5" style={{ backgroundColor: '#fff', border: `1px solid rgba(var(--vk-gold-rgb), 0.3)`, boxShadow: '0 4px 20px rgba(var(--vk-dark-rgb), 0.1)' }}>
-                  <p style={{ fontFamily: 'Cinzel, serif', fontSize: '2rem', color: C.gold, fontWeight: 700, lineHeight: 1 }}>10+</p>
-                  <p className="text-xs tracking-widest uppercase mt-1.5" style={{ color: C.muted }}>{t.trust?.stat || 'Years of Excellence'}</p>
-                </div>
-              </motion.div>
-
-              <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.08)} className="lg:pl-8">
-                <motion.div variants={mv.fadeIn()}><SectionLabel>{cms('trustLabel', t.trust?.label || 'Why VarliKent')}</SectionLabel></motion.div>
-                <div className="overflow-hidden mb-6">
-                  <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.7rem, 3.6vw, 2.4rem)', color: C.charcoal, lineHeight: 1.22 }}>
-                    {cms('trustHeading', t.trust?.heading || 'A refined approach to property — from design to delivery.')}
-                  </motion.h2>
-                </div>
-                <motion.p variants={mv.slideUp(0.10)} className="mb-10 leading-relaxed text-sm" style={{ color: C.muted }}>
-                  {cms('trustBody', t.trust?.body || 'We bring together market intelligence, architectural expertise, and exceptional service — guiding clients through every stage.')}
-                </motion.p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {Object.entries(t.trust?.points || {}).map(([key, pt], i) => (
-                    <motion.div key={key} variants={mv.slideUp(i * 0.07)} className="flex gap-4 p-5 rounded-xl transition-all duration-300 hover:shadow-md"
-                      style={{ backgroundColor: '#fff', border: `1px solid rgba(var(--vk-green-rgb), 0.12)`, boxShadow: '0 1px 8px rgba(var(--vk-dark-rgb), 0.04)' }}>
-                      <svg className="h-5 w-5 shrink-0 mt-0.5" style={{ color: C.green }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={TRUST_PATHS[key]} /></svg>
-                      <div>
-                        <h4 style={{ fontFamily: 'Cinzel, serif', fontSize: '0.78rem', color: C.charcoal }} className="mb-1">{pt.title}</h4>
-                        <p className="text-xs leading-relaxed" style={{ color: C.muted }}>{pt.desc}</p>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            </div>
-          </div>
-        </section>
-        )}
-
-        {/* ── PROCESS — charcoal bg ── */}
-        {isSectionVisible('process') && (
-        <section id="process" aria-label="How We Work" style={{ backgroundColor: bg('process')}} className="relative overflow-hidden">
-          <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.33), transparent)' }} />
-          <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: `linear-gradient(rgba(var(--vk-gold-rgb), 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--vk-gold-rgb), 0.04) 1px, transparent 1px)`, backgroundSize: '52px 52px' }} />
-
-          <div className="relative mx-auto max-w-7xl px-6 py-32">
-            <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-20 text-center">
-              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{cms('processLabel', t.process?.label || 'How We Work')}</SectionLabel></motion.div>
-              <div className="overflow-hidden">
-                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: C.marble }}>
-                  {cms('processHeading', t.process?.heading || 'From Vision to Handover')}
-                </motion.h2>
-              </div>
-            </motion.div>
-
-            <div className="relative">
-              <div className="absolute top-10 left-0 right-0 hidden lg:block h-px" style={{ background: 'linear-gradient(to right, transparent 3%, rgba(var(--vk-gold-rgb), 0.2) 12%, rgba(var(--vk-gold-rgb), 0.2) 88%, transparent 97%)' }} />
-              <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-5">
-                {(t.process?.steps || [
-                  { num: '01', title: 'Consult',           desc: 'We listen to your vision, brief and budget — then map a clear path forward.' },
-                  { num: '02', title: 'Design',            desc: 'Our architects craft plans balancing beauty, function and long-term value.' },
-                  { num: '03', title: 'Build',             desc: "Our construction teams deliver to Istanbul's highest quality standards." },
-                  { num: '04', title: 'Renovate & Finish', desc: 'Precision renovation and premium interior fit-out transforms every space.' },
-                  { num: '05', title: 'Sell or Rent',      desc: 'Our real estate team places your property with the right buyers and tenants.' },
-                ]).map((step, i) => (
-                  <motion.article key={step.num} initial="hidden" whileInView="show" viewport={vp} variants={mv.slideUp(i * 0.1)} className="relative flex flex-col">
-                    <div className="relative mb-7">
-                      <span style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(3rem, 5.5vw, 4.5rem)', fontWeight: 700, lineHeight: 1, color: 'rgba(var(--vk-gold-rgb), 0.13)', userSelect: 'none', display: 'block' }}>{step.num}</span>
-                      <div className="absolute bottom-2 left-0 h-px w-8" style={{ backgroundColor: C.gold, opacity: 0.55 }} />
-                    </div>
-                    <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '0.85rem', color: C.marble }} className="mb-3">{step.title}</h3>
-                    <p className="text-xs leading-relaxed" style={{ color: C.muted }}>{step.desc}</p>
-                  </motion.article>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
         </section>
         )}
 

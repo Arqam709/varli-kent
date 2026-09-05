@@ -127,9 +127,19 @@ export default function AIChatbot() {
     sendMessage,
     loadConversations,
     loadConversation,
+    // CURRENT ChatContext owns deletion end to end (network, list state,
+    // pagination and selected-transcript clearing). The donor called these
+    // with (pageKey, id, welcome); CURRENT's signatures are
+    // deleteConversation(id) and deleteAllConversations() — CURRENT wins.
+    deleteConversation,
+    deleteAllConversations,
   } = useChat()
 
   const [activeScreen, setActiveScreen] = useState('chat')
+  // { type: 'one', conversationId } or { type: 'all' }. One piece of state
+  // for both destructive actions, so the confirm dialog has a single source.
+  const [pendingDelete, setPendingDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const pageKey = useMemo(() => {
     const path = location.pathname
@@ -259,6 +269,42 @@ export default function AIChatbot() {
   const handleStartNewFromHistory = () => {
     startNewConversation(pageKey, pageConfig.welcome)
     setActiveScreen('chat')
+  }
+
+  // stopPropagation is what keeps the trash icon from also opening the row.
+  const handleRequestDeleteOne = (e, conversationId) => {
+    e.stopPropagation()
+    setPendingDelete({ type: 'one', conversationId })
+  }
+
+  const handleRequestDeleteAll = () => {
+    setPendingDelete({ type: 'all' })
+  }
+
+  const handleCancelDelete = () => {
+    setPendingDelete(null)
+  }
+
+  const handleConfirmDelete = async () => {
+    // Guard, not just a disabled button: a double tap can land two presses
+    // before React re-renders the disabled state.
+    if (!pendingDelete || deleting) return
+
+    setDeleting(true)
+    try {
+      if (pendingDelete.type === 'all') {
+        await deleteAllConversations()
+      } else {
+        await deleteConversation(pendingDelete.conversationId)
+      }
+    } catch {
+      // ChatContext already reports failures through its own error state and
+      // leaves the list untouched on a failed delete; there is nothing useful
+      // to add here beyond not crashing the panel.
+    } finally {
+      setDeleting(false)
+      setPendingDelete(null)
+    }
   }
 
   const handleSelectConversation = async (conversation) => {
@@ -436,17 +482,33 @@ export default function AIChatbot() {
             <div className="flex flex-1 flex-col overflow-hidden">
               {/* Pinned New Chat action — a sibling of the scroll container
                   below, not inside it, so it never scrolls away. */}
-              <div style={{ backgroundColor: C.cardBg, borderBottom: `1px solid ${C.border}` }}>
+              <div className="flex" style={{ backgroundColor: C.cardBg, borderBottom: `1px solid ${C.border}` }}>
                 <button
                   type="button"
                   onClick={handleStartNewFromHistory}
                   aria-label={c.aria?.startNewConversation || 'Start a new conversation'}
-                  className="flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-semibold uppercase tracking-widest outline-none transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
+                  className="flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-semibold uppercase tracking-widest outline-none transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
                   style={{ color: C.textLight, backgroundColor: C.deepGreen, outlineColor: C.gold }}
                 >
                   <PlusIcon />
                   <span>{c.actions?.newChat || 'New Chat'}</span>
                 </button>
+
+                {/* Only offered when there is actually something to delete —
+                    and never while the list is still loading or errored, so
+                    the control cannot act on a list nobody has seen. */}
+                {!conversationsLoading && !conversationsError && conversations.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleRequestDeleteAll}
+                    aria-label={c.aria?.deleteAllConversations || 'Delete all conversations'}
+                    className="flex items-center justify-center gap-1 px-3 text-[11px] font-semibold uppercase tracking-widest outline-none transition hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
+                    style={{ color: '#dc2626', outlineColor: C.gold, borderLeft: `1px solid ${C.border}` }}
+                  >
+                    <TrashIcon />
+                    <span className="hidden sm:inline">{c.actions?.deleteAll || 'Delete All'}</span>
+                  </button>
+                )}
               </div>
 
               {/* Scrollable rows only */}
@@ -497,14 +559,24 @@ export default function AIChatbot() {
                       const mainText = conversation.lastMessage?.text?.trim() || c.history?.fallbackTitle || 'Property conversation'
                       const metaText = `${formatMessageCount(conversation.messageCount, c)} · ${formatConversationTime(conversation.lastActivityAt, language, c)}`
 
+                      // A div with button semantics rather than a <button>: the
+                      // row now contains its own delete <button>, and a button
+                      // inside a button is invalid HTML. Keyboard activation is
+                      // restored explicitly below. (Donor structure.)
                       return (
-                        <button
-                          type="button"
+                        <div
+                          role="button"
+                          tabIndex={transcriptLoading ? -1 : 0}
                           key={conversation._id}
-                          onClick={() => handleSelectConversation(conversation)}
-                          disabled={transcriptLoading}
+                          onClick={() => !transcriptLoading && handleSelectConversation(conversation)}
+                          onKeyDown={(e) => {
+                            if ((e.key === 'Enter' || e.key === ' ') && !transcriptLoading) {
+                              e.preventDefault()
+                              handleSelectConversation(conversation)
+                            }
+                          }}
                           aria-label={`${c.aria?.openConversation || 'Open conversation'}: ${mainText}, ${metaText}${isActive ? (c.aria?.currentConversationSuffix || ', current conversation') : ''}`}
-                          className="flex w-full items-start gap-2 px-4 py-3 text-left outline-none transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-[-2px] disabled:cursor-not-allowed disabled:opacity-50"
+                          className={`flex w-full items-start gap-2 px-4 py-3 text-left outline-none transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-[-2px] cursor-pointer ${transcriptLoading ? 'cursor-not-allowed opacity-50' : ''}`}
                           style={{
                             borderBottom: `1px solid ${C.border}`,
                             borderLeft: isActive ? `3px solid ${C.deepGreen}` : '3px solid transparent',
@@ -535,7 +607,17 @@ export default function AIChatbot() {
                               {metaText}
                             </p>
                           </div>
-                        </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => handleRequestDeleteOne(e, conversation._id)}
+                            aria-label={`${c.aria?.deleteConversation || 'Delete conversation'}: ${mainText}`}
+                            className="shrink-0 rounded-full p-1.5 outline-none transition hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2"
+                            style={{ color: C.muted, outlineColor: C.gold }}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </div>
                       )
                     })}
                   </div>
@@ -769,6 +851,21 @@ export default function AIChatbot() {
             </button>
           </div>
             </>
+          )}
+
+          {pendingDelete && (
+            <ChatConfirmModal
+              busy={deleting}
+              message={
+                pendingDelete.type === 'all'
+                  ? c.history?.confirmDeleteAll || 'Delete all your conversations? This cannot be undone.'
+                  : c.history?.confirmDeleteOne || 'Delete this conversation? This cannot be undone.'
+              }
+              confirmLabel={deleting ? (c.actions?.deleting || 'Deleting...') : (c.actions?.delete || 'Delete')}
+              cancelLabel={c.actions?.cancel || 'Cancel'}
+              onCancel={handleCancelDelete}
+              onConfirm={handleConfirmDelete}
+            />
           )}
         </div>
       )}

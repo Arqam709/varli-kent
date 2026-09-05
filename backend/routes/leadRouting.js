@@ -5,7 +5,7 @@ import { requireRole } from '../middleware/checkPermission.js'
 
 const router = express.Router()
 
-const ALL_TYPES = ['Buying', 'Selling', 'Renting', 'Renovation', 'Interior Design', 'Architecture', 'Construction', 'General']
+const ALL_TYPES = ['Buying', 'Selling', 'Renting', 'Renovation', 'Interior Design', 'Architecture', 'Construction', 'General', 'Troubleshoot']
 
 // GET /api/lead-routing — owner only
 router.get('/', protect, requireRole('owner'), async (req, res, next) => {

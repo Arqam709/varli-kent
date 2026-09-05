@@ -3,7 +3,7 @@ import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
-import { useTheme, C } from '../contexts/ThemeContext'
+import { C } from '../contexts/ThemeContext'
 
 const ChevronIcon = ({ open }) => (
   <svg
@@ -92,34 +92,55 @@ const Navbar = () => {
     navigate('/')
   }
 
-  const { theme } = useTheme()
-  const isDarkNav = theme === 'forest'
-  const isLight = scrolled && !isDarkNav
+  // ── The scrolled nav surface ───────────────────────────────────
+  // A dark, theme-tinted translucent bar rather than the flat white
+  // --vk-nav-bg. That token is white (or near-white) in every theme, so using
+  // it turned the scrolled nav into a full-width white slab over the hero
+  // photograph — the thing this replaces.
+  //
+  // Every colour below is derived from the theme's OWN rgb tokens, so the bar
+  // re-tints with Studio Palette instead of being pinned to one hard-coded
+  // dark. Nothing here is #000: --vk-dark-rgb is 30,30,28 by default and
+  // 14,25,18 under Forest, which is what makes the tint read as charcoal-green
+  // rather than as black.
+  //
+  // Because the bar is now a DARK surface in both states, the nav text no
+  // longer switches ink at the scroll threshold — it stays light throughout,
+  // which is also why the previous white-on-white Forest bug cannot recur.
+  const solidNavStyle = {
+    backgroundColor: 'rgba(var(--vk-dark-rgb), 0.72)',
+    backgroundImage:
+      'radial-gradient(ellipse 80% 180% at 50% -30%, rgba(var(--vk-green-rgb), 0.30) 0%, transparent 70%)',
+    // saturate() keeps the hero's colour alive through the blur; without it a
+    // translucent dark bar greys out whatever is behind it.
+    backdropFilter: 'blur(14px) saturate(140%)',
+    WebkitBackdropFilter: 'blur(14px) saturate(140%)',
+    borderBottom: '1px solid rgba(var(--vk-gold-rgb), 0.20)',
+    boxShadow: '0 8px 30px rgba(var(--vk-dark-rgb), 0.30)',
+  }
+  // Nav text/background defaults to "over a dark hero" (white text,
+  // transparent bg) until scrolled. Routes with no dark hero at the top need
+  // the solid/dark-text style from the very first paint, or the nav renders
+  // near-invisible white-on-white before the user scrolls. A ROUTE LIST
+  // rather than a one-off pathname check, so adding the next such page is a
+  // one-line edit here instead of another branch. (Donor concept.)
+  const LIGHT_FROM_TOP_ROUTES = ['/favourites']
+  const startsLight = LIGHT_FROM_TOP_ROUTES.includes(location.pathname)
+  const navSolid = scrolled || startsLight
 
   return (
     <>
     <nav
       aria-label="Main navigation"
       className="fixed top-0 left-0 right-0 z-50 transition-all duration-500"
-      style={scrolled
-        ? {
-            backgroundColor: C.navBg,
-            backdropFilter: 'blur(12px)',
-            borderBottom: `1px solid rgba(0,0,0,0.06)`,
-            boxShadow: '0 1px 8px rgba(0,0,0,0.08)',
-            backgroundImage: isDarkNav
-              ? 'radial-gradient(ellipse 80% 180% at 50% -30%, rgba(var(--vk-green-rgb), 0.28) 0%, transparent 70%)'
-              : undefined,
-          }
-        : { backgroundColor: 'transparent' }
-      }
+      style={navSolid ? solidNavStyle : { backgroundColor: 'transparent' }}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-10">
 
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group" aria-label="VarliKent home">
           <span
-            style={{ fontFamily: 'Cinzel, serif', color: isLight ? C.textDark : '#ffffff' }}
+            style={{ fontFamily: 'Cinzel, serif', color: '#ffffff' }}
             className="text-lg font-bold tracking-[0.2em] transition-colors duration-300"
           >
             VARLI<span style={{ color: C.accent }}>KENT</span>
@@ -134,7 +155,7 @@ const Navbar = () => {
               to={link.to}
               end={link.end}
               className="text-xs font-medium uppercase tracking-[0.15em] transition-colors duration-200"
-              style={({ isActive }) => ({ color: isActive ? C.accent : (scrolled ? (isDarkNav ? 'rgba(255,255,255,0.85)' : C.textDark) : 'rgba(255,255,255,0.8)') })}
+              style={({ isActive }) => ({ color: isActive ? C.accent : ('rgba(255,255,255,0.8)') })}
             >
               {t.nav[link.key]}
             </NavLink>
@@ -147,7 +168,7 @@ const Navbar = () => {
               aria-expanded={servicesOpen}
               aria-haspopup="true"
               className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.15em] transition-colors duration-200 cursor-pointer"
-              style={{ color: scrolled ? (isDarkNav ? 'rgba(255,255,255,0.85)' : C.textDark) : 'rgba(255,255,255,0.8)' }}
+              style={{ color: 'rgba(255,255,255,0.8)' }}
             >
               {t.nav.services}
               <ChevronIcon open={servicesOpen} />
@@ -183,7 +204,7 @@ const Navbar = () => {
               key={link.to}
               to={link.to}
               className="text-xs font-medium uppercase tracking-[0.15em] transition-colors duration-200"
-              style={({ isActive }) => ({ color: isActive ? C.accent : (scrolled ? (isDarkNav ? 'rgba(255,255,255,0.85)' : C.textDark) : 'rgba(255,255,255,0.8)') })}
+              style={({ isActive }) => ({ color: isActive ? C.accent : ('rgba(255,255,255,0.8)') })}
             >
               {t.nav[link.key]}
             </NavLink>
@@ -205,7 +226,7 @@ const Navbar = () => {
                   className={`px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
                     language === lang.code
                       ? 'bg-[#4b6741] text-white'
-                      : isLight ? 'text-slate-500 hover:text-slate-800' : 'text-white/40 hover:text-white'
+                      : 'text-white/40 hover:text-white'
                   }`}
                 >
                   {lang.label}
@@ -223,7 +244,7 @@ const Navbar = () => {
                 className={`flex items-center justify-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
                   MORE_LANGS.some(l => l.code === language)
                     ? 'bg-[#4b6741] text-white'
-                    : isLight ? 'text-slate-500 hover:text-slate-800' : 'text-white/40 hover:text-white'
+                    : 'text-white/40 hover:text-white'
                 }`}
                 style={{ border: '1px solid rgba(255,255,255,0.12)' }}
               >
@@ -263,7 +284,7 @@ const Navbar = () => {
                 onClick={() => setUserMenuOpen((v) => !v)}
                 aria-expanded={userMenuOpen}
                 className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] transition-colors cursor-pointer"
-                style={{ color: scrolled ? (isDarkNav ? 'rgba(255,255,255,0.85)' : C.textDark) : 'rgba(255,255,255,0.8)' }}
+                style={{ color: 'rgba(255,255,255,0.8)' }}
               >
                 {user?.avatar
                   ? <img src={user.avatar} alt="" className="h-7 w-7 rounded-full object-cover" />
@@ -313,7 +334,7 @@ const Navbar = () => {
               <Link
                 to="/login"
                 className="text-xs font-medium uppercase tracking-[0.15em] transition-colors"
-                style={{ color: scrolled ? (isDarkNav ? 'rgba(255,255,255,0.85)' : C.textDark) : 'rgba(255,255,255,0.8)' }}
+                style={{ color: 'rgba(255,255,255,0.8)' }}
               >
                 {t.nav.signIn}
               </Link>
@@ -334,9 +355,7 @@ const Navbar = () => {
   onClick={() => setMobileOpen(true)}
   aria-label="Open navigation menu"
   className={`lg:hidden cursor-pointer p-2 rounded-lg transition-colors ${
-    scrolled && !isDarkNav
-      ? 'text-slate-900 hover:bg-black/5'
-      : 'text-white hover:bg-white/10'
+    'text-white hover:bg-white/10'
   }`}
 >
   <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

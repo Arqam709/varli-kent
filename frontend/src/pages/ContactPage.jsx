@@ -25,7 +25,19 @@ const vp = { once: true, margin: '-60px' }
 // Turkish visitor submitted interestType: 'Satın Alma' and was rejected by the enum —
 // the form only ever worked in English. Keep this array and every contactPage.interests
 // array the same length and the same order, or a label will attach to the wrong value.
-const INTEREST_TYPES = ['Buying', 'Renting', 'Selling', 'Renovation', 'Interior Design', 'Architecture', 'General']
+//
+// 'Troubleshoot' is APPENDED rather than slotted in beside the other service
+// reasons: because the label arrays are index-coupled, inserting mid-array would
+// shift 'General' by one in all six languages at once, and a single array missed
+// in that shift mislabels every option after it with no error anywhere. Appending
+// leaves indices 0-6 untouched.
+//
+// The backend also accepts 'Construction' (a visitor commissioning a new build).
+// It is intentionally NOT offered here — this form's build enquiries go through
+// Architecture/Renovation, and Construction stays reachable for the mobile client
+// and for admin routing. Troubleshoot is the opposite direction: something already
+// built has a problem and needs the technical team.
+const INTEREST_TYPES = ['Buying', 'Renting', 'Selling', 'Renovation', 'Interior Design', 'Architecture', 'General', 'Troubleshoot']
 
 const ContactPage = () => {
   const { t } = useLanguage()
