@@ -583,7 +583,7 @@ const translations = {
         visible: 'Visible', hidden: 'Hidden', order: 'Display Order', saveAll: 'Save All',
         creating: 'Creating...', uploading: 'Uploading...', ownerOnly: 'Owner access required',
         saveFailed: 'Failed to save', uploadFailed: 'Upload failed', failed: 'Failed',
-        refresh: 'Refresh', autoRefresh: 'Auto-refresh',
+        refresh: 'Refresh', autoRefresh: 'Auto-refresh', close: 'Close',
       },
       dashboard: {
         title: 'Dashboard', signedIn: 'Signed in as',
@@ -1659,7 +1659,7 @@ forgotPasswordPage: {
         visible: 'Görünür', hidden: 'Gizli', order: 'Sıra', saveAll: 'Tümünü Kaydet',
         creating: 'Oluşturuluyor...', uploading: 'Yükleniyor...', ownerOnly: 'Sahip erişimi gerekli',
         saveFailed: 'Kaydetme başarısız', uploadFailed: 'Yükleme başarısız', failed: 'Başarısız',
-        refresh: 'Yenile', autoRefresh: 'Otomatik yenile',
+        refresh: 'Yenile', autoRefresh: 'Otomatik yenile', close: 'Kapat',
       },
       dashboard: {
         title: 'Panel', signedIn: 'Oturum açık',
@@ -2736,7 +2736,7 @@ forgotPasswordPage: {
         visible: 'مرئي', hidden: 'مخفي', order: 'ترتيب العرض', saveAll: 'حفظ الكل',
         creating: 'جارٍ الإنشاء...', uploading: 'جارٍ الرفع...', ownerOnly: 'مطلوب صلاحية المالك',
         saveFailed: 'فشل الحفظ', uploadFailed: 'فشل الرفع', failed: 'فشل',
-        refresh: 'تحديث', autoRefresh: 'تحديث تلقائي',
+        refresh: 'تحديث', autoRefresh: 'تحديث تلقائي', close: 'إغلاق',
       },
       dashboard: {
         title: 'لوحة التحكم', signedIn: 'مسجّل دخول بصفة',
@@ -3880,7 +3880,7 @@ forgotPasswordPage: {
         deleted: 'Gelöscht', deleteFailed: 'Löschen fehlgeschlagen', failed: 'Fehlgeschlagen', updated: 'Aktualisiert', added: 'Hinzugefügt',
         confirmDeleteNamed: '{name} löschen? Dies kann nicht widerrufen werden.',
         confirmDeleteGeneric: 'Dieses Element löschen? Dies kann nicht widerrufen werden.',
-        refresh: 'Aktualisieren', autoRefresh: 'Automatisch aktualisieren', confirm: 'Bestätigen',
+        refresh: 'Aktualisieren', autoRefresh: 'Automatisch aktualisieren', confirm: 'Bestätigen', close: 'Schließen',
         uploaded: 'Hochgeladen', imagesAdded: '{n} Bild(er) hinzugefügt', nameRequired: 'Name ist erforderlich',
       },
       dashboard: {
@@ -5095,7 +5095,7 @@ forgotPasswordPage: {
         deleted: 'Удалено', deleteFailed: 'Не удалось удалить', failed: 'Не удалось', updated: 'Обновлено', added: 'Добавлено',
         confirmDeleteNamed: 'Удалить {name}? Это действие невозможно отменить.',
         confirmDeleteGeneric: 'Удалить этот элемент? Это действие невозможно отменить.',
-        refresh: 'Обновить', autoRefresh: 'Автообновление', confirm: 'Подтвердить',
+        refresh: 'Обновить', autoRefresh: 'Автообновление', confirm: 'Подтвердить', close: 'Закрыть',
         uploaded: 'Загружено', imagesAdded: 'Добавлено {n} изображение(й)', nameRequired: 'Имя обязательно',
       },
       dashboard: {
@@ -6310,7 +6310,7 @@ forgotPasswordPage: {
         deleted: 'حذف ہو گیا', deleteFailed: 'حذف کرنا ناکام ہوا', failed: 'ناکام', updated: 'اپڈیٹ ہو گیا', added: 'شامل ہو گیا',
         confirmDeleteNamed: '{name} کو حذف کریں؟ اس کو واپس نہیں لایا جا سکتا۔',
         confirmDeleteGeneric: 'اس آئٹم کو حذف کریں؟ اس کو واپس نہیں لایا جا سکتا۔',
-        refresh: 'ریفریش کریں', autoRefresh: 'خود کار ریفریش', confirm: 'تصدیق کریں',
+        refresh: 'ریفریش کریں', autoRefresh: 'خود کار ریفریش', confirm: 'تصدیق کریں', close: 'بند کریں',
         uploaded: 'اپ لوڈ ہو گیا', imagesAdded: '{n} تصویر شامل کی گئیں', nameRequired: 'نام درکار ہے',
       },
       dashboard: {

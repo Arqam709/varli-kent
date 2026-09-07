@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { editableText } from '../lib/localizedText'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
@@ -70,6 +70,27 @@ const AdminShowroom = () => {
     setModal(img)
   }
 
+  // The single way out of the editor. X, Cancel and Escape all come through
+  // here so none of them can drift into doing its own partial cleanup.
+  const closeModal = useCallback(() => setModal(null), [])
+
+  // Escape closes the editor, matching what every other dialog on the web does.
+  // Bound only while the editor is actually open, and torn down on close or
+  // unmount so no listener outlives the modal.
+  useEffect(() => {
+    if (modal === null) return
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return
+      // The delete confirmation renders on top; let it take its own Escape.
+      if (confirm) return
+      // Bailing out mid-request would hide a save/upload that is still running.
+      if (saving || uploading) return
+      closeModal()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [modal, confirm, saving, uploading, closeModal])
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -100,7 +121,7 @@ const AdminShowroom = () => {
         await api.put(`/showroom/${modal._id}`, form)
         toast.success('Updated')
       }
-      setModal(null)
+      closeModal()
       load(activeTab)
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed')
@@ -207,148 +228,172 @@ const AdminShowroom = () => {
 
       {modal !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          {/*
+            This panel is the tallest form in the admin — upload box, media
+            preview, two textareas, a live caption preview and the order/visible
+            row. It used to be an unbounded div inside an `items-center` overlay
+            that could not scroll, so once the content grew past the viewport it
+            overflowed EQUALLY off the top and the bottom: the header (and its
+            close button) went above y=0 and the footer below the fold, with no
+            scrollbar anywhere to reach either. On a 1366x768 laptop that left
+            the admin genuinely trapped in the editor.
+
+            Bounded height + flex column is the same shape AdminUsers.jsx's
+            permissions dialog already uses: header and footer are shrink-0, and
+            only the field list between them scrolls. 90dvh rather than 90vh so
+            mobile browser chrome is subtracted from the budget instead of
+            hiding the footer behind it.
+          */}
+          <div className="flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4">
               <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-lg font-bold text-[#202a36]">
                 {modal === 'create' ? (p.addMediaTitle || 'Add Media') : (p.editMediaTitle || 'Edit Media')}
               </h2>
-              <button onClick={() => setModal(null)} className="text-slate-400 hover:text-slate-700 transition cursor-pointer">
+              <button type="button" onClick={closeModal} aria-label={c.close || 'Close'} title={c.close || 'Close'} className="text-slate-400 hover:text-slate-700 transition cursor-pointer">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+            <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+              {/* min-h-0 is what actually lets this shrink below its content
+                  height — without it the flex child refuses to shrink and the
+                  overflow-y-auto never engages. */}
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-5">
 
-              <div>
-                <label className={labelCls}>{p.uploadLabel || 'Upload Image or Video'}</label>
-                <div
-                  onClick={() => fileRef.current.click()}
-                  className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-6 cursor-pointer hover:border-[#4b6741] hover:bg-slate-50 transition"
-                >
-                  {uploading ? (
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#4b6741] border-t-transparent" />
-                  ) : (
-                    <svg className="h-8 w-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                  )}
-                  <p className="text-sm font-medium text-slate-500">{uploading ? (c.uploading || 'Uploading…') : (p.clickToUpload || 'Click to upload')}</p>
-                  <p className="text-[10px] text-slate-400 text-center px-4">{UPLOAD_HINT}</p>
+                <div>
+                  <label className={labelCls}>{p.uploadLabel || 'Upload Image or Video'}</label>
+                  <div
+                    onClick={() => fileRef.current.click()}
+                    className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-6 cursor-pointer hover:border-[#4b6741] hover:bg-slate-50 transition"
+                  >
+                    {uploading ? (
+                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#4b6741] border-t-transparent" />
+                    ) : (
+                      <svg className="h-8 w-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                    )}
+                    <p className="text-sm font-medium text-slate-500">{uploading ? (c.uploading || 'Uploading…') : (p.clickToUpload || 'Click to upload')}</p>
+                    <p className="text-[10px] text-slate-400 text-center px-4">{UPLOAD_HINT}</p>
+                  </div>
+                  <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFileUpload} />
                 </div>
-                <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFileUpload} />
-              </div>
 
-              {form.url && (
-                <div className="relative rounded-xl overflow-hidden aspect-video bg-slate-100">
-                  {isVideo(form.url)
-                    ? <video src={form.url} className="h-full w-full object-cover" muted playsInline />
-                    : <img src={form.url} alt="" className="h-full w-full object-cover" />}
-                  <button type="button" onClick={() => setForm(f => ({ ...f, url: '' }))}
-                    className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white text-xs cursor-pointer">✕</button>
-                </div>
-              )}
-
-              <div>
-                <label className={labelCls}>{p.orPasteUrl || 'Or paste URL'}</label>
-                <input className={inputCls} value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://res.cloudinary.com/..." />
-              </div>
-
-              <div>
-                <label className={labelCls}>{p.titleLabel || 'Title (optional)'}</label>
-                <input
-                  className={inputCls}
-                  value={form.title}
-                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="e.g. Bosphorus Villa"
-                />
-                <p className="mt-1 text-[10px] text-slate-400">
-                  {p.titleHint || 'Heading shown when a visitor expands this media — separate from the caption below.'}
-                </p>
-              </div>
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className={labelCls}>{p.caption || 'Caption (optional)'}</label>
-                  <span className={`text-[10px] ${wordCount(form.caption) > CAPTION_WORDS ? 'text-amber-600 font-semibold' : 'text-slate-400'}`}>
-                    {wordCount(form.caption)}/{CAPTION_WORDS} {p.words || 'words'}
-                  </span>
-                </div>
-                <textarea
-                  rows={2}
-                  className={inputCls}
-                  value={form.caption}
-                  onChange={e => setForm(f => ({ ...f, caption: e.target.value }))}
-                  placeholder="e.g. Bosphorus Villa — 2024, a full renovation completed in six months"
-                />
-                <p className="mt-1 text-[10px] text-slate-400">
-                  {p.captionHint || 'Shown in a small box below the media on the public page. It grows with how much you write.'}
-                </p>
-
-                {/* Live preview of the public caption box, so the admin can see
-                    the short-label vs sentence styling before saving. */}
-                {form.caption.trim() && (
-                  <div className="mt-2">
-                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                      {p.previewLabel || 'Preview on public page'}
-                    </p>
-                    <div className="rounded-lg px-3 py-2" style={{ background: '#C9A35A' }}>
-                      <p
-                        className={wordCount(form.caption) > 8 ? 'text-xs leading-relaxed' : 'text-xs uppercase tracking-wider'}
-                        style={{ color: wordCount(form.caption) > 8 ? 'rgba(255,255,255,0.88)' : '#FFFFFF' }}
-                      >
-                        {form.caption}
-                      </p>
-                    </div>
+                {form.url && (
+                  <div className="relative rounded-xl overflow-hidden aspect-video bg-slate-100">
+                    {isVideo(form.url)
+                      ? <video src={form.url} className="h-full w-full object-cover" muted playsInline />
+                      : <img src={form.url} alt="" className="h-full w-full object-cover" />}
+                    <button type="button" onClick={() => setForm(f => ({ ...f, url: '' }))}
+                      className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white text-xs cursor-pointer">✕</button>
                   </div>
                 )}
-              </div>
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className={labelCls}>{p.detailText || 'Detail Text (optional)'}</label>
-                  <span className={`text-[10px] ${wordCount(form.detailText) > DETAIL_WORDS ? 'text-amber-600 font-semibold' : 'text-slate-400'}`}>
-                    {wordCount(form.detailText)}/{DETAIL_WORDS} {p.words || 'words'}
-                  </span>
-                </div>
-                <textarea
-                  rows={5}
-                  className={inputCls}
-                  value={form.detailText}
-                  onChange={e => setForm(f => ({ ...f, detailText: e.target.value }))}
-                  placeholder="Longer description shown when a visitor expands this image or video..."
-                />
-                <p className="mt-1 text-[10px] text-slate-400">
-                  {p.detailHint || 'Fill this in and expanding the media on the public page shows it larger with this text beside it. Leave blank for a simple full-size view.'}
-                </p>
-              </div>
-
-              {activeTab === 'interior' && (
                 <div>
-                  <label className={labelCls}>{p.designStyle || 'Design Style (optional)'}</label>
-                  <select className={inputCls} value={form.style} onChange={e => setForm(f => ({ ...f, style: e.target.value }))}>
-                    <option value="">{p.allStyles || 'All Styles'}</option>
-                    <option value="contemporary">{p.contemporary || 'Contemporary'}</option>
-                    <option value="warm">{p.warmModern || 'Warm Modern'}</option>
-                    <option value="coastal">{p.coastal || 'Coastal'}</option>
-                    <option value="classic">{p.classic || 'Classic'}</option>
-                  </select>
+                  <label className={labelCls}>{p.orPasteUrl || 'Or paste URL'}</label>
+                  <input className={inputCls} value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://res.cloudinary.com/..." />
                 </div>
-              )}
 
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelCls}>{p.orderLabel || 'Display Order'}</label>
-                  <input type="number" className={inputCls} value={form.order} onChange={e => setForm(f => ({ ...f, order: Number(e.target.value) }))} />
+                  <label className={labelCls}>{p.titleLabel || 'Title (optional)'}</label>
+                  <input
+                    className={inputCls}
+                    value={form.title}
+                    onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                    placeholder="e.g. Bosphorus Villa"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {p.titleHint || 'Heading shown when a visitor expands this media — separate from the caption below.'}
+                  </p>
                 </div>
-                <div className="flex flex-col">
-                  <label className={labelCls}>{c.visible || 'Visible'}</label>
-                  <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                    <input type="checkbox" className="h-4 w-4 accent-[#4b6741]" checked={form.visible} onChange={e => setForm(f => ({ ...f, visible: e.target.checked }))} />
-                    <span className="text-sm text-slate-600">{p.showOnPage || 'Show on page'}</span>
-                  </label>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className={labelCls}>{p.caption || 'Caption (optional)'}</label>
+                    <span className={`text-[10px] ${wordCount(form.caption) > CAPTION_WORDS ? 'text-amber-600 font-semibold' : 'text-slate-400'}`}>
+                      {wordCount(form.caption)}/{CAPTION_WORDS} {p.words || 'words'}
+                    </span>
+                  </div>
+                  <textarea
+                    rows={2}
+                    className={inputCls}
+                    value={form.caption}
+                    onChange={e => setForm(f => ({ ...f, caption: e.target.value }))}
+                    placeholder="e.g. Bosphorus Villa — 2024, a full renovation completed in six months"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {p.captionHint || 'Shown in a small box below the media on the public page. It grows with how much you write.'}
+                  </p>
+
+                  {/* Live preview of the public caption box, so the admin can see
+                      the short-label vs sentence styling before saving. */}
+                  {form.caption.trim() && (
+                    <div className="mt-2">
+                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                        {p.previewLabel || 'Preview on public page'}
+                      </p>
+                      <div className="rounded-lg px-3 py-2" style={{ background: '#C9A35A' }}>
+                        <p
+                          className={`break-words ${wordCount(form.caption) > 8 ? 'text-xs leading-relaxed' : 'text-xs uppercase tracking-wider'}`}
+                          style={{ color: wordCount(form.caption) > 8 ? 'rgba(255,255,255,0.88)' : '#FFFFFF' }}
+                        >
+                          {form.caption}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className={labelCls}>{p.detailText || 'Detail Text (optional)'}</label>
+                    <span className={`text-[10px] ${wordCount(form.detailText) > DETAIL_WORDS ? 'text-amber-600 font-semibold' : 'text-slate-400'}`}>
+                      {wordCount(form.detailText)}/{DETAIL_WORDS} {p.words || 'words'}
+                    </span>
+                  </div>
+                  <textarea
+                    rows={5}
+                    className={inputCls}
+                    value={form.detailText}
+                    onChange={e => setForm(f => ({ ...f, detailText: e.target.value }))}
+                    placeholder="Longer description shown when a visitor expands this image or video..."
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {p.detailHint || 'Fill this in and expanding the media on the public page shows it larger with this text beside it. Leave blank for a simple full-size view.'}
+                  </p>
+                </div>
+
+                {activeTab === 'interior' && (
+                  <div>
+                    <label className={labelCls}>{p.designStyle || 'Design Style (optional)'}</label>
+                    <select className={inputCls} value={form.style} onChange={e => setForm(f => ({ ...f, style: e.target.value }))}>
+                      <option value="">{p.allStyles || 'All Styles'}</option>
+                      <option value="contemporary">{p.contemporary || 'Contemporary'}</option>
+                      <option value="warm">{p.warmModern || 'Warm Modern'}</option>
+                      <option value="coastal">{p.coastal || 'Coastal'}</option>
+                      <option value="classic">{p.classic || 'Classic'}</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>{p.orderLabel || 'Display Order'}</label>
+                    <input type="number" className={inputCls} value={form.order} onChange={e => setForm(f => ({ ...f, order: Number(e.target.value) }))} />
+                  </div>
+                  <div className="flex flex-col">
+                    <label className={labelCls}>{c.visible || 'Visible'}</label>
+                    <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                      <input type="checkbox" className="h-4 w-4 accent-[#4b6741]" checked={form.visible} onChange={e => setForm(f => ({ ...f, visible: e.target.checked }))} />
+                      <span className="text-sm text-slate-600">{p.showOnPage || 'Show on page'}</span>
+                    </label>
+                  </div>
+                </div>
+
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">{c.cancel || 'Cancel'}</button>
+              {/* Outside the scroll container on purpose: Save and Cancel stay
+                  on screen no matter how far down the form the admin is. */}
+              <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4">
+                <button type="button" onClick={closeModal} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">{c.cancel || 'Cancel'}</button>
                 <button type="submit" disabled={saving || uploading} className="rounded-xl bg-[#4b6741] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#3d5535] transition disabled:opacity-60 cursor-pointer">
                   {saving ? (c.saving || 'Saving…') : modal === 'create' ? (p.addToShowroom || 'Add to Showroom') : (c.save || 'Save Changes')}
                 </button>
