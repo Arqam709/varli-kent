@@ -25,11 +25,20 @@ export const PROPERTY_TYPES = [
   'Commercial', 'Land', 'Shop', 'Warehouse', 'Hotel', 'Farm',
 ]
 
-export const HEATING_OPTIONS = ['Central', 'Individual Gas', 'Floor Heating', 'Air Conditioning', 'None']
+// Same union the editor, the public filter and the chat vocabulary carry.
+// Without it the assistant could read "Kombi (Doğalgaz)" off a listing and
+// have no bucket to put it in, even though the editor can store one.
+export const HEATING_OPTIONS = [
+  'Stove', 'Natural Gas Stove', 'Central Heating', 'Central', 'Central (Meter)',
+  'Combi Boiler (Natural Gas)', 'Individual Gas', 'Floor Heating', 'Air Conditioning', 'None',
+]
 
-export const PARKING_OPTIONS = ['Open Parking', 'Closed Parking', 'None']
+export const PARKING_OPTIONS = [
+  'Open Parking', 'Closed Parking', 'Open Parking Lot', 'Parking Garage',
+  'Open & Covered Parking', 'None',
+]
 
-export const BUILDING_AGE_OPTIONS = ['0 (New)', '1-5', '6-10', '11-15', '16-20', '21+']
+export const BUILDING_AGE_OPTIONS = ['0', '1', '2', '3', '4', '5', '6-10', '11-15', '16-20', '21-25', '26-30', '31+']
 
 export const ROOM_OPTIONS = [
   'Studio (1+0)', '1+1', '1.5+1', '2+0', '2+1', '2.5+1', '2+2',
@@ -204,8 +213,8 @@ DETAILED EXTRACTION AND TURKISH NORMALIZATION
 - floor: the property's numeric floor, for example "4. kat" to 4. Basement levels may be negative only when a numeric basement level is explicit.
 - floorLocation: one of ${FLOOR_LOCATION_OPTIONS.join(', ')} when the floor is described non-numerically. Map "zemin/bahçe katı" to Ground floor, "yüksek giriş" to High Entrance, "çatı katı" to Penthouse when it means a top-floor unit, "dubleks/çatı dubleksi" to Duplex, and "tripleks" to Triplex. Do not set a numeric floor merely from a non-numeric phrase.
 - totalFloors: total floors in the building, commonly labelled "Kat Sayısı"; do not confuse it with the property's own floor.
-- buildingAge: one of ${BUILDING_AGE_OPTIONS.join(', ')}. Map "sıfır/yeni bina/0" to "0 (New)", stated ages 1-5 to "1-5", 6-10 to "6-10", 11-15 to "11-15", 16-20 to "16-20", and 21 or more to "21+".
-- heating: one of ${HEATING_OPTIONS.join(', ')}. Map "Merkezi" to Central, "Kombi (Doğalgaz)/Doğalgaz Kombi" to Individual Gas, "Yerden Isıtma" to Floor Heating, "Klima" to Air Conditioning and an explicit "Isıtma yok/Yok" to None.
+- buildingAge: one of ${BUILDING_AGE_OPTIONS.join(', ')}. Map "sıfır/yeni bina/0" to "0", a stated age of 1, 2, 3, 4 or 5 to that exact bucket, 6-10 to "6-10", 11-15 to "11-15", 16-20 to "16-20", 21-25 to "21-25", 26-30 to "26-30", and 31 or more to "31+". Only use a single-year bucket when the listing states a single year; if it gives a range, pick the band that contains it, and if the age is not stated at all use null rather than guessing.
+- heating: one of ${HEATING_OPTIONS.join(', ')}. Map "Merkezi" to Central, "Merkezi (Pay Ölçer)" to "Central (Meter)", "Kombi (Doğalgaz)/Doğalgaz Kombi" to "Combi Boiler (Natural Gas)", "Soba" to Stove, "Doğalgaz Sobası" to "Natural Gas Stove", "Yerden Isıtma" to Floor Heating, "Klima" to Air Conditioning and an explicit "Isıtma yok/Yok" to None.
 - kitchenType: one of ${KITCHEN_TYPE_OPTIONS.join(', ')}. Map "Açık/Amerikan mutfak" to "Open (American)" and "Kapalı mutfak" to Closed.
 - parking: one of ${PARKING_OPTIONS.join(', ')}. Map "Açık Otopark" to Open Parking, "Kapalı Otopark/Otopark (Kapalı)" to Closed Parking and an explicit "Otopark yok/Yok" to None. If both open and closed parking are stated, choose the option most specifically presented as belonging to the property; otherwise return null because CURRENT has no combined value.
 - nearbyTransport: an array containing only ${TRANSPORT_OPTIONS.join(', ')}. Map explicitly nearby "Metro", "Metrobüs", "Otobüs", "Vapur", "Tren", "Tramvay" and "Otoyol bağlantısı" to their canonical values. Do not infer proximity.

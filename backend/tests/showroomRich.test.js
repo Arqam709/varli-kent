@@ -367,3 +367,34 @@ test('6. writing the rich fields still requires owner/admin', async () => {
 
   assert.equal(store.length, 0)
 })
+
+
+test('crop POST, public GET and recrop PUT keep the original URL and crop metadata separate', async () => {
+  currentUser = OWNER
+  const crop = { width: 1000, height: 800, cropUrl: 'https://example.com/crop.jpg', cropWidth: 400, cropHeight: 300 }
+  const original = 'https://example.com/original.jpg'
+  const created = await request('POST', '/api/showroom', { serviceType: 'architecture', url: original, ...crop })
+  assert.equal(created.status, 201)
+  for (const [key, value] of Object.entries(crop)) assert.equal(store[0][key], value)
+  const id = store[0]._id
+  const edited = await request('PUT', '/api/showroom/' + id, { cropUrl: 'https://example.com/recrop.jpg', cropWidth: 300, cropHeight: 200 })
+  assert.equal(edited.status, 200)
+  assert.equal(store[0].url, original)
+  assert.equal(store[0].width, 1000)
+  const publicResult = await request('GET', '/api/showroom/architecture')
+  assert.equal(publicResult.body.images[0].cropUrl, 'https://example.com/recrop.jpg')
+  assert.equal(publicResult.body.images[0].cropWidth, 300)
+  assert.equal(publicResult.body.images[0].url, original)
+  assert.equal(providerCalls.length, 0)
+})
+
+test('invalid crop is rejected on both write routes without changing stored data', async () => {
+  currentUser = OWNER
+  const bad = { url: 'https://example.com/a.jpg', cropUrl: 'https://example.com/crop.jpg', cropWidth: 0, cropHeight: 200 }
+  assert.equal((await request('POST', '/api/showroom', { serviceType: 'architecture', ...bad })).status, 400)
+  assert.equal(store.length, 0)
+  store.push({ _id: 'a', serviceType: 'architecture', url: 'https://example.com/original.jpg' })
+  assert.equal((await request('PUT', '/api/showroom/a', bad)).status, 400)
+  assert.equal(store[0].url, 'https://example.com/original.jpg')
+  assert.equal(store[0].cropUrl, undefined)
+})

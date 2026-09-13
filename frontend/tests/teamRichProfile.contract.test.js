@@ -72,8 +72,8 @@ test('1e. BOTH single-image fields use the one uploader', async () => {
   assert.ok(main, 'the main grid photo does not use ImageUploadField')
   assert.ok(secondary, 'the secondary profile photo does not use ImageUploadField')
 
-  assert.match(main, /onChange=\{url => setForm\(f => \(\{ \.\.\.f, photo: url \}\)\)\}/, 'main photo is not wired to form.photo')
-  assert.match(secondary, /onChange=\{url => setForm\(f => \(\{ \.\.\.f, secondaryPhoto: url \}\)\)\}/, 'secondary photo is not wired to form.secondaryPhoto')
+  assert.match(main, /onChange=\{url => setForm\(f => \(\{ \.\.\.f, photo: url, photoCropUrl: '' \}\)\)\}/, 'main photo is not wired to form.photo')
+  assert.match(secondary, /onChange=\{url => setForm\(f => \(\{ \.\.\.f, secondaryPhoto: url, secondaryPhotoCropUrl: '' \}\)\)\}/, 'secondary photo is not wired to form.secondaryPhoto')
 
   // One component, not a second abstraction per field.
   for (const banned of ['MainPhotoUpload', 'PhotoUploader', 'SinglePhotoField']) {

@@ -69,8 +69,13 @@ test('1c. every rich field has a real input bound to the form', async () => {
       `'${f}' has an input that never writes back to the form`
     )
   }
-  // detailText is prose, so it needs room to write.
-  assert.match(s, /<textarea[\s\S]{0,500}value=\{form\.detailText\}/, 'detailText is not a textarea')
+  // detailText is prose, so it needs room to write. AutoGrowTextarea renders a
+  // real <textarea> and grows it with the content, so either tag satisfies the
+  // point of this check — what must never happen is a single-line <input>.
+  assert.match(
+    s, /<(textarea|AutoGrowTextarea)[\s\S]{0,500}value=\{form\.detailText\}/,
+    'detailText is not a multi-line prose field'
+  )
 })
 
 test('1d. no new upload or storage architecture was introduced', async () => {

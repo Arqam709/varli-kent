@@ -233,8 +233,18 @@ export const CANONICAL_TITLE_DEED_STATUSES = [
 ]
 export const CANONICAL_TRANSPORT_OPTIONS = ['Metro', 'Metrobus', 'Bus', 'Ferry', 'Train', 'Tram', 'Highway Access']
 export const CANONICAL_CURRENCIES = ['TL', 'USD', 'EUR', 'GBP']
-export const CANONICAL_HEATING = ['Central', 'Individual Gas', 'Floor Heating', 'Air Conditioning', 'None']
-export const CANONICAL_PARKING_TYPES = ['Open Parking', 'Closed Parking', 'None']
+// Kept in step with PropertiesPage.jsx, which is the authority for these two
+// (they have no Mongoose enum). Both were widened to the union of this site's
+// vocabulary and the second front-end that shares the same database, so the
+// assistant can answer about listings written from either side.
+export const CANONICAL_HEATING = [
+  'Stove', 'Natural Gas Stove', 'Central Heating', 'Central', 'Central (Meter)',
+  'Combi Boiler (Natural Gas)', 'Individual Gas', 'Floor Heating', 'Air Conditioning', 'None',
+]
+export const CANONICAL_PARKING_TYPES = [
+  'Open Parking', 'Closed Parking', 'Open Parking Lot', 'Parking Garage',
+  'Open & Covered Parking', 'None',
+]
 export const CANONICAL_ROOMS = [
   'Studio (1+0)', '1+1', '1.5+1', '2+0', '2+1', '2.5+1', '2+2',
   '3+0', '3+1', '3.5+1', '3+2', '3+3',
@@ -366,25 +376,44 @@ export const HEATING_TERMS = {
 
 /* ─── Building age buckets ─────────────────────────────────────────────
  *
- * CURRENT's six stored buckets, each with the maximum age it covers. The
- * donor's twelve single-year buckets ('0','1','2',...,'31+') are NOT used:
- * no listing in this database carries one, so an $in against them matches
- * nothing.
+ * The twelve canonical buckets, each with the maximum age it covers.
  *
  * `maxYears` exists so a relative phrase ("built in the last 10 years")
  * can expand to every bucket that fits entirely inside the stated span,
- * which is what an $in query needs. '21+' is unbounded, so it can never
- * fit inside any finite span — Infinity makes that fall out of the
- * comparison rather than needing a special case.
+ * which is what an $in query needs — and that is exactly why the single
+ * years matter. Under the six-bucket set this site used to ship, '1-5'
+ * covered up to five years, so "built in the last 3 years" could only
+ * answer with '0 (New)' and quietly dropped every one-, two- and
+ * three-year-old building. Splitting 1..5 fixes that, and splitting the
+ * old unbounded '21+' into 21-25 / 26-30 / 31+ means a 25-year-old
+ * building can be found by "in the last 30 years" instead of being
+ * unreachable by any finite span.
+ *
+ * '31+' is still unbounded, so it still cannot fit inside a finite span.
+ * Infinity makes that fall out of the comparison rather than needing a
+ * special case, and it is now correct rather than merely convenient: a
+ * building of unknown age past 31 genuinely cannot be promised to fall
+ * within any stated number of years.
  */
 export const BUILDING_AGE_BUCKETS = [
-  { label: '0 (New)', maxYears: 0 },
-  { label: '1-5', maxYears: 5 },
+  { label: '0', maxYears: 0 },
+  { label: '1', maxYears: 1 },
+  { label: '2', maxYears: 2 },
+  { label: '3', maxYears: 3 },
+  { label: '4', maxYears: 4 },
+  { label: '5', maxYears: 5 },
   { label: '6-10', maxYears: 10 },
   { label: '11-15', maxYears: 15 },
   { label: '16-20', maxYears: 20 },
-  { label: '21+', maxYears: Infinity },
+  { label: '21-25', maxYears: 25 },
+  { label: '26-30', maxYears: 30 },
+  { label: '31+', maxYears: Infinity },
 ]
+
+// Retired buckets, kept recognisable so an older stored value or a stale
+// conversation still resolves. Never produced as new parser output, and
+// never rewritten into a canonical bucket — the exact age is unknown.
+export const BUILDING_AGE_DEPRECATED_LABELS = ['0 (New)', '1-5', '21+']
 
 export const BUILDING_AGE_BUCKET_LABELS = BUILDING_AGE_BUCKETS.map((bucket) => bucket.label)
 

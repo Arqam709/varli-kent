@@ -24,6 +24,12 @@ import { localizedField } from '../utils/localizedField.js'
 const showroomImageSchema = new mongoose.Schema({
   serviceType: { type: String, required: true, enum: ['architecture', 'interior', 'construction', 'renovation'] },
   url: { type: String, required: true },
+  // Optional non-destructive lightbox crop. Zero means unknown on legacy rows/videos.
+  width: { type: Number, default: 0, min: 0, validate: Number.isSafeInteger },
+  height: { type: Number, default: 0, min: 0, validate: Number.isSafeInteger },
+  cropWidth: { type: Number, default: 0, min: 0, max: 4096, validate: Number.isSafeInteger },
+  cropHeight: { type: Number, default: 0, min: 0, max: 4096, validate: Number.isSafeInteger },
+  cropUrl: { type: String, default: '', validate: value => !value || /^https?:\/\//i.test(value) },
   // The short line under a card in the carousel.
   caption: localizedField(),
 

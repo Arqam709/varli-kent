@@ -21,9 +21,34 @@ const ROOM_OPTIONS = [
 
 const PROPERTY_TYPES = ['Apartment','Villa','Penthouse','Duplex','Studio','Office','Commercial','Land','Shop','Warehouse','Hotel','Farm']
 
-const HEATING = ['Central','Individual Gas','Floor Heating','Air Conditioning','None']
-const PARKING = ['Open Parking','Closed Parking','None']
-const BUILDING_AGE = ['0 (New)','1-5','6-10','11-15','16-20','21+']
+/*
+ * Compatibility union, not a preference.
+ *
+ * This deployment shares one MongoDB database with a second front-end that
+ * ships a different, longer vocabulary for these two fields. Listings written
+ * there are already in the collection — a real one stores heating
+ * 'Combi Boiler (Natural Gas)' and parking 'Open & Covered Parking' — and
+ * neither value existed in any list here, so the filters could never reach
+ * them and the editor could never reproduce them.
+ *
+ * So both sets are carried, and nothing is aliased: 'Combi Boiler (Natural
+ * Gas)' is NOT folded into 'Individual Gas', and 'Open & Covered Parking' is
+ * NOT folded into 'Open Parking' — the latter plausibly means both kinds of
+ * space exist, which is a third state, not a synonym. Collapsing them is a
+ * product decision, and until someone makes it the stored meaning is kept.
+ */
+const HEATING = [
+  'Stove','Natural Gas Stove','Central Heating','Central','Central (Meter)',
+  'Combi Boiler (Natural Gas)','Individual Gas','Floor Heating','Air Conditioning','None',
+]
+const PARKING = [
+  'Open Parking','Closed Parking','Open Parking Lot','Parking Garage',
+  'Open & Covered Parking','None',
+]
+// Mirrors AdminProperties.jsx. The three retired buckets are not offered
+// here — a visitor must never be asked to choose between "1-5" and "3" as
+// if they were alternatives.
+const BUILDING_AGE = ['0','1','2','3','4','5','6-10','11-15','16-20','21-25','26-30','31+']
 
 /*
  * Wave 10B4 vocabularies. These mirror the enums in
@@ -72,6 +97,48 @@ const SkeletonCard = () => (
   </div>
 )
 
+/*
+ * One collapsible filter row.
+ *
+ * Declared at module scope on purpose: a component defined inside
+ * PropertiesPage would be a brand-new type on every render, so React would
+ * unmount and remount every section and each one would forget whether it was
+ * open the moment anything else on the page changed.
+ *
+ * Sections hold their own open state and nothing coordinates them, so several
+ * can be open at once — opening Heating must not close Parking.
+ *
+ * The body stays mounted and is hidden with the `hidden` attribute rather than
+ * being conditionally rendered, so `aria-controls` always points at a real
+ * element and a half-typed number is not thrown away by collapsing the row.
+ */
+const FilterSection = ({ id, title, defaultOpen = false, children }) => {
+  const [open, setOpen] = useState(defaultOpen)
+  const panelId = `${id}-panel`
+
+  return (
+    <div className="border-b border-slate-100 pb-4">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="flex w-full items-center justify-between gap-2 cursor-pointer text-start"
+      >
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</span>
+        <svg
+          aria-hidden="true"
+          className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div id={panelId} hidden={!open} className="mt-3">{children}</div>
+    </div>
+  )
+}
+
 const Label = ({ children }) => (
   <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">{children}</label>
 )
@@ -92,7 +159,6 @@ const PropertiesPage = () => {
   // Presentation only, and deliberately NOT in the URL: a shared filter
   // link should carry the filters, not dictate how the recipient views them.
   const [viewMode, setViewMode] = useState('grid')
-  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const [listingType, setListingType] = useState(searchParams.get('listingType') || '')
   const [district,    setDistrict]    = useState(searchParams.get('district') || '')
@@ -104,9 +170,12 @@ const PropertiesPage = () => {
   const [maxSqm,      setMaxSqm]      = useState(searchParams.get('maxSqm') || '')
   const [floor,       setFloor]       = useState(searchParams.get('floor') || '')
   const [totalFloors, setTotalFloors] = useState(searchParams.get('totalFloors') || '')
-  const [heating,     setHeating]     = useState(searchParams.get('heating') || '')
-  const [parking,     setParking]     = useState(searchParams.get('parking') || '')
-  const [buildingAge, setBuildingAge] = useState(searchParams.get('buildingAge') || '')
+  // Arrays, not strings: these three are any-of multi-selects now, and getAll
+  // is what restores every value from a shared ?heating=A&heating=B link
+  // rather than only the first one.
+  const [heating,     setHeating]     = useState(() => searchParams.getAll('heating'))
+  const [parking,     setParking]     = useState(() => searchParams.getAll('parking'))
+  const [buildingAge, setBuildingAge] = useState(() => searchParams.getAll('buildingAge'))
   const [furnished,   setFurnished]   = useState(searchParams.get('furnished') || '')
   const [balcony,     setBalcony]     = useState(searchParams.get('balcony') || '')
   const [elevator,    setElevator]    = useState(searchParams.get('elevator') || '')
@@ -164,9 +233,6 @@ const PropertiesPage = () => {
     setIf('maxSqm', maxSqm)
     setIf('floor', floor)
     setIf('totalFloors', totalFloors)
-    setIf('heating', heating)
-    setIf('parking', parking)
-    setIf('buildingAge', buildingAge)
     setIf('furnished', furnished)
     setIf('balcony', balcony)
     setIf('elevator', elevator)
@@ -182,6 +248,9 @@ const PropertiesPage = () => {
     setIf('maxCoefficient', maxCoefficient)
     setIf('listedSince', listedSince)
 
+    appendAll('heating', heating)
+    appendAll('parking', parking)
+    appendAll('buildingAge', buildingAge)
     appendAll('floorLocation', floorLocation)
     appendAll('kitchenType', kitchenType)
     appendAll('usageStatus', usageStatus)
@@ -230,7 +299,7 @@ const PropertiesPage = () => {
   const clearFilters = () => {
     setListingType(''); setDistrict(''); setPropertyType(''); setMinPrice(''); setMaxPrice('')
     setRooms(''); setMinSqm(''); setMaxSqm(''); setFloor(''); setTotalFloors('')
-    setHeating(''); setParking(''); setBuildingAge(''); setFurnished('')
+    setHeating([]); setParking([]); setBuildingAge([]); setFurnished('')
     setBalcony(''); setElevator(''); setPool(''); setGarden('')
     setBaths(''); setMinNetSqm(''); setMaxNetSqm(''); setMinOpenArea(''); setMaxOpenArea('')
     setMinCoefficient(''); setMaxCoefficient(''); setListedSince('')
@@ -254,9 +323,9 @@ const PropertiesPage = () => {
 
   const setTri = (field, value) => setTriState(prev => ({ ...prev, [field]: value }))
 
-  const rangeRow = (key, labelText, minValue, setMin, maxValue, setMax, step) => (
+  const rangeRow = (key, labelText, minValue, setMin, maxValue, setMax, step, srOnly) => (
     <div key={key}>
-      <Label>{labelText}</Label>
+      {srOnly ? <span className="sr-only">{labelText}</span> : <Label>{labelText}</Label>}
       <div className="flex gap-2">
         <input
           type="number" inputMode="decimal" step={step} min="0"
@@ -274,9 +343,9 @@ const PropertiesPage = () => {
     </div>
   )
 
-  const multiSelect = (idPrefix, field, labelText, options, values, setter, labelMap) => (
+  const multiSelect = (idPrefix, field, labelText, options, values, setter, labelMap, srOnly) => (
     <fieldset key={field}>
-      <legend className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">{labelText}</legend>
+      <legend className={srOnly ? 'sr-only' : 'mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500'}>{labelText}</legend>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {options.map(option => (
           <label key={option} htmlFor={`${idPrefix}-${field}-${option}`} className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
@@ -302,21 +371,33 @@ const PropertiesPage = () => {
    * fold "we never asked" into "it has none" — exactly the distinction Waves
    * 10B1 to 10B3 kept intact.
    */
-  const triSelect = (idPrefix, field, labelText) => (
+  /*
+   * A plain checkbox, for the five fields the route only ever narrows on when
+   * they are true (`if (furnished === 'true')`). Unticked means "do not filter",
+   * which is exactly what an unchecked box should say — so unlike the tri-state
+   * fields below, nothing is lost by using one here.
+   */
+  const yesOnly = (idPrefix, field, labelText, value, setter) => (
+    <label key={field} htmlFor={`${idPrefix}-${field}`} className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
+      <input
+        id={`${idPrefix}-${field}`}
+        type="checkbox"
+        className={chk}
+        checked={value === 'true'}
+        onChange={e => setter(e.target.checked ? 'true' : '')}
+      />
+      <span>{labelText}</span>
+    </label>
+  )
+
+  const triSelect = (idPrefix, field, labelText, srOnly) => (
     <div key={field}>
-      <label htmlFor={`${idPrefix}-${field}`} className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">{labelText}</label>
+      <label htmlFor={`${idPrefix}-${field}`} className={srOnly ? 'sr-only' : 'mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500'}>{labelText}</label>
       <select id={`${idPrefix}-${field}`} value={triState[field]} onChange={e => setTri(field, e.target.value)} className={inp}>
         <option value="">{pp.any || 'Any'}</option>
         <option value="true">{pp.yes || 'Yes'}</option>
         <option value="false">{pp.no || 'No'}</option>
       </select>
-    </div>
-  )
-
-  const section = (key, title, children) => (
-    <div key={key} className="border-t border-slate-100 pt-4">
-      <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-400">{title}</p>
-      <div className="space-y-4">{children}</div>
     </div>
   )
 
@@ -334,10 +415,20 @@ const PropertiesPage = () => {
    * Called as a normal function, never mounted as a component type: that is
    * what keeps inputs from being torn down and re-created on every keystroke.
    */
-  const renderFilterPanel = (instanceId) => (
-    <div className="space-y-5">
+  const renderFilterPanel = (instanceId, onDone) => (
+    <div className="space-y-4">
+      {/*
+        Every filter's heading is visible while scrolling; only its controls are
+        collapsed. There is no master "show advanced filters" gate any more —
+        that hid two thirds of the panel behind one click and made the site look
+        like it filtered on far less than it does.
+
+        The four controls above the accordions stay permanently open because
+        they are the ones almost every search touches.
+      */}
+
       {/* Listing type */}
-      <div>
+      <div className="pb-4 border-b border-slate-100">
         <Label>{t.propertiesPage?.filterType || 'Type'}</Label>
         <div className="flex rounded-lg border border-slate-200 overflow-hidden">
           {[['', t.propertiesPage?.all || 'All'], ['Sale', t.propertiesPage?.forSale || 'For Sale'], ['Rent', t.propertiesPage?.forRent || 'For Rent']].map(([val, label]) => (
@@ -349,197 +440,205 @@ const PropertiesPage = () => {
         </div>
       </div>
 
-      {/* Location */}
-      <div>
-        <Label>{t.propertiesPage?.district || 'District'}</Label>
-        <select value={district} onChange={e => setDistrict(e.target.value)} className={inp}>
+      {/* District */}
+      <div className="pb-4 border-b border-slate-100">
+        <label htmlFor={`${instanceId}-district`} className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.propertiesPage?.district || 'District'}</label>
+        <select id={`${instanceId}-district`} value={district} onChange={e => setDistrict(e.target.value)} className={inp}>
           <option value="">{t.propertiesPage?.allDistricts || 'All Districts'}</option>
           {areas.map(a => <option key={a.district} value={a.district}>{a.district} ({a.count})</option>)}
         </select>
       </div>
 
       {/* Property type */}
-      <div>
-        <Label>{t.propertiesPage?.propertyType || 'Property Type'}</Label>
-        <select value={propertyType} onChange={e => setPropertyType(e.target.value)} className={inp}>
+      <div className="pb-4 border-b border-slate-100">
+        <label htmlFor={`${instanceId}-propertyType`} className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.propertiesPage?.propertyType || 'Property Type'}</label>
+        <select id={`${instanceId}-propertyType`} value={propertyType} onChange={e => setPropertyType(e.target.value)} className={inp}>
           <option value="">{t.propertiesPage?.allTypes || 'All Types'}</option>
-          {PROPERTY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-      </div>
-
-      {/* Rooms */}
-      <div>
-        <Label>{t.propertiesPage?.rooms || 'Number of Rooms'}</Label>
-        <select value={rooms} onChange={e => setRooms(e.target.value)} className={inp}>
-          <option value="">Any</option>
-          {ROOM_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
-        </select>
-      </div>
-
-      {/* Bathrooms */}
-      <div>
-        <Label>{pp.baths || 'Bathrooms'}</Label>
-        <select value={baths} onChange={e => setBaths(e.target.value)} className={inp}>
-          <option value="">{pp.any || 'Any'}</option>
-          {BATHS_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
+          {PROPERTY_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
         </select>
       </div>
 
       {/* Price */}
-      <div>
-        <Label>{t.propertiesPage?.priceRange || 'Price Range ($)'}</Label>
-        <div className="flex gap-2">
-          <input type="number" placeholder="Min" value={minPrice} onChange={e => setMinPrice(e.target.value)} className={inp} min="0" />
-          <input type="number" placeholder="Max" value={maxPrice} onChange={e => setMaxPrice(e.target.value)} className={inp} min="0" />
-        </div>
+      <div className="pb-4 border-b border-slate-100">
+        {rangeRow('price', t.propertiesPage?.priceRange || 'Price Range ($)', minPrice, setMinPrice, maxPrice, setMaxPrice)}
       </div>
 
-      {/* Area sqm */}
-      <div>
-        <Label>{t.propertiesPage?.area || 'Area (m²)'}</Label>
-        <div className="flex gap-2">
-          <input type="number" placeholder="Min" value={minSqm} onChange={e => setMinSqm(e.target.value)} className={inp} min="0" />
-          <input type="number" placeholder="Max" value={maxSqm} onChange={e => setMaxSqm(e.target.value)} className={inp} min="0" />
+      <FilterSection id={`${instanceId}-rooms`} title={t.propertiesPage?.rooms || 'Number of Rooms'} defaultOpen>
+        <label htmlFor={`${instanceId}-rooms-select`} className="sr-only">{t.propertiesPage?.rooms || 'Number of Rooms'}</label>
+        <select id={`${instanceId}-rooms-select`} value={rooms} onChange={e => setRooms(e.target.value)} className={inp}>
+          <option value="">{pp.any || 'Any'}</option>
+          {ROOM_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-grossArea`} title={pp.grossArea || 'Area (Gross m²)'} defaultOpen>
+        {rangeRow('sqm', pp.grossArea || 'Area (Gross m²)', minSqm, setMinSqm, maxSqm, setMaxSqm, undefined, true)}
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-netArea`} title={pp.netArea || 'Area (Net m²)'}>
+        {rangeRow('netSqm', pp.netArea || 'Area (Net m²)', minNetSqm, setMinNetSqm, maxNetSqm, setMaxNetSqm, '0.01', true)}
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-openArea`} title={pp.openArea || 'Open Area (m²)'}>
+        {rangeRow('openArea', pp.openArea || 'Open Area (m²)', minOpenArea, setMinOpenArea, maxOpenArea, setMaxOpenArea, '0.01', true)}
+      </FilterSection>
+
+      {/* Any-of, like the other enum filters: a buyer usually has a band in mind
+          ("anything under 10 years"), not one exact bracket. */}
+      <FilterSection id={`${instanceId}-buildingAge`} title={pp.buildingAge || 'Building Age'}>
+        {multiSelect(instanceId, 'buildingAge', pp.buildingAge || 'Building Age', BUILDING_AGE,
+          buildingAge, toggleInArray(setBuildingAge), optionLabels.buildingAgeOptions, true)}
+      </FilterSection>
+
+      {/* Deliberately labelled with no unit or interpretation — the reference
+          documents none, so none is invented here. */}
+      <FilterSection id={`${instanceId}-coefficient`} title={pp.coefficient || 'Coefficient'}>
+        {rangeRow('coefficient', pp.coefficient || 'Coefficient', minCoefficient, setMinCoefficient, maxCoefficient, setMaxCoefficient, '0.01', true)}
+      </FilterSection>
+
+      {/* Floor number, total floors and the named floor positions are one
+          question ("where in the building?"), so they share a row. */}
+      <FilterSection id={`${instanceId}-floor`} title={t.propertiesPage?.floor || 'Floor'}>
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <input type="number" aria-label={pp.floorNo || 'Floor no.'} placeholder={pp.floorNo || 'Floor no.'}
+              value={floor} onChange={e => setFloor(e.target.value)} className={inp} min="0" />
+            <input type="number" aria-label={pp.totalFloors || 'Total floors'} placeholder={pp.totalFloors || 'Total floors'}
+              value={totalFloors} onChange={e => setTotalFloors(e.target.value)} className={inp} min="0" />
+          </div>
+          {multiSelect(instanceId, 'floorLocation', pp.floorLocation || 'Floor Location', FLOOR_LOCATIONS,
+            floorLocation, toggleInArray(setFloorLocation), optionLabels.floorLocationOptions)}
         </div>
-      </div>
+      </FilterSection>
 
-      {/* Advanced toggle */}
-      <button type="button" onClick={() => setShowAdvanced(v => !v)}
-        className="flex items-center gap-2 text-xs font-semibold text-[#5E7F52] hover:underline cursor-pointer w-full">
-        <span>{showAdvanced ? (t.propertiesPage?.hideAdvanced || '▲ Hide advanced filters') : (t.propertiesPage?.showAdvanced || '▼ Show advanced filters')}</span>
-        {activeFilterCount > 0 && (
-          <span className="rounded-full bg-[#5E7F52] px-2 py-0.5 text-[10px] font-bold text-white">
-            {activeFilterCount}
-          </span>
-        )}
-      </button>
+      <FilterSection id={`${instanceId}-heating`} title={pp.heating || 'Heating'}>
+        {multiSelect(instanceId, 'heating', pp.heating || 'Heating', HEATING,
+          heating, toggleInArray(setHeating), optionLabels.heatingOptions, true)}
+      </FilterSection>
 
-      {showAdvanced && (
-        <div className="space-y-5 border-t border-slate-100 pt-5">
-          {/* Floor */}
-          <div>
-            <Label>{t.propertiesPage?.floor || 'Floor'}</Label>
-            <div className="flex gap-2">
-              <input type="number" placeholder="Floor no." value={floor} onChange={e => setFloor(e.target.value)} className={inp} min="0" />
-              <input type="number" placeholder="Total floors" value={totalFloors} onChange={e => setTotalFloors(e.target.value)} className={inp} min="0" />
-            </div>
+      <FilterSection id={`${instanceId}-baths`} title={pp.baths || 'Number of Bathrooms'}>
+        <label htmlFor={`${instanceId}-baths-select`} className="sr-only">{pp.baths || 'Number of Bathrooms'}</label>
+        <select id={`${instanceId}-baths-select`} value={baths} onChange={e => setBaths(e.target.value)} className={inp}>
+          <option value="">{pp.any || 'Any'}</option>
+          {BATHS_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-kitchenType`} title={pp.kitchenType || 'Kitchen'}>
+        {multiSelect(instanceId, 'kitchenType', pp.kitchenType || 'Kitchen', KITCHEN_TYPES,
+          kitchenType, toggleInArray(setKitchenType), optionLabels.kitchenOptions, true)}
+      </FilterSection>
+
+      {/*
+        balcony / elevator / furnished / pool / garden are stored one-way — the
+        route only narrows on `true` — so a checkbox is the honest control for
+        them. The tri-state fields below get Any/Yes/No instead, because for
+        those "not recorded" and "no" are different answers and a checkbox
+        cannot say which one it means.
+      */}
+      <FilterSection id={`${instanceId}-balcony`} title={t.propertiesPage?.balcony || 'Balcony'}>
+        {yesOnly(instanceId, 'balcony', t.propertiesPage?.balcony || 'Balcony', balcony, setBalcony)}
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-elevator`} title={pp.lift || t.propertiesPage?.elevator || 'Lift'}>
+        {yesOnly(instanceId, 'elevator', pp.lift || t.propertiesPage?.elevator || 'Lift', elevator, setElevator)}
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-parking`} title={pp.parking || 'Parking'}>
+        {multiSelect(instanceId, 'parking', pp.parking || 'Parking', PARKING,
+          parking, toggleInArray(setParking), optionLabels.parkingOptions, true)}
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-furnished`} title={t.propertiesPage?.furnished || 'Furnished'}>
+        {yesOnly(instanceId, 'furnished', t.propertiesPage?.furnished || 'Furnished', furnished, setFurnished)}
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-usageStatus`} title={pp.usageStatus || 'Usage Status'}>
+        {multiSelect(instanceId, 'usageStatus', pp.usageStatus || 'Usage Status', USAGE_STATUSES,
+          usageStatus, toggleInArray(setUsageStatus), optionLabels.usageStatusOptions, true)}
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-withinSite`} title={optionLabels.amenityOptions?.withinSite || 'Within a Site/Complex'}>
+        {triSelect(instanceId, 'withinSite', optionLabels.amenityOptions?.withinSite || 'Within a Site/Complex', true)}
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-eligibleForCredit`} title={optionLabels.amenityOptions?.eligibleForCredit || 'Eligible for Credit'}>
+        {triSelect(instanceId, 'eligibleForCredit', optionLabels.amenityOptions?.eligibleForCredit || 'Eligible for Credit', true)}
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-titleDeedStatus`} title={pp.titleDeedStatus || 'Title Deed Status'}>
+        {multiSelect(instanceId, 'titleDeedStatus', pp.titleDeedStatus || 'Title Deed Status', TITLE_DEED_STATUSES,
+          titleDeedStatus, toggleInArray(setTitleDeedStatus), optionLabels.titleDeedOptions, true)}
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-exchange`} title={optionLabels.amenityOptions?.exchange || 'Open to Exchange'}>
+        {triSelect(instanceId, 'exchange', optionLabels.amenityOptions?.exchange || 'Open to Exchange', true)}
+      </FilterSection>
+
+      {/*
+        Pool and garden are the one-way pair; the five wellness rooms are
+        tri-state. They share a row because that is the question a visitor asks,
+        and each field still appears exactly once in the whole panel.
+      */}
+      <FilterSection id={`${instanceId}-wellness`} title={pp.sectionWellness || 'Pool, Sauna & Wellness'}>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            {yesOnly(instanceId, 'pool', t.propertiesPage?.pool || 'Pool', pool, setPool)}
+            {yesOnly(instanceId, 'garden', t.propertiesPage?.garden || 'Garden', garden, setGarden)}
           </div>
-
-          {/* Building age */}
-          <div>
-            <Label>{t.propertiesPage?.buildingAge || 'Building Age'}</Label>
-            <select value={buildingAge} onChange={e => setBuildingAge(e.target.value)} className={inp}>
-              <option value="">Any</option>
-              {BUILDING_AGE.map(a => <option key={a} value={a}>{a} yrs</option>)}
-            </select>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {TRISTATE_AMENITIES.map(field =>
+              triSelect(instanceId, field, optionLabels.amenityOptions?.[field] || field))}
           </div>
-
-          {/* Heating */}
-          <div>
-            <Label>{t.propertiesPage?.heating || 'Heating'}</Label>
-            <select value={heating} onChange={e => setHeating(e.target.value)} className={inp}>
-              <option value="">Any</option>
-              {HEATING.map(h => <option key={h} value={h}>{h}</option>)}
-            </select>
-          </div>
-
-          {/* Parking */}
-          <div>
-            <Label>{t.propertiesPage?.parking || 'Parking'}</Label>
-            <select value={parking} onChange={e => setParking(e.target.value)} className={inp}>
-              <option value="">Any</option>
-              {PARKING.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-
-          {/* Checkboxes */}
-          <div>
-            <Label>{t.propertiesPage?.features || 'Features'}</Label>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                ['furnished', t.propertiesPage?.furnished || 'Furnished', furnished, setFurnished],
-                ['balcony', t.propertiesPage?.balcony || 'Balcony', balcony, setBalcony],
-                ['elevator', t.propertiesPage?.elevator || 'Elevator', elevator, setElevator],
-                ['pool', t.propertiesPage?.pool || 'Pool', pool, setPool],
-                ['garden', t.propertiesPage?.garden || 'Garden', garden, setGarden],
-              ].map(([key, label, val, setter]) => (
-                <label key={key} className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-                  <input type="checkbox" className={chk} checked={val === 'true'} onChange={e => setter(e.target.checked ? 'true' : '')} />
-                  {label}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {section('size', pp.sectionSizeArea || 'Size & Area', (
-            <>
-              {rangeRow('netSqm', pp.netArea || 'Net Area (m²)', minNetSqm, setMinNetSqm, maxNetSqm, setMaxNetSqm, '0.01')}
-              {rangeRow('openArea', pp.openArea || 'Open Area (m²)', minOpenArea, setMinOpenArea, maxOpenArea, setMaxOpenArea, '0.01')}
-            </>
-          ))}
-
-          {section('building', pp.sectionBuildingLayout || 'Building & Layout', (
-            <>
-              {multiSelect(instanceId, 'floorLocation', pp.floorLocation || 'Floor Location', FLOOR_LOCATIONS,
-                floorLocation, toggleInArray(setFloorLocation), optionLabels.floorLocationOptions)}
-              {multiSelect(instanceId, 'kitchenType', pp.kitchenType || 'Kitchen Type', KITCHEN_TYPES,
-                kitchenType, toggleInArray(setKitchenType), optionLabels.kitchenOptions)}
-              {/* Deliberately labelled with no unit or interpretation — the
-                  donor documents none, so none is invented here. */}
-              {rangeRow('coefficient', pp.coefficient || 'Coefficient', minCoefficient, setMinCoefficient, maxCoefficient, setMaxCoefficient, '0.01')}
-            </>
-          ))}
-
-          {section('extraAmenities', pp.sectionAmenitiesExtra || 'More Amenities', (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {TRISTATE_AMENITIES.map(field =>
-                triSelect(instanceId, field, optionLabels.amenityOptions?.[field] || field))}
-            </div>
-          ))}
-
-          {section('transport', pp.sectionTransport || 'Nearby Transport', (
-            multiSelect(instanceId, 'nearbyTransport', pp.nearbyTransport || 'Nearby Transport', TRANSPORT_OPTIONS,
-              nearbyTransport, toggleInArray(setNearbyTransport), optionLabels.transportOptions)
-          ))}
-
-          {section('legal', pp.sectionLegalUsage || 'Legal & Usage', (
-            <>
-              {multiSelect(instanceId, 'usageStatus', pp.usageStatus || 'Usage Status', USAGE_STATUSES,
-                usageStatus, toggleInArray(setUsageStatus), optionLabels.usageStatusOptions)}
-              {multiSelect(instanceId, 'titleDeedStatus', pp.titleDeedStatus || 'Title Deed', TITLE_DEED_STATUSES,
-                titleDeedStatus, toggleInArray(setTitleDeedStatus), optionLabels.titleDeedOptions)}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {TRISTATE_LEGAL.map(field =>
-                  triSelect(instanceId, field, optionLabels.amenityOptions?.[field] || field))}
-              </div>
-            </>
-          ))}
-
-          {section('listing', pp.sectionListing || 'Listing', (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {triSelect(instanceId, 'hasVirtualTour', pp.hasVirtualTour || 'Virtual Tour')}
-              <div>
-                <label htmlFor={`${instanceId}-listedSince`} className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">{pp.listedSince || 'Listed'}</label>
-                <select id={`${instanceId}-listedSince`} value={listedSince} onChange={e => setListedSince(e.target.value)} className={inp}>
-                  <option value="">{pp.anyTime || 'Any time'}</option>
-                  {LISTED_SINCE_DAYS.map(days => (
-                    <option key={days} value={days}>
-                      {pp[`last${days}Days`] || `Last ${days} days`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          ))}
         </div>
-      )}
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-nearbyTransport`} title={pp.nearbyTransport || 'Nearby Transportation'}>
+        {multiSelect(instanceId, 'nearbyTransport', pp.nearbyTransport || 'Nearby Transportation', TRANSPORT_OPTIONS,
+          nearbyTransport, toggleInArray(setNearbyTransport), optionLabels.transportOptions, true)}
+      </FilterSection>
+
+      <FilterSection id={`${instanceId}-listedSince`} title={pp.sectionListingDate || 'Date of Announcement'}>
+        <label htmlFor={`${instanceId}-listedSince`} className="sr-only">{pp.listedSince || 'Listed'}</label>
+        <select id={`${instanceId}-listedSince`} value={listedSince} onChange={e => setListedSince(e.target.value)} className={inp}>
+          <option value="">{pp.anyTime || 'Any time'}</option>
+          {LISTED_SINCE_DAYS.map(days => (
+            <option key={days} value={days}>
+              {pp[`last${days}Days`] || `Last ${days} days`}
+            </option>
+          ))}
+        </select>
+      </FilterSection>
+
+      {/*
+        The reference calls this row "Photo, Video" and puts a video-only
+        checkbox in it. There is no video field on the schema — it matches a
+        regex against image URLs — so only the filter that is real is offered
+        here, under its real name.
+      */}
+      <FilterSection id={`${instanceId}-hasVirtualTour`} title={pp.hasVirtualTour || 'Virtual Tour'}>
+        {triSelect(instanceId, 'hasVirtualTour', pp.hasVirtualTour || 'Virtual Tour', true)}
+      </FilterSection>
 
       <div className="flex flex-col gap-2 pt-2">
-        <button type="button" onClick={fetchProperties} className="w-full rounded-full bg-[#4b6741] py-3 text-sm font-semibold text-white transition hover:bg-[#3a5030] cursor-pointer">
-          {t.propertiesPage?.apply || 'Apply Filters'}
-        </button>
+        {/*
+          No "Apply" on desktop: results already refetch as the query string
+          changes, so a button implying unapplied changes would be a lie. In the
+          mobile drawer the same button has a real job — closing the drawer over
+          the results it just filtered.
+        */}
+        {onDone && (
+          <button type="button" onClick={onDone} className="w-full rounded-full bg-[#4b6741] py-3 text-sm font-semibold text-white transition hover:bg-[#3a5030] cursor-pointer">
+            {t.propertiesPage?.apply || 'Apply Filters'}
+          </button>
+        )}
         <button type="button" onClick={clearFilters} className="w-full text-center text-sm text-slate-500 hover:text-slate-800 cursor-pointer">
           {t.propertiesPage?.clearAll || 'Clear All'}
+          {activeFilterCount > 0 && (
+            <span className="ms-2 rounded-full bg-[#5E7F52] px-2 py-0.5 text-[10px] font-bold text-white">
+              {activeFilterCount}
+            </span>
+          )}
         </button>
       </div>
     </div>
@@ -639,7 +738,7 @@ const PropertiesPage = () => {
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            {renderFilterPanel('mobile')}
+            {renderFilterPanel('mobile', () => setMobileFilterOpen(false))}
           </div>
         </div>
       )}

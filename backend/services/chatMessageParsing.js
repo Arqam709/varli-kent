@@ -19,6 +19,7 @@ import {
   buildSynonymsFromTermMap,
   buildingAgeBucketsWithinYears,
   BUILDING_AGE_BUCKET_LABELS,
+  BUILDING_AGE_DEPRECATED_LABELS,
   CANONICAL_CURRENCIES,
   CANONICAL_FLOOR_LOCATIONS,
   CANONICAL_HEATING,
@@ -343,10 +344,17 @@ export const canonicalizeRooms = (value) => {
 
 // Building-age buckets arrive already-bucketed from Gemini or from
 // extractBuildingAgeFromText below; only membership needs proving.
+//
+// The three retired buckets are accepted here as well, so a conversation
+// that still carries one — or a listing saved under the old vocabulary —
+// keeps resolving instead of being silently dropped. They are only ever
+// passed through, never produced: extractBuildingAgeFromText builds its
+// output from BUILDING_AGE_BUCKETS, which holds the canonical twelve.
 export const canonicalizeBuildingAge = (value) => {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
-  return BUILDING_AGE_BUCKET_LABELS.includes(trimmed) ? trimmed : null
+  if (BUILDING_AGE_BUCKET_LABELS.includes(trimmed)) return trimmed
+  return BUILDING_AGE_DEPRECATED_LABELS.includes(trimmed) ? trimmed : null
 }
 
 // Canonicalize every entry of an array, drop what does not resolve, and
@@ -400,9 +408,9 @@ const BUILDING_AGE_YEAR_PATTERNS = [
 ]
 
 // "built in the last 10 years" / "son 10 yılda yapılan" / "آخر 10 سنوات"
-// -> buildingAge: ['0 (New)', '1-5', '6-10'] — every CURRENT bucket whose
-// whole range fits inside the stated span. Only overrides parsed.buildingAge
-// when a pattern actually matches.
+// -> buildingAge: ['0','1','2','3','4','5','6-10'] — every canonical bucket
+// whose whole range fits inside the stated span. Only overrides
+// parsed.buildingAge when a pattern actually matches.
 export const extractBuildingAgeFromText = (message, parsed) => {
   const text = normalizeDigits(message).toLowerCase()
 

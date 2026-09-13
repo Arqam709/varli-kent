@@ -257,6 +257,60 @@ const TITLE_DEED_STATUSES = [
 ]
 const TRANSPORT_OPTIONS = ['Metro', 'Metrobus', 'Bus', 'Ferry', 'Train', 'Tram', 'Highway Access']
 
+/*
+ * Vocabularies for the three filters that became multi-select.
+ *
+ * These mirror AdminProperties.jsx exactly — they are the only values the
+ * editor can store, so a value outside them could never match a listing.
+ * Passing them to applyEnumFilter is what stops a hand-written query string
+ * putting an arbitrary object inside $in.
+ */
+/*
+ * Compatibility union, not a preference.
+ *
+ * This deployment shares one MongoDB database with a second front-end that
+ * ships a different, longer vocabulary for these two fields. Listings written
+ * there are already in the collection — a real one stores heating
+ * 'Combi Boiler (Natural Gas)' and parking 'Open & Covered Parking' — and
+ * neither value existed in any list here, so the filters could never reach
+ * them and the editor could never reproduce them.
+ *
+ * So both sets are carried, and nothing is aliased: 'Combi Boiler (Natural
+ * Gas)' is NOT folded into 'Individual Gas', and 'Open & Covered Parking' is
+ * NOT folded into 'Open Parking' — the latter plausibly means both kinds of
+ * space exist, which is a third state, not a synonym. Collapsing them is a
+ * product decision, and until someone makes it the stored meaning is kept.
+ */
+const HEATING_OPTIONS = [
+  'Stove', 'Natural Gas Stove', 'Central Heating', 'Central', 'Central (Meter)',
+  'Combi Boiler (Natural Gas)', 'Individual Gas', 'Floor Heating', 'Air Conditioning', 'None',
+]
+const PARKING_OPTIONS = [
+  'Open Parking', 'Closed Parking', 'Open Parking Lot', 'Parking Garage',
+  'Open & Covered Parking', 'None',
+]
+
+/*
+ * Building age: twelve canonical buckets — single years up to five, then
+ * five-year bands. This is the granularity the listings are actually written
+ * with, and it is what makes a relative phrase resolve properly: with a
+ * single '1-5' bucket, "built in the last 3 years" can only answer with
+ * brand-new buildings, because a bucket is only usable when its WHOLE range
+ * fits inside the span asked for.
+ *
+ * DEPRECATED holds the three buckets this site used to offer. They are NOT
+ * canonical and are NOT shown anywhere — not in the admin editor, not in the
+ * public filter. They stay accepted by this route only so an old shared link,
+ * or a listing saved in the moments before this shipped, still resolves
+ * instead of silently matching nothing. No stored document uses one today.
+ *
+ * They are never rewritten into a canonical bucket: '1-5' cannot become '3'
+ * and '21+' cannot become '26-30' — the exact age simply is not known.
+ */
+const BUILDING_AGES_CANONICAL = ['0', '1', '2', '3', '4', '5', '6-10', '11-15', '16-20', '21-25', '26-30', '31+']
+const BUILDING_AGES_DEPRECATED = ['0 (New)', '1-5', '21+']
+const BUILDING_AGES = [...BUILDING_AGES_CANONICAL, ...BUILDING_AGES_DEPRECATED]
+
 const EXTENDED_ENUMS = {
   currency: CURRENCIES,
   floorLocation: FLOOR_LOCATIONS,
@@ -607,9 +661,6 @@ router.get('/', async (req, res, next) => {
     if (rooms) filter.rooms = rooms
     if (floor) filter.floor = Number(floor)
     if (totalFloors) filter.totalFloors = Number(totalFloors)
-    if (heating) filter.heating = heating
-    if (parking) filter.parking = parking
-    if (buildingAge) filter.buildingAge = buildingAge
     if (furnished === 'true') filter.furnished = true
     if (balcony === 'true') filter.balcony = true
     if (elevator === 'true') filter.elevator = true
@@ -637,6 +688,22 @@ router.get('/', async (req, res, next) => {
     applyRangeFilter(filter, 'netSqm', minNetSqm, maxNetSqm)
     applyRangeFilter(filter, 'openAreaSqm', minOpenArea, maxOpenArea)
     applyRangeFilter(filter, 'coefficient', minCoefficient, maxCoefficient)
+
+    /*
+     * heating / parking / buildingAge moved from single-value equality to the
+     * same allow-listed any-of the other enum filters use, so a visitor can ask
+     * for "Central OR Floor Heating" instead of one at a time.
+     *
+     * Backward compatible for a single value: `?heating=Central` produced
+     * { heating: 'Central' } and now produces { heating: { $in: ['Central'] } },
+     * which selects exactly the same documents. What changes is that a second
+     * value is now honoured rather than silently overwriting the first, and
+     * that an unknown value is dropped by the allow-list rather than reaching
+     * the query.
+     */
+    applyEnumFilter(filter, 'heating', heating, HEATING_OPTIONS)
+    applyEnumFilter(filter, 'parking', parking, PARKING_OPTIONS)
+    applyEnumFilter(filter, 'buildingAge', buildingAge, BUILDING_AGES)
 
     applyEnumFilter(filter, 'floorLocation', floorLocation, FLOOR_LOCATIONS)
     applyEnumFilter(filter, 'kitchenType', kitchenType, KITCHEN_TYPES)

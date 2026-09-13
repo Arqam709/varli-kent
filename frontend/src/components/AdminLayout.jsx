@@ -101,7 +101,7 @@ const AdminLayout = ({ children }) => {
 
   const Sidebar = () => (
     <div className="flex h-full flex-col" style={{ backgroundColor: '#202a36' }}>
-      <div className="px-6 py-6 border-b border-slate-700">
+      <div className="shrink-0 px-6 py-6 border-b border-slate-700">
         <Link to="/" className="block">
           <span style={{ fontFamily: 'Cinzel, serif' }} className="text-lg font-bold tracking-widest text-white hover:text-white/80 transition-colors">
             VARLI<span style={{ color: '#4b6741' }}>KENT</span>
@@ -109,7 +109,7 @@ const AdminLayout = ({ children }) => {
         </Link>
         <p className="mt-1 text-xs text-slate-500">{a.adminPortal || 'Admin Portal'}</p>
       </div>
-      <nav className="flex-1 space-y-5 px-3 py-4 overflow-y-auto">
+      <nav className="vk-scroll-gold min-h-0 flex-1 space-y-5 px-3 py-4 overflow-y-auto">
         {navGroups.map(group => (
           <div key={group.title}>
             <p className="px-4 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">{group.title}</p>
@@ -119,7 +119,7 @@ const AdminLayout = ({ children }) => {
           </div>
         ))}
       </nav>
-      <div className="border-t border-slate-700 px-4 py-4">
+      <div className="shrink-0 border-t border-slate-700 px-4 py-4">
         <div className="mb-3 flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#4b6741] text-sm font-bold text-white">
             {user?.name?.[0]?.toUpperCase() || 'A'}
@@ -170,7 +170,7 @@ const AdminLayout = ({ children }) => {
             ))}
           </div>
         </header>
-        <main className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8">{children}</main>
+        <main className="vk-scroll-gold flex-1 min-h-0 overflow-y-auto p-6 lg:p-8">{children}</main>
       </div>
     </div>
   )

@@ -2,7 +2,9 @@ import express from 'express'
 import TeamMember from '../models/TeamMember.js'
 import { protect } from '../middleware/auth.js'
 import { requireRole, requirePermission } from '../middleware/checkPermission.js'
-import { localizeFields, sanitizePoisonedTranslations } from '../utils/autoTranslate.js'
+import { sanitizePoisonedTranslations } from '../utils/autoTranslate.js'
+
+import { localizeTeamWorkPayload } from '../utils/teamWork.js'
 
 const router = express.Router()
 
@@ -36,7 +38,7 @@ router.get('/all', protect, requireRole('owner', 'admin'), requirePermission('ma
 // POST /api/team — create
 router.post('/', protect, requireRole('owner', 'admin'), requirePermission('manage_team'), async (req, res, next) => {
   try {
-    const localizedBody = await localizeFields(normalizeTeamRoleBody(req.body), LOCALIZED_TEAM_FIELDS)
+    const localizedBody = await localizeTeamWorkPayload(normalizeTeamRoleBody(req.body), LOCALIZED_TEAM_FIELDS)
     const member = await TeamMember.create(localizedBody)
     res.status(201).json({ success: true, member })
   } catch (err) {
@@ -51,7 +53,7 @@ router.put('/:id', protect, requireRole('owner', 'admin'), requirePermission('ma
     const existing = await TeamMember.findById(req.params.id)
     if (!existing) return res.status(404).json({ success: false, message: 'Member not found' })
 
-    const localizedBody = await localizeFields(
+    const localizedBody = await localizeTeamWorkPayload(
       normalizeTeamRoleBody(req.body),
       LOCALIZED_TEAM_FIELDS,
       existing.toObject()

@@ -361,3 +361,44 @@ test('6. writing the rich fields still requires owner/admin', async () => {
 
   assert.equal(store.length, 0)
 })
+
+
+test('Batch 3 create/update/GET persist nested work and profile crop URLs', async () => {
+  currentUser = OWNER
+  const sectionId = '100000000000000000000001'
+  const itemId = '200000000000000000000001'
+  const body = { name: 'Ada', role: 'Architect', photo: '/original.jpg', photoCropUrl: '/crop.jpg',
+    workSections: [{ _id: sectionId, title: 'Villa', label: 'Interior', description: 'An introduction', conclusion: 'Finished', order: 0,
+      items: [{ _id: itemId, url: '/work.jpg', cropUrl: '/work-crop.jpg', width: 400, height: 300, title: 'Kitchen', description: 'Details' }] }],
+    workFiles: [{ url: '/portfolio.pdf', name: 'Portfolio', fileType: 'pdf' }] }
+  const created = await request('POST', '/api/team', body)
+  assert.equal(created.status, 201)
+  assert.equal(store[0].photo, '/original.jpg')
+  assert.equal(store[0].photoCropUrl, '/crop.jpg')
+  assert.equal(store[0].workSections[0].items[0].title.en, 'Kitchen')
+  assert.ok(store[0].workSections[0].items[0].description.tr)
+  const memberId = store[0]._id
+  const previousTranslation = store[0].workSections[0].items[0].description.tr
+  providerBehaviour.tr = 'fail'
+  const updated = await request('PUT', '/api/team/' + memberId, { workSections: [{ _id: sectionId, order: 1, items: [{ _id: itemId, description: 'New details' }] }] })
+  assert.equal(updated.status, 200)
+  assert.equal(store[0].workSections[0].items[0].description.tr, previousTranslation)
+  assert.equal(store[0].workSections[0].items[0].description.en, 'New details')
+  assert.equal(store[0].workSections[0].items[0].url, '/work.jpg')
+  const publicResult = await request('GET', '/api/team')
+  assert.equal(publicResult.body.members[0].workFiles[0].url, '/portfolio.pdf')
+  assert.equal(publicResult.body.members[0].workSections[0].conclusion.en, 'Finished')
+})
+
+test('Batch 3 rejects malformed nested writes and strips unknown request fields', async () => {
+  currentUser = OWNER
+  const bad = await request('POST', '/api/team', { name: 'Ada', role: 'Architect', workSections: { injected: true } })
+  assert.equal(bad.status, 400)
+  assert.equal(store.length, 0)
+  const created = await request('POST', '/api/team', { name: 'Ada', role: 'Architect', workSections: [{ title: 'Work', injected: 'junk', items: [] }], adminOnly: true })
+  assert.equal(created.status, 201)
+  assert.equal(store[0].adminOnly, undefined)
+  assert.equal(store[0].workSections[0].injected, undefined)
+  assert.equal((await request('PUT', '/api/team/' + store[0]._id, { workFiles: 'bad' })).status, 400)
+  assert.equal(store[0].workFiles, undefined)
+})

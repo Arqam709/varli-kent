@@ -98,10 +98,13 @@ function ShowroomLightbox({ item, onClose }) {
             <video src={item.url} className="max-h-[88vh] w-full object-contain" controls autoPlay playsInline />
           ) : (
             <img
-              src={item.url}
+              src={item.cropUrl || item.url}
               alt={caption || title || ''}
               className="max-h-[88vh] w-full object-contain"
-              onError={(e) => { e.currentTarget.style.display = 'none' }}
+              onError={(e) => {
+                if (item.cropUrl && e.currentTarget.getAttribute('src') !== item.url) e.currentTarget.src = item.url
+                else e.currentTarget.style.display = 'none'
+              }}
             />
           )}
         </div>

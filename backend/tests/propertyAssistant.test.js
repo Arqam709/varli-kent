@@ -397,16 +397,46 @@ test('valid numbers and boundaries survive', async () => {
   assert.deepEqual(sanitizeParsedListing({ sqm: 120.5 }), { sqm: 120.5 })
 })
 
-test('enum fields refuse values from outside the CURRENT vocabulary', async () => {
+test('enum fields refuse values from outside the canonical vocabulary', async () => {
   const out = sanitizeParsedListing({
-    listingType: 'Kiralık',
+    listingType: 'Kiralık',      // Turkish label, not the stored value
     propertyType: 'Chalet',
-    heating: 'Combi Boiler (Natural Gas)',   // donor vocabulary
-    parking: 'Parking Garage',               // donor vocabulary
-    buildingAge: '26-30',                    // donor bucket
+    heating: 'Geothermal',
+    parking: 'Helipad',
+    buildingAge: '7-9',          // in neither the canonical nor the retired set
     rooms: '17+9',
   })
   assert.deepEqual(out, {}, 'an unrecognised enum is dropped, never repaired')
+})
+
+test('the assistant knows the widened heating and parking vocabulary', async () => {
+  // These were storable everywhere else — editor, public filter, chat — but the
+  // assistant's own option list had not been widened with them, so it could read
+  // "Kombi (Doğalgaz)" off a listing and have nowhere to put it.
+  const out = sanitizeParsedListing({
+    heating: 'Combi Boiler (Natural Gas)',
+    parking: 'Open & Covered Parking',
+  })
+  assert.deepEqual(out, {
+    heating: 'Combi Boiler (Natural Gas)',
+    parking: 'Open & Covered Parking',
+  })
+})
+
+test('the assistant produces the canonical building-age buckets', async () => {
+  for (const bucket of ['0', '3', '5', '6-10', '21-25', '26-30', '31+']) {
+    assert.deepEqual(sanitizeParsedListing({ buildingAge: bucket }), { buildingAge: bucket },
+      `${bucket} must survive sanitisation`)
+  }
+})
+
+test('the assistant no longer offers the retired building-age buckets', async () => {
+  // Retired values stay accepted by the public filter route for old links, but
+  // the assistant must never file a NEW listing under one.
+  for (const retired of ['0 (New)', '1-5', '21+']) {
+    assert.deepEqual(sanitizeParsedListing({ buildingAge: retired }), {},
+      `${retired} must not be produced for a new listing`)
+  }
 })
 
 test('enum fields accept the CURRENT vocabulary', async () => {
@@ -415,12 +445,12 @@ test('enum fields accept the CURRENT vocabulary', async () => {
     propertyType: 'Villa',
     heating: 'Individual Gas',
     parking: 'Closed Parking',
-    buildingAge: '6-10',
+    buildingAge: '3',
     rooms: '3+1',
   })
   assert.deepEqual(out, {
     listingType: 'Rent', propertyType: 'Villa', heating: 'Individual Gas',
-    parking: 'Closed Parking', buildingAge: '6-10', rooms: '3+1',
+    parking: 'Closed Parking', buildingAge: '3', rooms: '3+1',
   })
 })
 
@@ -484,7 +514,7 @@ test('the extraction prompt retains detailed donor Turkish normalization with CU
     /sqm:.*brüt/i,
     /netSqm:.*net/i,
     /yüksek giriş.*High Entrance/i,
-    /Kombi \(Doğalgaz\).*Individual Gas/i,
+    /Kombi \(Doğalgaz\).*Combi Boiler \(Natural Gas\)/i,
     /Kapalı Otopark.*Closed Parking/i,
     /Açık\/Amerikan mutfak.*Open \(American\)/i,
     /Kat Mülkiyeti.*Independent Title Deed/i,

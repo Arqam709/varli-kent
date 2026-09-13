@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
@@ -40,9 +40,35 @@ const ROOM_OPTIONS = [
   '9+1','9+2','9+3','9+4','9+5','9+6',
   '10+1','10+2','Out of 10',
 ]
-const HEATING_OPTIONS = ['Central','Individual Gas','Floor Heating','Air Conditioning','None']
-const PARKING_OPTIONS = ['Open Parking','Closed Parking','None']
-const BUILDING_AGE_OPTIONS = ['0 (New)','1-5','6-10','11-15','16-20','21+']
+/*
+ * Compatibility union, not a preference.
+ *
+ * This deployment shares one MongoDB database with a second front-end that
+ * ships a different, longer vocabulary for these two fields. Listings written
+ * there are already in the collection — a real one stores heating
+ * 'Combi Boiler (Natural Gas)' and parking 'Open & Covered Parking' — and
+ * neither value existed in any list here, so the filters could never reach
+ * them and the editor could never reproduce them.
+ *
+ * So both sets are carried, and nothing is aliased: 'Combi Boiler (Natural
+ * Gas)' is NOT folded into 'Individual Gas', and 'Open & Covered Parking' is
+ * NOT folded into 'Open Parking' — the latter plausibly means both kinds of
+ * space exist, which is a third state, not a synonym. Collapsing them is a
+ * product decision, and until someone makes it the stored meaning is kept.
+ */
+const HEATING_OPTIONS = [
+  'Stove','Natural Gas Stove','Central Heating','Central','Central (Meter)',
+  'Combi Boiler (Natural Gas)','Individual Gas','Floor Heating','Air Conditioning','None',
+]
+const PARKING_OPTIONS = [
+  'Open Parking','Closed Parking','Open Parking Lot','Parking Garage',
+  'Open & Covered Parking','None',
+]
+// Twelve canonical buckets. The three this site used to offer
+// ('0 (New)', '1-5', '21+') are deliberately absent: they are still
+// accepted by the public filter route for old links, but no NEW listing
+// should be filed under a bucket that cannot answer a relative-age query.
+const BUILDING_AGE_OPTIONS = ['0','1','2','3','4','5','6-10','11-15','16-20','21-25','26-30','31+']
 // All twelve schema values. The form previously offered only the first eight,
 // so Shop, Warehouse, Hotel and Farm were unreachable from the admin.
 const PROPERTY_TYPES = ['Apartment','Villa','Penthouse','Duplex','Studio','Office','Commercial','Land','Shop','Warehouse','Hotel','Farm']
@@ -466,10 +492,29 @@ const AdminProperties = () => {
     }
   }
 
+  // One way out, shared by the header X, Cancel and Escape, so the three
+  // cannot drift into doing different cleanup.
+  const closeForm = useCallback(() => setFormOpen(false), [])
+
+  // Escape closes the editor. Bound only while it is open and removed on
+  // close/unmount, so no listener outlives the form. Deliberately does NOT
+  // fire while saving: the request is already in flight and hiding it would
+  // leave the admin unsure whether the property was written.
+  useEffect(() => {
+    if (!formOpen) return
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return
+      if (saving) return
+      closeForm()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [formOpen, saving, closeForm])
+
   const openEdit = (prop) => {
     setEditingId(prop._id)
     loadAdminLocation(prop._id)
-    setForm({ title: prop.title, listingType: prop.listingType, price: prop.price, priceLabel: prop.priceLabel || '', district: prop.district, address: prop.address, propertyType: prop.propertyType, beds: prop.beds, baths: prop.baths, sqm: prop.sqm, description: prop.description || '', agent: agentIdOf(prop.agent), agentPhone: prop.agentPhone || '', agentEmail: prop.agentEmail || '', whatsappNumber: prop.whatsappNumber || '', featured: prop.featured, status: prop.status })
+    setForm({ title: prop.title, listingType: prop.listingType, price: prop.price, priceLabel: prop.priceLabel || '', district: prop.district, address: prop.address, propertyType: prop.propertyType, beds: prop.beds, baths: prop.baths, sqm: prop.sqm, description: prop.description || '', agent: agentIdOf(prop.agent), agentPhone: prop.agentPhone || '', agentEmail: prop.agentEmail || '', whatsappNumber: prop.whatsappNumber || '', featured: prop.featured ?? false, status: prop.status })
     setDetails(detailsFromProperty(prop))
     setTransportTouched(false)
     setImages(prop.images || [])
@@ -758,10 +803,28 @@ const AdminProperties = () => {
         </div>
 
         {formOpen && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          /*
+            A fixed overlay, so opening the editor leaves the listing grid
+            exactly where it was instead of pushing the cards down the page.
+            The cards stay visible behind the scrim, which is what makes this
+            read as "editing that listing" rather than "the page changed".
+
+            Scroll safety, because this is a very long form: the OVERLAY
+            scrolls (overflow-y-auto) and aligns to the top (items-start), so
+            the panel is never taller than a scrollable area and Save is always
+            reachable. That is the opposite of the trap the Showroom editor had,
+            where an items-center overlay with no overflow pushed the panel off
+            both edges with no way to scroll it back.
+
+            No backdrop click-to-close: this form holds a lot of unsaved typing
+            and there is no unsaved-changes guard, so a stray click must not
+            discard it. The X, Cancel and Escape are the deliberate ways out.
+          */
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4 py-10">
+          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-6">
               <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-lg font-semibold text-[#202a36]">{editingId ? (p.editProperty || 'Edit Property') : (p.addPropertyTitle || 'Add Property')}</h2>
-              <button onClick={() => setFormOpen(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
+              <button type="button" onClick={closeForm} aria-label={c.close || 'Close'} className="text-slate-400 hover:text-slate-700 cursor-pointer">
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
@@ -793,8 +856,15 @@ const AdminProperties = () => {
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.priceLabel || 'Price Label (display)'}</label>
                   <input value={form.priceLabel} onChange={e => setForm(prev => ({...prev, priceLabel: e.target.value}))} className={inputCls} placeholder="$1,850,000" />
-                </div>
-                <div>
+
+                  {/*
+                    Stacked under Price Label, not given its own grid column.
+                    Two reasons: it keeps the basic rows paired exactly as the
+                    reference design pairs them (Price Label | District), and
+                    this select exists only to drive the price label above it,
+                    so separating them would hide the cause from the effect.
+                  */}
+                  <div className="mt-3">
                   <label htmlFor="detail-currency" className={labelCls}>{detailLabel('currency')}</label>
                   <select
                     id="detail-currency"
@@ -808,6 +878,7 @@ const AdminProperties = () => {
                     ))}
                   </select>
                   <p className="mt-1.5 text-[11px] text-slate-400">{p.currencyHint || 'Sets the price label symbol. A custom label you have written is left as it is.'}</p>
+                  </div>
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.district || 'Istanbul District'}</label>
@@ -848,7 +919,14 @@ const AdminProperties = () => {
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.description || 'Description'}</label>
                   <textarea value={form.description} onChange={e => setForm(prev => ({...prev, description: e.target.value}))} rows={4} className={inputCls} placeholder="Property description..." />
                 </div>
-                <div className="md:col-span-2">
+                {/*
+                  Row formation follows the reference (agent identity | phone,
+                  then email | whatsapp), but the first cell stays the Assigned
+                  Agent dropdown rather than the reference's free-text agent
+                  name: the listing points at a real User account, and the name
+                  and email are derived from it server-side.
+                */}
+                <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.assignedAgent || 'Assigned Agent'}</label>
                   <select value={form.agent} onChange={e => handleAgentChange(e.target.value)} className={inputCls}>
                     <option value="">{p.unassigned || 'Unassigned'}</option>
@@ -875,6 +953,10 @@ const AdminProperties = () => {
                   )}
                 </div>
                 <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.agentPhone || 'Agent Phone'}</label>
+                  <input value={form.agentPhone} onChange={e => setForm(prev => ({...prev, agentPhone: e.target.value}))} className={inputCls} placeholder="+90 530 123 4567" />
+                </div>
+                <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.agentEmail || 'Agent Email'}</label>
                   {/*
                     Read-only: when an agent is assigned this mirrors their
@@ -895,55 +977,9 @@ const AdminProperties = () => {
                   </p>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.agentPhone || 'Agent Phone'}</label>
-                  <input value={form.agentPhone} onChange={e => setForm(prev => ({...prev, agentPhone: e.target.value}))} className={inputCls} placeholder="+90 530 123 4567" />
-                </div>
-                <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.whatsapp || 'WhatsApp Number'}</label>
                   <input value={form.whatsappNumber} onChange={e => setForm(prev => ({...prev, whatsappNumber: e.target.value}))} className={inputCls} placeholder="+905301234567" />
                 </div>
-                <div className="md:col-span-2">
-                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.propertyLocation || 'Property Location'}</label>
-
-                  {location.status === 'loading' && (
-                    <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                      {p.locationLoading || 'Loading saved location…'}
-                    </p>
-                  )}
-
-                  {location.status === 'unknown' && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                      <p className="text-sm font-medium text-amber-800">
-                        {p.locationUnavailable || 'The saved location could not be loaded.'}
-                      </p>
-                      <p className="mt-1 text-xs text-amber-700">
-                        {p.locationUnavailableHint || 'Location editing is disabled so the stored location is not overwritten. Saving now leaves it unchanged.'}
-                      </p>
-                      {editingId && hasPermission('edit_listing') && (
-                        <button
-                          type="button"
-                          onClick={() => loadAdminLocation(editingId)}
-                          className="mt-2 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                        >
-                          {p.locationRetry || 'Retry'}
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {(location.status === 'none' || location.status === 'set') && (
-                    <PropertyLocationPicker
-                      value={location.status === 'set' ? location.value : null}
-                      onChange={(next) => {
-                        setLocationDirty(true)
-                        setLocation(next ? { status: 'set', value: next } : LOCATION_NONE)
-                      }}
-                      onDraftErrorChange={setLocationDraftError}
-                      labels={p}
-                    />
-                  )}
-                </div>
-
                 <div className="flex items-center gap-3">
                   <input type="checkbox" id="featured" checked={form.featured} onChange={e => setForm(prev => ({...prev, featured: e.target.checked}))} className="h-4 w-4 accent-[#4b6741]" />
                   <label htmlFor="featured" className="text-sm font-medium text-slate-700 cursor-pointer">{p.featured || 'Mark as Featured'}</label>
@@ -1064,6 +1100,63 @@ const AdminProperties = () => {
                 </div>
               </div>
 
+              {/*
+                Location was previously a md:col-span-2 cell wedged between the
+                agent fields and the Featured checkbox, splitting the basic block
+                in half around a map picker. It is a section in its own right, so
+                it now sits with the other sections.
+
+                Moved verbatim: every status branch travels together. Only the
+                picker would have been the tempting thing to move, but the
+                'loading' branch, the 'unknown' branch (with its hint and
+                permission-gated retry) and the none/set branch are one state
+                machine — locationDirty and LOCATION_NONE are what tell
+                handleSubmit whether to omit the key, send null, or send
+                coordinates. Dropping any branch would silently overwrite a
+                stored pin.
+              */}
+              <div className={sectionCls}>
+                <p className={sectionTitleCls}>{p.propertyLocation || 'Property Location'}</p>
+
+                {location.status === 'loading' && (
+                  <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                    {p.locationLoading || 'Loading saved location…'}
+                  </p>
+                )}
+
+                {location.status === 'unknown' && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <p className="text-sm font-medium text-amber-800">
+                      {p.locationUnavailable || 'The saved location could not be loaded.'}
+                    </p>
+                    <p className="mt-1 text-xs text-amber-700">
+                      {p.locationUnavailableHint || 'Location editing is disabled so the stored location is not overwritten. Saving now leaves it unchanged.'}
+                    </p>
+                    {editingId && hasPermission('edit_listing') && (
+                      <button
+                        type="button"
+                        onClick={() => loadAdminLocation(editingId)}
+                        className="mt-2 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      >
+                        {p.locationRetry || 'Retry'}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {(location.status === 'none' || location.status === 'set') && (
+                  <PropertyLocationPicker
+                    value={location.status === 'set' ? location.value : null}
+                    onChange={(next) => {
+                      setLocationDirty(true)
+                      setLocation(next ? { status: 'set', value: next } : LOCATION_NONE)
+                    }}
+                    onDraftErrorChange={setLocationDraftError}
+                    labels={p}
+                  />
+                )}
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.images || 'Property Images'}</label>
@@ -1101,6 +1194,7 @@ const AdminProperties = () => {
               </div>
             </form>
           </div>
+          </div>
         )}
 
         {loading ? (
@@ -1108,7 +1202,23 @@ const AdminProperties = () => {
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {visibleProperties.map(prop => (
-              <div key={prop._id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex gap-4">
+              <div key={prop._id} className="relative rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex gap-4">
+                {/*
+                  Reads the stored boolean directly — the same field the public
+                  Home carousel queries via GET /properties?featured=true. There
+                  is no separate admin-side featured list to keep in sync, so a
+                  card showing this badge is a listing Home is actually serving.
+
+                  The checkbox in the editor below has always written this field;
+                  what was missing was any way to see the result without opening
+                  each listing one at a time.
+                */}
+                {prop.featured && (
+                  <span className="absolute -top-2.5 left-4 flex items-center gap-1 rounded-full bg-amber-500 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow-sm">
+                    <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L10 15l-5.6 3.1 1.4-6.3-4.8-4.3 6.4-.6z" /></svg>
+                    {p.featuredBadge || 'Featured on Homepage'}
+                  </span>
+                )}
                 <img src={prop.mainImage || prop.images?.[0] || 'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=200&q=60'} alt={prop.title} className="h-28 w-40 shrink-0 rounded-xl object-cover" loading="lazy" />
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-start justify-between gap-2">

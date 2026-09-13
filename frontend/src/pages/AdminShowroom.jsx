@@ -3,13 +3,17 @@ import { editableText } from '../lib/localizedText'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
+import AutoGrowTextarea from '../components/AutoGrowTextarea'
+import ImageCropModal from '../components/ImageCropModal'
+import { applyShowroomCrop, emptyCrop } from '../lib/imageCrop'
+import { imageCropLabels } from '../locales/imageCrop'
 import { useLanguage } from '../contexts/LanguageContext'
 
 const SERVICES = ['architecture', 'interior', 'construction', 'renovation']
 const SERVICE_LABELS = { architecture: 'Architecture', interior: 'Interior Design', construction: 'Construction', renovation: 'Renovation' }
 const UPLOAD_HINT = 'JPG, PNG, WEBP, GIF — max 10 MB · MP4, MOV, WEBM — max 100 MB'
 
-const empty = { url: '', title: '', caption: '', detailText: '', style: '', order: 0, visible: true }
+const empty = { url: '', ...emptyCrop, title: '', caption: '', detailText: '', style: '', order: 0, visible: true }
 
 // Soft guidance, not enforcement — the counter turns amber past these but the
 // save is never blocked, because a caption's right length is an editorial
@@ -39,7 +43,8 @@ const ConfirmModal = ({ message, onConfirm, onCancel }) => (
 )
 
 const AdminShowroom = () => {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const cropLabels = imageCropLabels(language)
   const p = t.adminPages?.showroom || {}
   const c = t.adminPages?.common || {}
   const [activeTab, setActiveTab] = useState('architecture')
@@ -50,7 +55,15 @@ const AdminShowroom = () => {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [confirm, setConfirm] = useState(null)
+  const [cropSession, setCropSession] = useState(null)
+  const editorVersion = useRef(0)
   const fileRef = useRef()
+
+  useEffect(() => {
+    return () => { if (cropSession?.file) URL.revokeObjectURL(cropSession.src) }
+  }, [cropSession])
+
+  useEffect(() => () => { editorVersion.current += 1 }, [])
 
   const load = (service) => {
     setLoading(true)
@@ -62,17 +75,22 @@ const AdminShowroom = () => {
 
   useEffect(() => { load(activeTab) }, [activeTab])
 
-  const openCreate = () => { setForm({ ...empty, serviceType: activeTab }); setModal('create') }
+  const openCreate = () => { editorVersion.current += 1; setForm({ ...empty, serviceType: activeTab }); setModal('create') }
   const openEdit = (img) => {
+    editorVersion.current += 1
     // Wave 12A2 — caption is stored localized; show the admin their own
     // source text, not the object and not a machine translation of it.
-    setForm({ url: img.url, title: editableText(img.title), caption: editableText(img.caption), detailText: editableText(img.detailText), style: img.style || '', order: img.order ?? 0, visible: img.visible ?? true })
+    setForm({ url: img.url, cropUrl: img.cropUrl || '', width: img.width || 0, height: img.height || 0, cropWidth: img.cropWidth || 0, cropHeight: img.cropHeight || 0, title: editableText(img.title), caption: editableText(img.caption), detailText: editableText(img.detailText), style: img.style || '', order: img.order ?? 0, visible: img.visible ?? true })
     setModal(img)
   }
 
   // The single way out of the editor. X, Cancel and Escape all come through
   // here so none of them can drift into doing its own partial cleanup.
-  const closeModal = useCallback(() => setModal(null), [])
+  const closeModal = useCallback(() => {
+    editorVersion.current += 1
+    setCropSession(null)
+    setModal(null)
+  }, [])
 
   // Escape closes the editor, matching what every other dialog on the web does.
   // Bound only while the editor is actually open, and torn down on close or
@@ -82,35 +100,70 @@ const AdminShowroom = () => {
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return
       // The delete confirmation renders on top; let it take its own Escape.
-      if (confirm) return
+      if (confirm || cropSession) return
       // Bailing out mid-request would hide a save/upload that is still running.
       if (saving || uploading) return
       closeModal()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [modal, confirm, saving, uploading, closeModal])
+  }, [modal, confirm, cropSession, saving, uploading, closeModal])
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0]
     if (!file) return
+    e.target.value = ''
+    if (uploading || saving) return
+    if (file.type.startsWith('image/')) {
+      setCropSession({ src: URL.createObjectURL(file), file })
+      return
+    }
+    const version = editorVersion.current
     const fd = new FormData()
     fd.append('image', file)
     setUploading(true)
     try {
       const r = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-      setForm(f => ({ ...f, url: r.data.url }))
+      if (version !== editorVersion.current) return
+      setForm(f => ({ ...f, ...emptyCrop, url: r.data.url }))
       toast.success('File uploaded')
     } catch {
       toast.error('Upload failed')
     } finally {
       setUploading(false)
-      e.target.value = ''
+    }
+  }
+
+  const handleCropConfirm = async (blob, cropWidth, cropHeight, originalSize) => {
+    const session = cropSession
+    const version = editorVersion.current
+    if (!session) return
+    setUploading(true)
+    try {
+      const cropFd = new FormData()
+      cropFd.append('image', blob, 'cropped.jpg')
+      const originalFd = new FormData()
+      if (session.file) originalFd.append('image', session.file)
+      const [cropResult, originalResult] = await Promise.all([
+        api.post('/upload', cropFd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+        session.file ? api.post('/upload', originalFd, { headers: { 'Content-Type': 'multipart/form-data' } }) : null,
+      ])
+      if (version !== editorVersion.current) return
+      if (!cropResult.data.url || (session.file && !originalResult?.data.url)) throw new Error('Upload failed')
+      setForm(f => applyShowroomCrop(f, {
+        originalUrl: originalResult?.data.url,
+        width: originalSize.width, height: originalSize.height,
+        cropUrl: cropResult.data.url, cropWidth, cropHeight,
+      }))
+      setCropSession(null)
+    } finally {
+      setUploading(false)
     }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (uploading || saving || cropSession) return
     if (!form.url.trim()) { toast.error('Please upload or paste a file URL'); return }
     setSaving(true)
     try {
@@ -275,7 +328,7 @@ const AdminShowroom = () => {
                     <p className="text-sm font-medium text-slate-500">{uploading ? (c.uploading || 'Uploading…') : (p.clickToUpload || 'Click to upload')}</p>
                     <p className="text-[10px] text-slate-400 text-center px-4">{UPLOAD_HINT}</p>
                   </div>
-                  <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFileUpload} />
+                  <input ref={fileRef} type="file" accept="image/*,video/*" disabled={uploading || saving} className="hidden" onChange={handleFileUpload} />
                 </div>
 
                 {form.url && (
@@ -283,14 +336,24 @@ const AdminShowroom = () => {
                     {isVideo(form.url)
                       ? <video src={form.url} className="h-full w-full object-cover" muted playsInline />
                       : <img src={form.url} alt="" className="h-full w-full object-cover" />}
-                    <button type="button" onClick={() => setForm(f => ({ ...f, url: '' }))}
+                    <button type="button" disabled={uploading || saving} onClick={() => setForm(f => ({ ...f, ...emptyCrop, url: '' }))}
                       className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white text-xs cursor-pointer">✕</button>
+                  </div>
+                )}
+
+                {form.url && !isVideo(form.url) && (
+                  <div className="space-y-2">
+                    {form.cropUrl && <img src={form.cropUrl} alt={cropLabels.title} className="max-h-40 w-full rounded-xl object-contain" />}
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" disabled={uploading || saving} onClick={() => setCropSession({ src: form.url, file: null })} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">{cropLabels.edit}</button>
+                      {form.cropUrl && <button type="button" disabled={uploading || saving} onClick={() => setForm(f => ({ ...f, cropUrl: '', cropWidth: 0, cropHeight: 0 }))} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">{cropLabels.remove}</button>}
+                    </div>
                   </div>
                 )}
 
                 <div>
                   <label className={labelCls}>{p.orPasteUrl || 'Or paste URL'}</label>
-                  <input className={inputCls} value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://res.cloudinary.com/..." />
+                  <input className={inputCls} disabled={uploading || saving} value={form.url} onChange={e => setForm(f => ({ ...f, ...emptyCrop, url: e.target.value }))} placeholder="https://res.cloudinary.com/..." />
                 </div>
 
                 <div>
@@ -312,8 +375,10 @@ const AdminShowroom = () => {
                       {wordCount(form.caption)}/{CAPTION_WORDS} {p.words || 'words'}
                     </span>
                   </div>
-                  <textarea
-                    rows={2}
+                  {/* minRows matches the rows={2} this field already had, so the
+                      starting size is unchanged — only the growing is new. */}
+                  <AutoGrowTextarea
+                    minRows={2}
                     className={inputCls}
                     value={form.caption}
                     onChange={e => setForm(f => ({ ...f, caption: e.target.value }))}
@@ -349,8 +414,11 @@ const AdminShowroom = () => {
                       {wordCount(form.detailText)}/{DETAIL_WORDS} {p.words || 'words'}
                     </span>
                   </div>
-                  <textarea
-                    rows={5}
+                  {/* Ceiling at 20 rows: this is the long-form field, and without a
+                      limit a few hundred words would push Save out of the modal. */}
+                  <AutoGrowTextarea
+                    minRows={5}
+                    maxRows={20}
                     className={inputCls}
                     value={form.detailText}
                     onChange={e => setForm(f => ({ ...f, detailText: e.target.value }))}
@@ -403,6 +471,7 @@ const AdminShowroom = () => {
         </div>
       )}
 
+      {cropSession && <ImageCropModal imageSrc={cropSession.src} onCancel={() => setCropSession(null)} onConfirm={handleCropConfirm} />}
       {confirm && <ConfirmModal message={confirm.message} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />}
     </AdminLayout>
   )

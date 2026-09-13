@@ -82,6 +82,8 @@ const Navbar = () => {
     setServicesOpen(false)
     setMobileOpen(false)
     setMobileServicesOpen(false)
+    setMoreLangOpen(false)
+    setMobileMoreLangOpen(false)
   }, [location.pathname])
 
   const closeMobile = () => setMobileOpen(false)
@@ -225,7 +227,7 @@ const Navbar = () => {
                   aria-label={`Switch to ${lang.label}`}
                   className={`px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
                     language === lang.code
-                      ? 'bg-[#4b6741] text-white'
+                      ? 'bg-[var(--vk-green-brand)] text-white'
                       : 'text-white/40 hover:text-white'
                   }`}
                 >
@@ -243,7 +245,7 @@ const Navbar = () => {
                 aria-label="More languages"
                 className={`flex items-center justify-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
                   MORE_LANGS.some(l => l.code === language)
-                    ? 'bg-[#4b6741] text-white'
+                    ? 'bg-[var(--vk-green-brand)] text-white'
                     : 'text-white/40 hover:text-white'
                 }`}
                 style={{ border: '1px solid rgba(255,255,255,0.12)' }}
@@ -267,7 +269,7 @@ const Navbar = () => {
                         key={lang.code}
                         onClick={() => { setLanguage(lang.code); setMoreLangOpen(false) }}
                         className="flex w-full items-center px-5 py-2.5 text-xs font-medium uppercase tracking-[0.12em] transition-colors cursor-pointer hover:bg-white/5"
-                        style={{ color: language === lang.code ? '#4b6741' : C.muted }}
+                        style={{ color: language === lang.code ? C.accent : C.muted }}
                       >
                         {lang.label}
                       </button>
@@ -303,16 +305,16 @@ const Navbar = () => {
                     transition={{ duration: 0.18 }}
                     className="absolute right-0 mt-3 w-52 rounded-xl border border-black/8 bg-white py-2 shadow-2xl"
                   >
-                    <Link to="/favourites" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.1em] text-slate-600 hover:bg-slate-50 hover:text-[#4b6741]">
+                    <Link to="/favourites" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.1em] text-slate-600 hover:bg-slate-50 hover:text-[var(--vk-green-brand)]">
                       <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
                       {t.nav.favourites}
                     </Link>
-                    <Link to="/settings" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.1em] text-slate-600 hover:bg-slate-50 hover:text-[#4b6741]">
+                    <Link to="/settings" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.1em] text-slate-600 hover:bg-slate-50 hover:text-[var(--vk-green-brand)]">
                       <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                       Settings
                     </Link>
                     {portal && (
-                      <Link to={portal.to} onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.1em] text-slate-600 hover:bg-slate-50 hover:text-[#4b6741]">
+                      <Link to={portal.to} onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.1em] text-slate-600 hover:bg-slate-50 hover:text-[var(--vk-green-brand)]">
                         <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" /></svg>
                         {/* Admins keep their translated "Dashboard"; the agent
                             portal has no translation key yet, so it falls back
@@ -404,7 +406,7 @@ const Navbar = () => {
             </div>
 
             {/* Mobile nav links */}
-            <div className="flex-1 overflow-y-auto px-6 py-6">
+            <div className="vk-scroll-gold min-h-0 flex-1 overflow-y-auto px-6 py-6">
               <nav className="space-y-0">
                 {NAV_ROUTES.map((link) => (
                   <Link
@@ -442,7 +444,7 @@ const Navbar = () => {
                               key={s.to}
                               to={s.to}
                               onClick={closeMobile}
-                              className="block py-2.5 text-sm font-medium uppercase tracking-[0.15em] text-white/50 transition-colors hover:text-[#4b6741]"
+                              className="block py-2.5 text-sm font-medium uppercase tracking-[0.15em] text-white/50 transition-colors hover:text-[var(--vk-green-brand)]"
                             >
                               {t.services?.items?.[s.key]?.label || s.key}
                             </Link>
@@ -491,7 +493,7 @@ const Navbar = () => {
                       onClick={() => setLanguage(lang.code)}
                       className={`flex-1 rounded-lg py-2.5 text-xs font-semibold uppercase tracking-wider cursor-pointer transition-colors ${
                         language === lang.code
-                          ? 'bg-[#4b6741] text-white'
+                          ? 'bg-[var(--vk-green-brand)] text-white'
                           : 'text-white/50 hover:text-white'
                       }`}
                       style={language !== lang.code ? { border: '1px solid rgba(255,255,255,0.12)' } : {}}
@@ -504,7 +506,7 @@ const Navbar = () => {
                     aria-expanded={mobileMoreLangOpen}
                     className={`flex-1 flex items-center justify-center gap-1 rounded-lg py-2.5 text-xs font-semibold uppercase tracking-wider cursor-pointer transition-colors ${
                       MORE_LANGS.some(l => l.code === language)
-                        ? 'bg-[#4b6741] text-white'
+                        ? 'bg-[var(--vk-green-brand)] text-white'
                         : 'text-white/50 hover:text-white'
                     }`}
                     style={!MORE_LANGS.some(l => l.code === language) ? { border: '1px solid rgba(255,255,255,0.12)' } : {}}
@@ -529,7 +531,7 @@ const Navbar = () => {
                             onClick={() => { setLanguage(lang.code); setMobileMoreLangOpen(false) }}
                             className={`flex-1 rounded-lg py-2.5 text-xs font-semibold uppercase tracking-wider cursor-pointer transition-colors ${
                               language === lang.code
-                                ? 'bg-[#4b6741] text-white'
+                                ? 'bg-[var(--vk-green-brand)] text-white'
                                 : 'text-white/50 hover:text-white'
                             }`}
                             style={language !== lang.code ? { border: '1px solid rgba(255,255,255,0.12)' } : {}}

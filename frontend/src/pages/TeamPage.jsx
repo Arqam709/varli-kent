@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+// eslint-disable-next-line no-unused-vars -- motion is used in JSX member expressions.
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLanguage } from '../contexts/LanguageContext'
 import { localizedText } from '../lib/localizedText'
@@ -6,6 +7,8 @@ import usePageContent from '../lib/usePageContent'
 import api from '../lib/api'
 import { C } from '../contexts/ThemeContext'
 import useSeo from '../lib/useSeo'
+import TeamWorkPortfolio, { TeamWorkImageDialog } from '../components/TeamWorkPortfolio'
+import { teamWorkView } from '../lib/teamWork'
 
 const GoldDivider = () => (
   <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, var(--vk-gold) 25%, var(--vk-gold) 75%, transparent)', opacity: 0.5 }} />
@@ -27,10 +30,12 @@ const fadeUp = {
  */
 function MemberModal({ member, onClose, t, language }) {
   const [tab, setTab] = useState('about')
+  const [activeItem, setActiveItem] = useState(null)
   const loc = (value) => localizedText(value, language)
 
   const workImages = Array.isArray(member.workImages) ? member.workImages : []
-  const hasWork = workImages.length > 0
+  const { sections, files } = teamWorkView(member, language)
+  const hasWork = workImages.length > 0 || sections.length > 0 || files.length > 0
 
   const role = loc(member.role)
   const bio = loc(member.bio)
@@ -39,7 +44,8 @@ function MemberModal({ member, onClose, t, language }) {
   // The secondary photo is the profile portrait when one exists, otherwise
   // the card photo. Never a placeholder URL — a member with neither gets the
   // same monogram the card uses.
-  const image = member.secondaryPhoto || member.photo
+  const originalImage = member.secondaryPhoto || member.photo
+  const image = member.secondaryPhoto ? (member.secondaryPhotoCropUrl || member.secondaryPhoto) : (member.photoCropUrl || member.photo)
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -81,6 +87,7 @@ function MemberModal({ member, onClose, t, language }) {
       <motion.div
         initial={{ opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }}
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        inert={activeItem ? true : undefined}
         className="flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl lg:flex-row"
         style={{ background: C.darkGrey, maxHeight: '88vh' }}
         // Clicking the panel itself must not fall through to the backdrop.
@@ -88,7 +95,7 @@ function MemberModal({ member, onClose, t, language }) {
       >
         <div className="shrink-0 lg:w-2/5" style={{ minHeight: 260, backgroundColor: C.charcoal }}>
           {image ? (
-            <img src={image} alt={member.name} className="h-full max-h-[40vh] w-full object-cover lg:max-h-[88vh]" />
+            <img key={image} src={image} onError={e => { if (e.currentTarget.getAttribute('src') !== originalImage) e.currentTarget.src = originalImage; else e.currentTarget.style.display = 'none' }} alt={member.name} className="h-full max-h-[40vh] w-full object-cover lg:max-h-[88vh]" />
           ) : (
             <div className="flex h-full min-h-[260px] w-full items-center justify-center">
               <span style={{ fontFamily: 'Cinzel, serif', fontSize: '4rem', color: 'rgba(201,163,90,0.25)', fontWeight: 700 }}>
@@ -98,7 +105,7 @@ function MemberModal({ member, onClose, t, language }) {
           )}
         </div>
 
-        <div className="flex flex-1 flex-col overflow-y-auto p-7 sm:p-9">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-7 sm:p-9 [overflow-wrap:anywhere]">
           <div>
             <h3 style={{ fontFamily: 'Cinzel, serif', color: C.marble }} className="text-2xl font-semibold">{member.name}</h3>
             {role && (
@@ -135,6 +142,7 @@ function MemberModal({ member, onClose, t, language }) {
                 {longBio || bio || (t.teamPage?.noBio || 'No additional information yet.')}
               </p>
             ) : (
+              <TeamWorkPortfolio sections={sections} files={files} onOpen={setActiveItem}>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {workImages.map((url, i) => (
                   <div key={url || i} className="overflow-hidden rounded-lg" style={{ aspectRatio: '1', backgroundColor: C.charcoal }}>
@@ -150,10 +158,12 @@ function MemberModal({ member, onClose, t, language }) {
                   </div>
                 ))}
               </div>
+              </TeamWorkPortfolio>
             )}
           </div>
         </div>
       </motion.div>
+      {activeItem && <TeamWorkImageDialog item={activeItem} onClose={() => setActiveItem(null)} />}
     </motion.div>
   )
 }
@@ -270,7 +280,7 @@ export default function TeamPage() {
                   custom={i % 3}
                   onClick={() => setSelected(m)}
                   aria-label={`${m.name} — ${t.teamPage?.viewProfile || 'View Profile'}`}
-                  className="group relative block w-full overflow-hidden text-left cursor-pointer"
+                  className="group relative block w-full overflow-hidden text-start cursor-pointer"
                   style={{
                     borderRadius: '1.25rem',
                     border: '1px solid rgba(201,163,90,0.12)',

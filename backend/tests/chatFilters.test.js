@@ -248,11 +248,25 @@ test('12. a named parkingType overrides the generic parking existence check', ()
 })
 
 test('13. an invalid parkingType leaves the classic parking check intact', () => {
-  // The donor's values, which CURRENT cannot store — they must not silently
-  // replace a working filter with one that matches nothing.
+  // Values that are not in the vocabulary at all must not silently replace a
+  // working "has parking" filter with one that matches nothing.
+  //
+  // 'Parking Garage' and 'Open & Covered Parking' used to be the example here,
+  // on the grounds that this side could not store them. It can now — the shared
+  // database already holds a listing with 'Open & Covered Parking' — so genuine
+  // non-values are used instead.
   assert.deepEqual(
-    buildMongoFilter({ parking: true, parkingType: ['Parking Garage', 'Open & Covered Parking'] }),
+    buildMongoFilter({ parking: true, parkingType: ['Underground Valet', 'Helipad'] }),
     { ...AVAILABLE, parking: { $exists: true, $nin: ['', null, 'No', 'no', 'None', 'none'] } }
+  )
+})
+
+test('13b. the other front-end\'s parking values now build a real filter', () => {
+  // The counterpart to the case above: these ARE storable, so they must reach
+  // the query rather than being discarded.
+  assert.deepEqual(
+    buildMongoFilter({ parkingType: ['Parking Garage', 'Open & Covered Parking'] }),
+    { ...AVAILABLE, parking: { $in: ['Parking Garage', 'Open & Covered Parking'] } }
   )
 })
 
@@ -556,22 +570,45 @@ test('33. canonicalizers reject unknown and non-string input', async (t) => {
   }
 })
 
-test('34. donor vocabulary values never leak through as-is', () => {
-  // The donor's own canonical values differ from CURRENT's stored values.
-  // Where a donor value describes the same real thing, it must be TRANSLATED
-  // to CURRENT's value; where it has no CURRENT equivalent, it must be
-  // rejected. Either way the donor string itself must never survive — it
-  // would build an $in that matches no listing in this database.
-  assert.equal(canonicalizeParkingType('Parking Garage'), 'Closed Parking')
-  assert.equal(canonicalizeParkingType('Open Parking Lot'), 'Open Parking')
-  assert.equal(canonicalizeParkingType('Open & Covered Parking'), null, 'no CURRENT equivalent')
+test('34. the second vocabulary is carried, and invention is still rejected', () => {
+  // This test used to assert the opposite: that the other front-end's parking
+  // values were translated into this side's ('Parking Garage' -> 'Closed
+  // Parking') or dropped, because they could not be stored here.
+  //
+  // They can be stored now. The two projects share one database and it already
+  // holds 'Open & Covered Parking', so those strings are canonical values in
+  // their own right and must survive untouched. Translating them would rewrite
+  // what a listing says: 'Open & Covered Parking' plausibly means both kinds of
+  // space exist, which is neither 'Open Parking' nor 'Closed Parking'.
+  assert.equal(canonicalizeParkingType('Parking Garage'), 'Parking Garage')
+  assert.equal(canonicalizeParkingType('Open Parking Lot'), 'Open Parking Lot')
+  assert.equal(canonicalizeParkingType('Open & Covered Parking'), 'Open & Covered Parking')
+  assert.equal(canonicalizeParkingType('Combi Boiler (Natural Gas)'), null, 'wrong field entirely')
 
-  // Donor building-age buckets are single years plus 21-25/26-30/31+.
-  for (const donorBucket of ['0', '1', '5', '21-25', '26-30', '31+']) {
-    assert.equal(canonicalizeBuildingAge(donorBucket), null, `${donorBucket} is not a CURRENT bucket`)
+  // Heating gained the same second vocabulary.
+  assert.equal(canonicalizeHeating('Combi Boiler (Natural Gas)'), 'Combi Boiler (Natural Gas)')
+  assert.equal(canonicalizeHeating('Central (Meter)'), 'Central (Meter)')
+
+  // What has NOT changed: anything outside both vocabularies is still refused.
+  assert.equal(canonicalizeParkingType('Helipad'), null)
+  assert.equal(canonicalizeHeating('Geothermal'), null)
+  assert.equal(canonicalizeParkingType('1 covered parking spot'), null, 'free text, not a category')
+
+  // Building age moved the other way: the single-year buckets and the
+  // 21-25/26-30/31+ split ARE the canonical vocabulary now.
+  for (const bucket of ['0', '1', '5', '21-25', '26-30', '31+']) {
+    assert.equal(canonicalizeBuildingAge(bucket), bucket, `${bucket} is canonical`)
   }
-  assert.equal(canonicalizeBuildingAge('0 (New)'), '0 (New)')
-  assert.equal(canonicalizeBuildingAge('21+'), '21+')
+
+  // The three retired buckets are still recognised, so an old conversation or a
+  // listing saved under the previous vocabulary keeps resolving. They are never
+  // rewritten into a canonical bucket — the exact age is not known.
+  for (const retired of ['0 (New)', '1-5', '21+']) {
+    assert.equal(canonicalizeBuildingAge(retired), retired, `${retired} stays recognised`)
+  }
+
+  assert.equal(canonicalizeBuildingAge('7-9'), null, 'not a bucket in either vocabulary')
+  assert.equal(canonicalizeBuildingAge('newish'), null)
 })
 
 test('35. rooms tolerate surrounding whitespace but not invention', () => {
@@ -585,12 +622,27 @@ test('35. rooms tolerate surrounding whitespace but not invention', () => {
  * ═══════════════════════════════════════════════════════════════════════ */
 
 test('36. building-age buckets expand from a relative phrase', () => {
-  assert.deepEqual(buildingAgeBucketsWithinYears(0), ['0 (New)'])
-  assert.deepEqual(buildingAgeBucketsWithinYears(5), ['0 (New)', '1-5'])
-  assert.deepEqual(buildingAgeBucketsWithinYears(10), ['0 (New)', '1-5', '6-10'])
-  assert.deepEqual(buildingAgeBucketsWithinYears(20), ['0 (New)', '1-5', '6-10', '11-15', '16-20'])
-  // '21+' is unbounded, so it can never fit inside a finite span.
-  assert.ok(!buildingAgeBucketsWithinYears(100).includes('21+'))
+  assert.deepEqual(buildingAgeBucketsWithinYears(0), ['0'])
+  // The single-year buckets are the whole point: under the previous vocabulary
+  // "the last 3 years" could only answer '0 (New)', because the one '1-5'
+  // bucket reached past the span asked for and had to be excluded.
+  assert.deepEqual(buildingAgeBucketsWithinYears(1), ['0', '1'])
+  assert.deepEqual(buildingAgeBucketsWithinYears(3), ['0', '1', '2', '3'])
+  assert.deepEqual(buildingAgeBucketsWithinYears(5), ['0', '1', '2', '3', '4', '5'])
+  assert.deepEqual(buildingAgeBucketsWithinYears(10), ['0', '1', '2', '3', '4', '5', '6-10'])
+  assert.deepEqual(buildingAgeBucketsWithinYears(20),
+    ['0', '1', '2', '3', '4', '5', '6-10', '11-15', '16-20'])
+  // Splitting the old unbounded '21+' means a 25- or 30-year-old building is
+  // now reachable by a finite span, which it never was before.
+  assert.deepEqual(buildingAgeBucketsWithinYears(30),
+    ['0', '1', '2', '3', '4', '5', '6-10', '11-15', '16-20', '21-25', '26-30'])
+  // '31+' is still unbounded, so it still cannot fit inside a finite span —
+  // and now that is correct rather than merely convenient.
+  assert.ok(!buildingAgeBucketsWithinYears(100).includes('31+'))
+  // The retired buckets are not produced by expansion at all.
+  for (const retired of ['0 (New)', '1-5', '21+']) {
+    assert.ok(!buildingAgeBucketsWithinYears(100).includes(retired), `${retired} must not be produced`)
+  }
   for (const bad of [-1, NaN, Infinity, 'five', null]) {
     assert.deepEqual(buildingAgeBucketsWithinYears(bad), [], `${bad} must yield no buckets`)
   }
@@ -605,7 +657,7 @@ test('37. relative building-age phrases parse in three languages', async (t) => 
   for (const message of CASES) {
     await t.test(message, () => {
       const parsed = extractBuildingAgeFromText(message, { buildingAge: [] })
-      assert.deepEqual(parsed.buildingAge, ['0 (New)', '1-5'])
+      assert.deepEqual(parsed.buildingAge, ['0', '1', '2', '3', '4', '5'])
     })
   }
 })
@@ -650,7 +702,7 @@ test('42. normalizeParsed canonicalizes, drops and deduplicates arrays', () => {
       kitchenType: ['kapalı mutfak'],
       heating: ['kombi', 'invented'],
       rooms: ['3+1', '99+9'],
-      buildingAge: ['1-5', '31+'],
+      buildingAge: ['3', '31+', 'not-a-bucket'],
       parkingType: ['garaj'],
       floorLocation: ['zemin kat'],
       titleDeedStatus: ['kat mülkiyeti'],
@@ -662,7 +714,7 @@ test('42. normalizeParsed canonicalizes, drops and deduplicates arrays', () => {
   assert.deepEqual(parsed.kitchenType, ['Closed'])
   assert.deepEqual(parsed.heating, ['Individual Gas'])
   assert.deepEqual(parsed.rooms, ['3+1'])
-  assert.deepEqual(parsed.buildingAge, ['1-5'])
+  assert.deepEqual(parsed.buildingAge, ['3', '31+'])
   assert.deepEqual(parsed.parkingType, ['Closed Parking'])
   assert.deepEqual(parsed.floorLocation, ['Ground floor'])
   assert.deepEqual(parsed.titleDeedStatus, ['Independent Title Deed'])

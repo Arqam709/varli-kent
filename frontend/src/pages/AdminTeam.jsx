@@ -1,11 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { editableText } from '../lib/localizedText'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
+import AutoGrowTextarea from '../components/AutoGrowTextarea'
+import ImageCropModal from '../components/ImageCropModal'
+import TeamWorkEditor from '../components/TeamWorkEditor'
+import { editableWorkSections, newWorkId } from '../lib/teamWork'
+import { teamWorkLabels } from '../locales/teamWork'
+import { imageCropLabels } from '../locales/imageCrop'
 import { useLanguage } from '../contexts/LanguageContext'
 
-const empty = { name: '', role: '', bio: '', photo: '', secondaryPhoto: '', longBio: '', workImages: [], order: 0, visible: true }
+const empty = { name: '', role: '', bio: '', photo: '', secondaryPhoto: '', longBio: '', workImages: [], workSections: [], workFiles: [], photoCropUrl: '', secondaryPhotoCropUrl: '', order: 0, visible: true }
 
 // Module scope so the rich-profile field components below share exactly these.
 const inputCls = 'w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4b6741] bg-white'
@@ -21,14 +27,17 @@ const labelCls = 'block text-xs font-semibold uppercase tracking-widest text-sla
  */
 const MAX_WORK_IMAGES = 24
 
-const ImageUploadField = ({ label, hint, value, onChange, aspect = 'aspect-square', p = {} }) => {
+const ImageUploadField = ({ label, hint, value, onChange, aspect = 'aspect-square', p = {}, cropValue, onCrop, onCropChange, onBusy }) => {
   const [uploading, setUploading] = useState(false)
+  const { language } = useLanguage()
+  const cropLabels = imageCropLabels(language)
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
 
     setUploading(true)
+    onBusy?.(true)
     try {
       const fd = new FormData()
       fd.append('image', file)
@@ -39,6 +48,7 @@ const ImageUploadField = ({ label, hint, value, onChange, aspect = 'aspect-squar
       toast.error(p.uploadFailed || 'Upload failed')
     } finally {
       setUploading(false)
+      onBusy?.(false)
       e.target.value = ''
     }
   }
@@ -50,7 +60,7 @@ const ImageUploadField = ({ label, hint, value, onChange, aspect = 'aspect-squar
         <div className={`relative flex ${aspect} w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50`}>
           {value ? (
             <>
-              <img src={value} alt="" className="h-full w-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+              <img key={cropValue || value} src={cropValue || value} alt="" className="h-full w-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
               <button
                 type="button"
                 onClick={() => onChange('')}
@@ -75,13 +85,17 @@ const ImageUploadField = ({ label, hint, value, onChange, aspect = 'aspect-squar
         onChange={e => onChange(e.target.value)}
         placeholder="https://…"
       />
+      {value && <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" onClick={() => onCrop(value)} className="rounded-lg border px-3 py-2 text-xs">{cropLabels.edit}</button>
+        {cropValue && <button type="button" onClick={() => onCropChange('')} className="rounded-lg border px-3 py-2 text-xs">{cropLabels.remove}</button>}
+      </div>}
       {hint && <p className="mt-1 text-[10px] text-slate-400">{hint}</p>}
     </div>
   )
 }
 
 // "Their Work" gallery — add several images at once, remove any of them.
-const WorkGalleryField = ({ images, onChange, p = {} }) => {
+const WorkGalleryField = ({ images, onChange, p = {}, onBusy }) => {
   const [uploading, setUploading] = useState(false)
   const list = Array.isArray(images) ? images : []
   const full = list.length >= MAX_WORK_IMAGES
@@ -100,6 +114,7 @@ const WorkGalleryField = ({ images, onChange, p = {} }) => {
     }
 
     setUploading(true)
+    onBusy?.(true)
     try {
       const uploaded = []
       for (const file of files.slice(0, room)) {
@@ -114,6 +129,7 @@ const WorkGalleryField = ({ images, onChange, p = {} }) => {
       toast.error(p.uploadFailed || 'Upload failed')
     } finally {
       setUploading(false)
+      onBusy?.(false)
       e.target.value = ''
     }
   }
@@ -169,7 +185,8 @@ const ConfirmModal = ({ message, onConfirm, onCancel }) => (
 )
 
 const AdminTeam = () => {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const workLabels = teamWorkLabels(language)
   const p = t.adminPages?.team || {}
   const c = t.adminPages?.common || {}
   const [members, setMembers] = useState([])
@@ -178,6 +195,47 @@ const AdminTeam = () => {
   const [form, setForm] = useState(empty)
   const [saving, setSaving] = useState(false)
   const [confirm, setConfirm] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const [cropSession, setCropSession] = useState(null)
+  const editorVersion = useRef(0)
+  const busy = saving || uploading || Boolean(cropSession)
+  useEffect(() => () => { editorVersion.current += 1 }, [])
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape' && !busy) setModal(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [busy])
+
+  const updateWorkImage = (target, patch) => setForm(current => ({ ...current, workSections: current.workSections.map(section => section._id === target.sectionId
+    ? { ...section, items: section.items.map(item => item._id === target.itemId ? { ...item, ...patch } : item) } : section) }))
+
+  const uploadWorkFile = async (file, target) => {
+    if (busy) return
+    const fileType = file.name.split('.').pop().toLowerCase()
+    if (target.document && (!['pdf', 'doc', 'docx', 'ppt', 'pptx'].includes(fileType) || file.size > 20 * 1024 * 1024)) { toast.error(workLabels.invalidFile); return }
+    const version = editorVersion.current
+    setUploading(true)
+    try {
+      const fd = new FormData(); fd.append('image', file)
+      const result = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      if (version !== editorVersion.current) return
+      if (!result.data.url) throw new Error('Upload failed')
+      if (target.document) setForm(current => ({ ...current, workFiles: [...current.workFiles, { _id: newWorkId(), url: result.data.url, name: file.name.slice(0, 200), fileType }] }))
+      else updateWorkImage(target, { url: result.data.url, cropUrl: '', width: 0, height: 0 })
+    } catch { toast.error(workLabels.failed) } finally { setUploading(false) }
+  }
+
+  const confirmCrop = async (blob, width, height) => {
+    const session = cropSession
+    const version = editorVersion.current
+    const fd = new FormData(); fd.append('image', blob, 'cropped.jpg')
+    const result = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    if (version !== editorVersion.current) return
+    if (!result.data.url) throw new Error('Upload failed')
+    if (session.target.field) setForm(current => ({ ...current, [session.target.field]: result.data.url }))
+    else updateWorkImage(session.target, { cropUrl: result.data.url, width, height })
+    setCropSession(null)
+  }
 
   const load = () => {
     setLoading(true)
@@ -189,7 +247,7 @@ const AdminTeam = () => {
 
   useEffect(() => { load() }, [])
 
-  const openCreate = () => { setForm(empty); setModal('create') }
+  const openCreate = () => { editorVersion.current += 1; setForm(empty); setModal('create') }
   /*
    * Wave 12A2 — role and bio are stored localized, so the form shows the
    * admin their OWN source-language text rather than the raw object (which
@@ -198,10 +256,11 @@ const AdminTeam = () => {
    * Sending a plain string is also the signal that the field was edited; an
    * unchanged one is detected server-side and costs no translation quota.
    */
-  const openEdit = (m) => { setForm({ name: m.name, role: editableText(m.role), bio: editableText(m.bio), photo: m.photo || '', secondaryPhoto: m.secondaryPhoto || '', longBio: editableText(m.longBio), workImages: m.workImages || [], order: m.order ?? 0, visible: m.visible ?? true }); setModal(m) }
+  const openEdit = (m) => { editorVersion.current += 1; setForm({ name: m.name, role: editableText(m.role), bio: editableText(m.bio), photo: m.photo || '', secondaryPhoto: m.secondaryPhoto || '', longBio: editableText(m.longBio), workImages: m.workImages || [], workSections: editableWorkSections(m.workSections), workFiles: (m.workFiles || []).map(file => ({ ...file, _id: file._id || newWorkId() })), photoCropUrl: m.photoCropUrl || '', secondaryPhotoCropUrl: m.secondaryPhotoCropUrl || '', order: m.order ?? 0, visible: m.visible ?? true }); setModal(m) }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (busy) return
     if (!form.name.trim() || !form.role.trim()) { toast.error('Name and role are required'); return }
     setSaving(true)
     try {
@@ -296,16 +355,19 @@ const AdminTeam = () => {
 
       {modal !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4">
               <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-lg font-bold text-[#202a36]">
                 {modal === 'create' ? (p.addMemberTitle || 'Add Team Member') : (p.editMemberTitle || 'Edit Member')}
               </h2>
-              <button onClick={() => setModal(null)} className="text-slate-400 hover:text-slate-700 transition cursor-pointer">
+              <button type="button" disabled={busy} aria-label={c.close || 'Close'} onClick={() => setModal(null)} className="text-slate-400 hover:text-slate-700 transition cursor-pointer">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+            <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+              {/* A normal div owns flex scrolling; fieldset has special intrinsic sizing. */}
+              <div data-testid="team-modal-body" className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
+              <fieldset disabled={busy} className="min-w-0 space-y-4 px-6 py-5">
               <div>
                 <label className={labelCls}>{p.fullName || 'Full Name'}</label>
                 <input className={inputCls} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Ahmet Yilmaz" />
@@ -316,12 +378,18 @@ const AdminTeam = () => {
               </div>
               <div>
                 <label className={labelCls}>{p.bio || 'Bio'}</label>
-                <textarea rows={3} className={inputCls} value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} placeholder="Short biography..." />
+                {/* minRows={3} keeps the size this field already had. The drop uses
+                    2 here, but this step is about growing, not resizing. */}
+                <AutoGrowTextarea minRows={3} className={inputCls} value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} placeholder="Short biography..." />
               </div>
               <ImageUploadField
                 label={p.photoUrl || 'Photo (grid thumbnail)'}
                 value={form.photo}
-                onChange={url => setForm(f => ({ ...f, photo: url }))}
+                onChange={url => setForm(f => ({ ...f, photo: url, photoCropUrl: '' }))}
+                cropValue={form.photoCropUrl}
+                onCrop={src => setCropSession({ src, target: { field: 'photoCropUrl' } })}
+                onCropChange={photoCropUrl => setForm(f => ({ ...f, photoCropUrl }))}
+                onBusy={setUploading}
                 aspect="aspect-square"
                 p={p}
               />
@@ -335,15 +403,20 @@ const AdminTeam = () => {
                   label={p.profilePhoto || 'Profile Photo (optional)'}
                   hint={p.profilePhotoHint || 'A separate, larger image for the expanded profile. Falls back to the grid photo if left blank.'}
                   value={form.secondaryPhoto}
-                  onChange={url => setForm(f => ({ ...f, secondaryPhoto: url }))}
+                  onChange={url => setForm(f => ({ ...f, secondaryPhoto: url, secondaryPhotoCropUrl: '' }))}
+                  cropValue={form.secondaryPhotoCropUrl}
+                  onCrop={src => setCropSession({ src, target: { field: 'secondaryPhotoCropUrl' } })}
+                  onCropChange={secondaryPhotoCropUrl => setForm(f => ({ ...f, secondaryPhotoCropUrl }))}
+                  onBusy={setUploading}
                   aspect="aspect-[3/4]"
                   p={p}
                 />
 
                 <div className="mt-4">
                   <label className={labelCls}>{p.detailedInfo || 'Detailed Info (optional)'}</label>
-                  <textarea
-                    rows={5}
+                  <AutoGrowTextarea
+                    minRows={5}
+                    maxRows={20}
                     className={inputCls}
                     value={form.longBio}
                     onChange={e => setForm(f => ({ ...f, longBio: e.target.value }))}
@@ -355,7 +428,11 @@ const AdminTeam = () => {
                 </div>
 
                 <div className="mt-4">
-                  <WorkGalleryField images={form.workImages} onChange={imgs => setForm(f => ({ ...f, workImages: imgs }))} p={p} />
+                  <TeamWorkEditor sections={form.workSections} files={form.workFiles} busy={busy}
+                    onChange={workSections => setForm(f => ({ ...f, workSections: workSections.map((section, order) => ({ ...section, order })) }))}
+                    onFilesChange={workFiles => setForm(f => ({ ...f, workFiles }))}
+                    onUpload={uploadWorkFile} onCrop={(src, target) => setCropSession({ src, target })} />
+                  {form.workImages.length > 0 && <WorkGalleryField images={form.workImages} onChange={imgs => setForm(f => ({ ...f, workImages: imgs }))} p={p} onBusy={setUploading} />}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -371,11 +448,13 @@ const AdminTeam = () => {
                   </label>
                 </div>
               </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setModal(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">
+              </fieldset>
+              </div>
+              <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 px-6 py-4">
+                <button type="button" disabled={busy} onClick={() => setModal(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">
                   {c.cancel || 'Cancel'}
                 </button>
-                <button type="submit" disabled={saving} className="rounded-xl bg-[#4b6741] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#3d5535] transition disabled:opacity-60 cursor-pointer">
+                <button type="submit" disabled={busy} className="rounded-xl bg-[#4b6741] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#3d5535] transition disabled:opacity-60 cursor-pointer">
                   {saving ? (c.saving || 'Saving...') : modal === 'create' ? (p.addMemberBtn || 'Add Member') : (p.saveChanges || 'Save Changes')}
                 </button>
               </div>
@@ -384,6 +463,7 @@ const AdminTeam = () => {
         </div>
       )}
 
+      {cropSession && <ImageCropModal imageSrc={cropSession.src} onCancel={() => setCropSession(null)} onConfirm={confirmCrop} />}
       {confirm && <ConfirmModal message={confirm.message} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />}
     </AdminLayout>
   )

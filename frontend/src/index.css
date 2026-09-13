@@ -468,7 +468,7 @@ html {
 }
 
 ::selection {
-  background: #4b6741;
+  background: var(--vk-green-brand);
   color: white;
 }
 
@@ -522,4 +522,26 @@ html {
 @keyframes vk-marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
+}
+
+/* Opt-in scrollbar polish for the admin shell and mobile navigation.
+   Keep native scrolling/direction; theme tokens follow Studio Palette. */
+.vk-scroll-gold {
+  scrollbar-width: thin;
+  scrollbar-color: var(--vk-gold) rgba(255,255,255,0.08);
+}
+.vk-scroll-gold::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.vk-scroll-gold::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.08);
+  border-radius: 999px;
+}
+.vk-scroll-gold::-webkit-scrollbar-thumb {
+  background-color: var(--vk-gold);
+  border-radius: 999px;
+}
+.vk-scroll-gold::-webkit-scrollbar-thumb:hover {
+  background-color: var(--vk-gold-hover);
 }

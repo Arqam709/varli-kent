@@ -1,4 +1,6 @@
 import mongoose from 'mongoose'
+import { workSectionSchema, workFileSchema } from './teamWorkSchemas.js'
+import { validTeamUrl, TEAM_WORK_LIMITS } from '../utils/teamWork.js'
 import {
   isLocalizedObject,
   isUsableText,
@@ -57,6 +59,11 @@ const teamMemberSchema = new mongoose.Schema({
     validate: { validator: isValidImageUrl, message: 'Secondary photo must be empty or a valid image URL' },
   },
   longBio: localizedField(),
+  photoCropUrl: { type: String, default: '', validate: validTeamUrl },
+  secondaryPhotoCropUrl: { type: String, default: '', validate: validTeamUrl },
+  // Optional additions; legacy workImages stays intact with its existing default.
+  workSections: { type: [workSectionSchema], default: [], validate: value => value.length <= TEAM_WORK_LIMITS.sections && value.reduce((n, section) => n + section.items.length, 0) <= TEAM_WORK_LIMITS.totalItems },
+  workFiles: { type: [workFileSchema], default: [], validate: value => value.length <= TEAM_WORK_LIMITS.files },
 
   workImages: {
     type: [String],

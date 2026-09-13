@@ -1,5 +1,6 @@
 import express from 'express'
 import ShowroomImage from '../models/ShowroomImage.js'
+import { normalizeShowroomCrop } from '../utils/showroomCrop.js'
 import { protect } from '../middleware/auth.js'
 import { requireRole, requirePermission } from '../middleware/checkPermission.js'
 import { localizeFields, sanitizePoisonedTranslations } from '../utils/autoTranslate.js'
@@ -45,7 +46,7 @@ router.get('/:service/all', protect, requireRole('owner', 'admin'), requirePermi
 // POST /api/showroom — create
 router.post('/', protect, requireRole('owner', 'admin'), requirePermission('manage_showroom'), async (req, res, next) => {
   try {
-    const localizedBody = await localizeFields(req.body, LOCALIZED_SHOWROOM_FIELDS)
+    const localizedBody = await localizeFields(normalizeShowroomCrop(req.body), LOCALIZED_SHOWROOM_FIELDS)
     const image = await ShowroomImage.create(localizedBody)
     res.status(201).json({ success: true, image })
   } catch (err) {
@@ -61,7 +62,7 @@ router.put('/:id', protect, requireRole('owner', 'admin'), requirePermission('ma
     const existing = await ShowroomImage.findById(req.params.id)
     if (!existing) return res.status(404).json({ success: false, message: 'Image not found' })
 
-    const localizedBody = await localizeFields(req.body, LOCALIZED_SHOWROOM_FIELDS, existing.toObject())
+    const localizedBody = await localizeFields(normalizeShowroomCrop(req.body, existing.toObject()), LOCALIZED_SHOWROOM_FIELDS, existing.toObject())
 
     const image = await ShowroomImage.findByIdAndUpdate(req.params.id, localizedBody, { new: true, runValidators: true })
     if (!image) return res.status(404).json({ success: false, message: 'Image not found' })
