@@ -339,7 +339,7 @@ const AdminPartners = () => {
       </div>
 
       {modal !== null && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 py-10 bg-black/50 backdrop-blur-sm">
+        <div className="vk-scroll-gold fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 py-10 bg-black/50 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-lg font-bold text-[#202a36]">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
@@ -310,6 +310,10 @@ const AdminProperties = () => {
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [agents, setAgents] = useState([])
+  // 'idle' | 'loading' | 'ready' | 'error'. Until the list is 'ready', an
+  // assigned agent missing from it is simply not known yet — not inactive.
+  const [agentsStatus, setAgentsStatus] = useState('idle')
+  const agentsRequest = useRef(0)
   const [details, setDetails] = useState(emptyDetails)
   // Nearby transport is the one list where "empty" is ambiguous: it can mean
   // "no transport recorded" or "recorded as nothing nearby". Only an admin who
@@ -329,13 +333,35 @@ const AdminProperties = () => {
   }
   useEffect(() => { fetchProperties() }, [])
 
-  // Real agent accounts for the selector — never a hardcoded list. The
-  // endpoint returns ACTIVE agents only and just four public fields.
-  // A failure leaves the list empty rather than blocking the form; every
-  // other field still works and the server would reject a bad id anyway.
-  useEffect(() => {
-    api.get('/users/agents').then(r => setAgents(r.data.agents || [])).catch(() => setAgents([]))
-  }, [])
+  /**
+   * Real agent accounts for the selector — never a hardcoded list. The
+   * endpoint returns ACTIVE agents only and just four public fields.
+   *
+   * Fetched every time the editor opens, not once per page mount. A one-shot
+   * mount load kept whatever the list was when the page first rendered: an
+   * account promoted to agent afterwards, or a request that failed while the
+   * backend was restarting, left the dropdown at "Unassigned" until a full
+   * page reload.
+   *
+   * A failure is reported, never swallowed into an empty list, and keeps the
+   * last good list. Every other field still works, and the server rejects an
+   * id that is not an active agent regardless.
+   */
+  const loadAgents = async () => {
+    const requestId = ++agentsRequest.current
+    setAgentsStatus('loading')
+
+    try {
+      const r = await api.get('/users/agents')
+      if (requestId !== agentsRequest.current) return
+      setAgents(r.data?.agents || [])
+      setAgentsStatus('ready')
+    } catch {
+      if (requestId !== agentsRequest.current) return
+      setAgentsStatus('error')
+      toast.error(p.agentsLoadError || 'Could not load agents. Close and reopen the form to try again.')
+    }
+  }
 
   /**
    * Choosing an agent rewrites the agent-derived contact state.
@@ -461,6 +487,7 @@ const AdminProperties = () => {
     setTransportTouched(false)
     setImages([])
     resetLocationState(LOCATION_NONE)
+    loadAgents()
     setFormOpen(true)
   }
 
@@ -518,6 +545,7 @@ const AdminProperties = () => {
     setDetails(detailsFromProperty(prop))
     setTransportTouched(false)
     setImages(prop.images || [])
+    loadAgents()
     setFormOpen(true)
   }
 
@@ -939,10 +967,18 @@ const AdminProperties = () => {
                       server, which is the honest outcome.
                     */}
                     {form.agent && !agents.some(a => a._id === form.agent) && (
-                      <option value={form.agent}>Currently assigned — no longer an active agent</option>
+                      <option value={form.agent}>
+                        {agentsStatus === 'ready' ? 'Currently assigned — no longer an active agent' : 'Currently assigned agent'}
+                      </option>
                     )}
                   </select>
-                  {form.agent && !agents.some(a => a._id === form.agent) ? (
+                  {agentsStatus === 'loading' ? (
+                    <p className="mt-1.5 text-[11px] text-slate-400">Loading agents…</p>
+                  ) : agentsStatus === 'error' ? (
+                    <p className="mt-1.5 text-[11px] text-red-600">
+                      Could not load agents. Close and reopen the form to try again.
+                    </p>
+                  ) : form.agent && !agents.some(a => a._id === form.agent) ? (
                     <p className="mt-1.5 text-[11px] text-amber-600">
                       The assigned account is no longer an active agent. Pick another agent or set Unassigned before saving.
                     </p>

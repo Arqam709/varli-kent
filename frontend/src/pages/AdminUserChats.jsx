@@ -414,6 +414,10 @@ const AdminUserChats = () => {
       })
       .then((res) => {
         if (requestId !== usersRequestRef.current) return
+        if (res.data.pagination && userPage > res.data.pagination.totalPages) {
+          setUserPage(Math.max(1, res.data.pagination.totalPages))
+          return
+        }
         const newUsers = res.data.users || []
         setUsers(newUsers)
         setUsersPagination(res.data.pagination || null)
@@ -453,6 +457,10 @@ const AdminUserChats = () => {
         })
         .then((res) => {
           if (requestId !== conversationsRequestRef.current) return
+          if (res.data.pagination && conversationPage > res.data.pagination.totalPages) {
+            setConversationPage(Math.max(1, res.data.pagination.totalPages))
+            return
+          }
           const newConversations = res.data.conversations || []
           setConversations(newConversations)
           setConversationsPagination(res.data.pagination || null)
@@ -489,12 +497,15 @@ The admin selects a different user. */
 
   useEffect(() => {
     if (!selectedUserId) {
+      setSelectedConversationId(null)
       setConversations([])
+      setConversationsLoading(false)
       setConversationsPagination(null)
       setConversationsError(false)
       return
     }
     loadConversationsForUser(selectedUserId)
+    return () => { conversationsRequestRef.current += 1 }
   }, [selectedUserId, loadConversationsForUser])
 
   const loadTranscript = useCallback((conversationId) => {
@@ -523,10 +534,12 @@ The admin selects a different user. */
     if (!selectedConversationId) {
       setSelectedConversation(null)
       setMessages([])
+      setTranscriptLoading(false)
       setTranscriptError(false)
       return
     }
     loadTranscript(selectedConversationId)
+    return () => { transcriptRequestRef.current += 1 }
   }, [selectedConversationId, loadTranscript])
 
   const handleSelectUser = (userId) => {
@@ -598,9 +611,10 @@ The admin selects a different user. */
         setMessages([])
         setMobileView('conversations')
         toast.success(`${p.cleared || 'Chat history cleared'} (${res.data?.deletedCount ?? 0})`)
-        // The user list shows a per-user conversation count, so it is now stale.
-        loadUsers()
       }
+      // Refresh both paginated lists and counts after either moderation action.
+      loadUsers()
+      loadConversationsForUser(selectedUserId)
     } catch (err) {
       console.log('Chat moderation delete error:', err)
       toast.error(p.deleteFailed || 'Could not delete')
@@ -666,7 +680,7 @@ The admin selects a different user. */
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+            <div className="vk-scroll-gold flex-1 min-h-0 overflow-y-auto overscroll-contain">
               {usersLoading ? (
                 <Spinner />
               ) : usersError ? (
@@ -761,9 +775,19 @@ The admin selects a different user. */
                       )}
                     </div>
                   </div>
+                  {canModerate && !conversationsLoading && !conversationsError && conversations.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete({ mode: 'user' })}
+                      disabled={deleting}
+                      className="mt-3 w-full rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-40 cursor-pointer"
+                    >
+                      {p.clearUserHistory || "Clear this user's AI chats"}
+                    </button>
+                  )}
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+                <div className="vk-scroll-gold flex-1 min-h-0 overflow-y-auto overscroll-contain">
                   {conversationsLoading ? (
                     <Spinner />
                   ) : conversationsError ? (
@@ -779,16 +803,6 @@ The admin selects a different user. */
                       >
                         {p.retry || 'Retry'}
                       </button>
-                  {canModerate && conversations.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setPendingDelete({ mode: 'user' })}
-                      disabled={deleting}
-                      className="mt-3 w-full rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-40 cursor-pointer"
-                    >
-                      {p.clearUserHistory || "Clear this user's AI chats"}
-                    </button>
-                  )}
                     </div>
                   ) : conversations.length === 0 ? (
                     <div className="m-4 rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">
@@ -934,7 +948,7 @@ The admin selects a different user. */
                   )}
                 </div>
 
-                <div className="flex-1 min-h-0 space-y-4 overflow-y-auto overscroll-contain p-4">
+                <div className="vk-scroll-gold flex-1 min-h-0 space-y-4 overflow-y-auto overscroll-contain p-4">
                   {transcriptItems.map((item) =>
                     item.type === 'separator' ? (
                       <div key={item.key} className="flex items-center justify-center">

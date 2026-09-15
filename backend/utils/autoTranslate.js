@@ -52,6 +52,21 @@ export const sanitizePoisonedTranslations = (value) => {
 
 export const TRANSLATE_TIMEOUT_MS = 5000
 
+const comparable = (text) => text.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
+
+/**
+ * The same text, ignoring whitespace and letter case.
+ *
+ * Used to recognise a provider ECHO: MyMemory can answer HTTP 200 with the
+ * input unchanged when it has no translation for a language. Storing that
+ * would claim the source-language text IS the translation — which is exactly
+ * how AboutContent, PageContent and team roles ended up with `tr`, `ar`, `de`,
+ * `ru` and `ur` all holding the English sentence, so every client showed
+ * English under a correct `tr` key.
+ */
+export const isSameText = (a, b) =>
+  typeof a === 'string' && typeof b === 'string' && comparable(a) === comparable(b)
+
 export const translateOne = async (text, targetLang, fetchImpl = fetch) => {
   if (!isUsableText(text)) return null
 
@@ -68,7 +83,16 @@ export const translateOne = async (text, targetLang, fetchImpl = fetch) => {
     if (isTranslationFailure(data)) return null
 
     const translated = data.responseData.translatedText
-    return isUsableText(translated) ? translated : null
+    if (!isUsableText(translated)) return null
+
+    // An echo is "no translation", not a translation. The target is then left
+    // absent (or keeps a previous real one), and clients fall back to the
+    // source language deliberately. A phrase that genuinely reads the same in
+    // both languages — a brand name — loses nothing: the fallback shows the
+    // identical text.
+    if (isSameText(translated, text)) return null
+
+    return translated
   } catch {
     return null
   }
@@ -124,6 +148,10 @@ export const localizeText = async (text, existing = null, fetchImpl = fetch) => 
     targets.map((lang) => translateOne(source, lang, fetchImpl))
   )
 
+  // The previous document's own source text, e.g. the English an older copy was
+  // made from. Only used to recognise stored echoes below.
+  const previousSource = typeof previous.sourceLang === 'string' ? previous[previous.sourceLang] : undefined
+
   targets.forEach((lang, i) => {
     const translated = translations[i]
 
@@ -132,8 +160,17 @@ export const localizeText = async (text, existing = null, fetchImpl = fetch) => 
       return
     }
 
-    // Failed. Keep whatever good translation this language already had.
-    if (isUsableText(previous[lang])) result[lang] = previous[lang]
+    // Failed. Keep the translation this language already had — but only a
+    // REAL one. A stored value that is just a copy of the source (new or
+    // previous) is an echo written before echoes were rejected; preserving it
+    // would keep claiming English is Turkish forever. An absent target lets
+    // clients fall back honestly, and the next successful save fills it.
+    const kept = previous[lang]
+    if (!isUsableText(kept)) return
+    if (isSameText(kept, source)) return
+    if (lang !== previous.sourceLang && isSameText(kept, previousSource)) return
+
+    result[lang] = kept
   })
 
   return result

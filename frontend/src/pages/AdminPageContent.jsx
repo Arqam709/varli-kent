@@ -5,7 +5,9 @@ import AdminLayout from '../components/AdminLayout'
 import { PAGE_CONTENT_REGISTRY, PAGE_CONTENT_KEYS, allFieldDefs, defaultValues } from '../lib/pageContentRegistry'
 import { editableText } from '../lib/localizedText'
 import { buildSavePayload, isEmptyPayload } from '../lib/pageContentResolve'
+import { pageContentFieldLabel, pageContentPageLabel, pageContentSectionTitle } from '../lib/pageContentAdminLabels'
 import { useLanguage } from '../contexts/LanguageContext'
+import ContactInterestsManager from '../components/ContactInterestsManager'
 
 const GOLD = '#C9A35A'
 const GREEN = '#4b6741'
@@ -80,14 +82,17 @@ function FieldRows({ fields, values, setField, pc }) {
   return (
     <div className="grid gap-5 sm:grid-cols-2">
       {fields.map((f) => {
+        // Layout keys off the stable ENGLISH caption, so a translation can never
+        // change which fields get the wide textarea.
         const isLong = /paragraph|body|description|subtitle|subheading/i.test(f.label)
+        const caption = pageContentFieldLabel(pc, f)
         return (
           <div key={f.key} className={isLong || f.type === 'image' ? 'sm:col-span-2' : ''}>
             {f.type === 'image' ? (
-              <ImageField label={f.label} value={values[f.key]} onChange={(v) => setField(f.key, v)} pc={pc} />
+              <ImageField label={caption} value={values[f.key]} onChange={(v) => setField(f.key, v)} pc={pc} />
             ) : (
               <div>
-                <label className={labelCls}>{f.label}</label>
+                <label className={labelCls}>{caption}</label>
                 <textarea
                   className={inputCls}
                   rows={isLong ? 3 : 1}
@@ -120,7 +125,7 @@ function ExpandButton({ open, onClick, pc }) {
   )
 }
 
-function SectionCard({ section, visible, onToggleVisible, values, setField, pc }) {
+function SectionCard({ section, title, visible, onToggleVisible, values, setField, pc }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -128,7 +133,7 @@ function SectionCard({ section, visible, onToggleVisible, values, setField, pc }
       <div className="flex items-center gap-3 px-6 py-4">
         <div className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: visible ? GREEN : '#CBD5E1' }} />
         <span style={{ fontFamily: 'Cinzel, serif' }} className="min-w-0 flex-1 truncate text-sm font-semibold text-[#202a36]">
-          {section.defaultTitle}
+          {title}
         </span>
         <button
           onClick={onToggleVisible}
@@ -305,7 +310,7 @@ const AdminPageContent = () => {
               }`}
               style={pageKey === key ? { backgroundColor: GREEN } : undefined}
             >
-              {PAGE_CONTENT_REGISTRY[key].label}
+              {pageContentPageLabel(pc, key, PAGE_CONTENT_REGISTRY[key])}
             </button>
           ))}
         </div>
@@ -342,6 +347,7 @@ const AdminPageContent = () => {
               <SectionCard
                 key={section.key}
                 section={section}
+                title={pageContentSectionTitle(pc, pageKey, section)}
                 visible={isVisible(section.key)}
                 onToggleVisible={() => toggleSection(section.key)}
                 values={values}
@@ -357,6 +363,14 @@ const AdminPageContent = () => {
             )}
           </>
         )}
+
+        {/*
+          Contact interests are ContactInterest records, not PageContent fields.
+          Shown here for convenience only: the manager saves through
+          /api/contact/interests on its own, and nothing in it feeds this
+          editor's payload or its Save Changes bar.
+        */}
+        {pageKey === 'contact' && <ContactInterestsManager />}
       </div>
 
       {/* Sticky save bar, so a toggle or edit can never silently go unsaved. */}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
@@ -6,6 +6,8 @@ import { useSiteSettings } from '../contexts/SiteSettingsContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import useSeo from '../lib/useSeo'
 import usePageContent from '../lib/usePageContent'
+import useContactInterests from '../lib/useContactInterests'
+import { contactInterestLabel } from '../lib/contactInterests.js'
 import { C } from '../contexts/ThemeContext'
 
 const fadeUp = (delay = 0) => ({
@@ -16,36 +18,24 @@ const fromLeft = { hidden: { opacity: 0, x: -48 }, show: { opacity: 1, x: 0, tra
 const fromRight = { hidden: { opacity: 0, x: 48 }, show: { opacity: 1, x: 0, transition: { duration: 0.75, ease: [0.22, 1, 0.36, 1] } } }
 const vp = { once: true, margin: '-60px' }
 
-// The canonical values the backend actually accepts — models/ContactSubmission.js's
-// interestType enum, routes/contact.js's isIn() validator, models/LeadRouting.js and
-// routes/leadRouting.js's ALL_TYPES all carry this exact set.
+// The interest options come from GET /api/contact/interests — admin-managed
+// ContactInterest records (Admin → Page Content → Contact), which the mobile
+// app reads too. An option's VALUE is the entry's legacy `value` ('Interior Design'),
+// which POST /api/contact validates; its visible TEXT is that same entry's label
+// for the current language. Value and label travel together in one object, so
+// no label can attach to the wrong value.
 //
-// These are the submitted VALUES; contactPage.interests supplies the display LABELS,
-// positionally. The select used to render the translated label as both, which meant a
-// Turkish visitor submitted interestType: 'Satın Alma' and was rejected by the enum —
-// the form only ever worked in English. Keep this array and every contactPage.interests
-// array the same length and the same order, or a label will attach to the wrong value.
-//
-// 'Troubleshoot' is APPENDED rather than slotted in beside the other service
-// reasons: because the label arrays are index-coupled, inserting mid-array would
-// shift 'General' by one in all six languages at once, and a single array missed
-// in that shift mislabels every option after it with no error anywhere. Appending
-// leaves indices 0-6 untouched.
-//
-// The backend also accepts 'Construction' (a visitor commissioning a new build).
-// It is intentionally NOT offered here — this form's build enquiries go through
-// Architecture/Renovation, and Construction stays reachable for the mobile client
-// and for admin routing. Troubleshoot is the opposite direction: something already
-// built has a problem and needs the technical team.
-const INTEREST_TYPES = ['Buying', 'Renting', 'Selling', 'Renovation', 'Interior Design', 'Architecture', 'General', 'Troubleshoot']
+// useContactInterests renders the bundled copy immediately and swaps in the
+// server's list when it arrives, so the form never waits on the network.
 
 const ContactPage = () => {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const c = t.contactPage || {}
 
   // Contact has no toggleable sections. CMS overrides display copy only —
-  // INTEREST_TYPES below stays the canonical submitted vocabulary.
+  // the interest vocabulary is the backend contract, not CMS content.
   const { get: cms } = usePageContent('contact')
+  const interests = useContactInterests()
   useSeo({
     title: 'Contact Us — Varlikent Istanbul',
     description: 'Get in touch with the Varlikent team. Enquire about buying, selling, renting or investing in Istanbul luxury real estate.',
@@ -59,6 +49,15 @@ const ContactPage = () => {
   const mapsUrl = settings?.mapsUrl || 'https://maps.google.com/?q=Levent+Besiktas+Istanbul'
 
   const [form, setForm] = useState({ name: '', email: '', phone: '', interestType: 'Buying', message: '' })
+
+  // If the served list ever stops offering the current choice (an entry was
+  // disabled on the backend), move to the first offered option rather than
+  // submitting a value the select no longer shows.
+  useEffect(() => {
+    if (!interests.some((interest) => interest.value === form.interestType)) {
+      setForm((p) => ({ ...p, interestType: interests[0]?.value ?? 'General' }))
+    }
+  }, [interests, form.interestType])
   const [loading, setLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
@@ -243,8 +242,8 @@ const ContactPage = () => {
                 <div>
                   <label className="block mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400" htmlFor="interestType">{cms('interestLabel', c.interestLabel || 'I am interested in')}</label>
                   <select id="interestType" name="interestType" value={form.interestType} onChange={handleChange} className={selectCls}>
-                    {INTEREST_TYPES.map((canonical, i) => (
-                      <option key={canonical} value={canonical}>{c.interests?.[i] || canonical}</option>
+                    {interests.map((interest) => (
+                      <option key={interest.id} value={interest.value}>{contactInterestLabel(interest, language)}</option>
                     ))}
                   </select>
                 </div>

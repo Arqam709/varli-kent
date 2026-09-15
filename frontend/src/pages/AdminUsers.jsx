@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
@@ -76,9 +76,9 @@ const USER_GROUPS = [
 
 const GROUPED_ROLES = USER_GROUPS.flatMap((group) => group.roles)
 
-const ConfirmModal = ({ message, onConfirm, onCancel, danger = true }) => (
+const ConfirmModal = ({ message, onConfirm, onCancel, danger = true, cancelLabel, confirmLabel }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-    <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl text-center">
+    <div role="dialog" aria-modal="true" aria-label={message} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl text-center">
       <div className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full ${danger ? 'bg-red-100' : 'bg-amber-100'}`}>
         <svg className={`h-6 w-6 ${danger ? 'text-red-500' : 'text-amber-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -86,8 +86,8 @@ const ConfirmModal = ({ message, onConfirm, onCancel, danger = true }) => (
       </div>
       <p className="text-sm text-slate-700 leading-relaxed">{message}</p>
       <div className="mt-5 flex gap-3">
-        <button onClick={onCancel} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">Cancel</button>
-        <button onClick={onConfirm} className={`flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition cursor-pointer ${danger ? 'bg-red-500 hover:bg-red-600' : 'bg-[#4b6741] hover:bg-[#3d5535]'}`}>Confirm</button>
+        <button onClick={onCancel} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">{cancelLabel}</button>
+        <button onClick={onConfirm} className={`flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition cursor-pointer ${danger ? 'bg-red-500 hover:bg-red-600' : 'bg-[#4b6741] hover:bg-[#3d5535]'}`}>{confirmLabel}</button>
       </div>
     </div>
   </div>
@@ -100,8 +100,11 @@ const AdminUsers = () => {
   const { isOwner, user: currentUser, hasPermission } = useAuth()
   const { t } = useLanguage()
   const p = t.adminPages?.users || {}
+  const c = t.adminPages?.common || {}
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const loadRequest = useRef(0)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [permModal, setPermModal] = useState(null)
@@ -117,12 +120,21 @@ const AdminUsers = () => {
   const canAccess = isOwner || hasPermission('user_management')
   const canChangePasswords = isOwner || hasPermission('manage_passwords')
 
-  const load = () => {
+  const load = useCallback(() => {
+    if (!canAccess) return
+    const request = ++loadRequest.current
     setLoading(true)
-    api.get('/users').then(r => setUsers(r.data.users || [])).catch(() => setUsers([])).finally(() => setLoading(false))
-  }
+    setLoadError(false)
+    api.get('/users')
+      .then(r => { if (request === loadRequest.current) setUsers(r.data.users || []) })
+      .catch(() => { if (request === loadRequest.current) setLoadError(true) })
+      .finally(() => { if (request === loadRequest.current) setLoading(false) })
+  }, [canAccess])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    return () => { loadRequest.current += 1 }
+  }, [load])
 
   const filtered = useMemo(() => {
     return users.filter(u => {
@@ -153,27 +165,27 @@ const AdminUsers = () => {
 
   const changeRole = async (userId, role) => {
     try {
-      await api.put(`/users/${userId}/role`, { role })
-      setUsers(prev => prev.map(u => u._id === userId ? { ...u, role } : u))
-      toast.success('Role updated')
+      const res = await api.put(`/users/${userId}/role`, { role })
+      setUsers(prev => prev.map(u => u._id === userId ? res.data.user : u))
+      toast.success(p.roleUpdated)
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed')
+      toast.error(err.response?.data?.message || c.failed)
     }
   }
 
   const openPermissions = (u) => {
     setPermModal(u)
-    setTempPerms([...u.permissions]) //save the permissions in a temp state so we can cancel changes if needed
+    setTempPerms([...(u.permissions || [])]) //save the permissions in a temp state so we can cancel changes if needed
   }
 
   const savePermissions = async () => {
     try {
-      await api.put(`/users/${permModal._id}/permissions`, { permissions: tempPerms })
-      setUsers(prev => prev.map(u => u._id === permModal._id ? { ...u, permissions: tempPerms } : u))
-      toast.success('Permissions saved')
+      const res = await api.put(`/users/${permModal._id}/permissions`, { permissions: tempPerms })
+      setUsers(prev => prev.map(u => u._id === permModal._id ? res.data.user : u))
+      toast.success(p.permissionsSaved)
       setPermModal(null)
     } catch {
-      toast.error('Failed to save permissions')
+      toast.error(p.permissionsSaveFailed)
     }
   }
 
@@ -183,15 +195,15 @@ const AdminUsers = () => {
 
   const handleChangePassword = async (e) => {
     e.preventDefault()
-    if (newPw.length < 6) { toast.error('Password must be at least 6 characters'); return }
+    if (newPw.length < 6) { toast.error(p.passwordTooShort); return }
     setPwSaving(true)
     try {
       await api.put(`/users/${pwModal._id}/password`, { newPassword: newPw })
-      toast.success(`Password updated for ${pwModal.name}`)
+      toast.success(p.passwordUpdatedFor.replace('{name}', pwModal.name))
       setPwModal(null)
       setNewPw('')
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update password')
+      toast.error(err.response?.data?.message || p.passwordUpdateFailed)
     } finally {
       setPwSaving(false)
     }
@@ -199,16 +211,16 @@ const AdminUsers = () => {
 
   const askDeactivate = (u) => {
     setConfirm({
-      message: `Deactivate ${u.name}? They will no longer be able to log in.`,
+      message: p.deactivateConfirm.replace('{name}', u.name),
       danger: true,
       onConfirm: async () => {
         setConfirm(null)
         try {
           await api.put(`/users/${u._id}/role`, { role: u.role, isActive: false })
           setUsers(prev => prev.map(x => x._id === u._id ? { ...x, isActive: false } : x))
-          toast.success('User deactivated')
+          toast.success(p.userDeactivated)
         } catch (err) {
-          toast.error(err.response?.data?.message || 'Failed')
+          toast.error(err.response?.data?.message || c.failed)
         }
       },
     })
@@ -216,16 +228,16 @@ const AdminUsers = () => {
 
   const askDelete = (u) => {
     setConfirm({
-      message: `Permanently delete ${u.name}? This cannot be undone.`,
+      message: p.deleteConfirm.replace('{name}', u.name),
       danger: true,
       onConfirm: async () => {
         setConfirm(null)
         try {
           await api.delete(`/users/${u._id}`)
           setUsers(prev => prev.filter(x => x._id !== u._id))
-          toast.success('User permanently deleted')
+          toast.success(p.userDeleted)
         } catch (err) {
-          toast.error(err.response?.data?.message || 'Failed')
+          toast.error(err.response?.data?.message || c.failed)
         }
       },
     })
@@ -233,16 +245,16 @@ const AdminUsers = () => {
 
   const askReactivate = (u) => {
     setConfirm({
-      message: `Reactivate ${u.name}? They will be able to log in again.`,
+      message: p.reactivateConfirm.replace('{name}', u.name),
       danger: false,
       onConfirm: async () => {
         setConfirm(null)
         try {
           await api.put(`/users/${u._id}/role`, { role: u.role, isActive: true })
           setUsers(prev => prev.map(x => x._id === u._id ? { ...x, isActive: true } : x))
-          toast.success('User reactivated')
+          toast.success(p.userReactivated)
         } catch (err) {
-          toast.error(err.response?.data?.message || 'Failed')
+          toast.error(err.response?.data?.message || c.failed)
         }
       },
     })
@@ -251,7 +263,7 @@ const AdminUsers = () => {
   const handleCreate = async (e) => {
     e.preventDefault()
     if (!createForm.name.trim() || !createForm.email.trim() || !createForm.password) {
-      toast.error('Name, email and password are required')
+      toast.error(p.createFieldsRequired)
       return
     }
     setSaving(true)
@@ -260,12 +272,12 @@ const AdminUsers = () => {
       if (createForm.role !== 'user') {
         await api.put(`/users/${res.data.user._id}/role`, { role: createForm.role })
       }
-      toast.success('Account created')
+      toast.success(p.accountCreated)
       setCreateModal(false)
       setCreateForm(emptyCreate)
       load()
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to create account')
+      toast.error(err.response?.data?.message || p.accountCreateFailed)
     } finally {
       setSaving(false)
     }
@@ -416,6 +428,12 @@ const AdminUsers = () => {
           </select>
         </div>
 
+        {loadError && (
+          <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {p.loadFailed}
+            <button type="button" onClick={load} className="ms-3 underline cursor-pointer">{c.refresh}</button>
+          </div>
+        )}
         {loading ? (
           <div className="flex justify-center py-10">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#4b6741] border-t-transparent" />
@@ -436,7 +454,7 @@ const AdminUsers = () => {
                 <div className="space-y-3">{ungrouped.map(u => <UserCard key={u._id} u={u} />)}</div>
               </div>
             )}
-            {filtered.length === 0 && (
+            {!loadError && filtered.length === 0 && (
               <div className="rounded-2xl border-2 border-dashed border-slate-200 p-12 text-center text-sm text-slate-400">
                 {p.noUsers || 'No users match your search.'}
               </div>
@@ -448,7 +466,7 @@ const AdminUsers = () => {
       {/* Permissions Modal */}
       {permModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
+          <div role="dialog" aria-modal="true" aria-label={p.permissions} className="w-full max-w-lg rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 shrink-0">
               <div>
                 <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-lg font-semibold text-[#202a36]">{p.permissions || 'Permissions'}</h2>
@@ -458,13 +476,22 @@ const AdminUsers = () => {
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="overflow-y-auto px-6 py-4 space-y-5">
+            <div className="vk-scroll-gold min-h-0 overflow-y-auto px-6 py-4 space-y-5">
               <p className="text-xs text-slate-500">{p.permissionsDesc || 'Select what this admin is allowed to do.'}</p>
               {PERMISSION_GROUPS.map(group => {
                 const perms = ALL_PERMISSIONS.filter(p => p.group === group)
+                const grantableKeys = perms.filter(({ key }) => isOwner || currentUser?.permissions?.includes(key)).map(({ key }) => key)
+                const allOn = grantableKeys.length > 0 && grantableKeys.every(key => tempPerms.includes(key))
                 return (
                   <div key={group}>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{group}</p>
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{group}</p>
+                      <button type="button" disabled={grantableKeys.length === 0}
+                        onClick={() => setTempPerms(prev => allOn ? prev.filter(key => !grantableKeys.includes(key)) : [...new Set([...prev, ...grantableKeys])])}
+                        className="text-xs font-semibold text-[#4b6741] underline disabled:opacity-40 cursor-pointer">
+                        {allOn ? p.selectNone : p.selectAll}
+                      </button>
+                    </div>
                     <div className="space-y-2">
                       {perms.map(({ key, label }) => {
                         const grantable = isOwner || currentUser?.permissions?.includes(key)
@@ -487,8 +514,8 @@ const AdminUsers = () => {
               })}
             </div>
             <div className="flex gap-3 border-t border-slate-100 px-6 py-4 shrink-0">
-              <button onClick={() => setPermModal(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">Cancel</button>
-              <button onClick={savePermissions} className="flex-1 rounded-xl bg-[#202a36] py-2.5 text-sm font-semibold text-white hover:bg-[#4b6741] transition cursor-pointer">Save Permissions</button>
+              <button onClick={() => setPermModal(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">{c.cancel}</button>
+              <button onClick={savePermissions} className="flex-1 rounded-xl bg-[#202a36] py-2.5 text-sm font-semibold text-white hover:bg-[#4b6741] transition cursor-pointer">{c.save}</button>
             </div>
           </div>
         </div>
@@ -520,7 +547,7 @@ const AdminUsers = () => {
                 />
               </div>
               <div className="flex justify-end gap-3 pt-1">
-                <button type="button" onClick={() => setPwModal(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">Cancel</button>
+                <button type="button" onClick={() => setPwModal(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">{c.cancel}</button>
                 <button type="submit" disabled={pwSaving} className="rounded-xl bg-[#4b6741] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#3d5535] transition disabled:opacity-60 cursor-pointer">
                   {pwSaving ? 'Saving...' : 'Update Password'}
                 </button>
@@ -562,7 +589,7 @@ const AdminUsers = () => {
                 </select>
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setCreateModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">Cancel</button>
+                <button type="button" onClick={() => setCreateModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">{c.cancel}</button>
                 <button type="submit" disabled={creating} className="rounded-xl bg-[#4b6741] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#3d5535] transition disabled:opacity-60 cursor-pointer">
                   {creating ? (p.creating || 'Creating...') : (p.createAccount || 'Create Account')}
                 </button>
@@ -572,7 +599,7 @@ const AdminUsers = () => {
         </div>
       )}
 
-      {confirm && <ConfirmModal message={confirm.message} danger={confirm.danger} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />}
+      {confirm && <ConfirmModal message={confirm.message} danger={confirm.danger} cancelLabel={c.cancel} confirmLabel={p.confirm} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />}
     </AdminLayout>
   )
 }

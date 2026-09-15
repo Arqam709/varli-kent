@@ -1,22 +1,25 @@
-// Contact interest vocabulary — the index-coupled bits nothing else guards.
+// Contact interests — the website half.
 //
 // ── Why this file exists ────────────────────────────────────────────────
-// ContactPage renders <option value={INTEREST_TYPES[i]}>{interests[i]}</option>.
-// The value array lives in ContactPage.jsx; the six label arrays live in
-// translations.js, one per language. Nothing at runtime checks that the seven
-// arrays are the same length or in the same order.
+// The website Contact form used to render <option value={INTEREST_TYPES[i]}>
+// {interests[i]}</option>: one value array and six label arrays paired BY
+// INDEX, and a hand-maintained subset that differed from the mobile app's.
 //
-// The failure mode is silent and total: append a value but miss one language,
-// and every option after the insertion point in that language shows the WRONG
-// label attached to a real canonical value. A Russian visitor picks "Общее" and
-// submits interestType: 'Troubleshoot'. No error is thrown anywhere — not in the
-// browser, not in the validator, not in Mongoose. The lead is simply filed and
-// routed as the wrong category.
+// Phase 1A replaced that with GET /api/contact/interests plus a bundled
+// fallback of the same shape. Phase 1B made the served list admin-managed
+// (MongoDB), so the form must now cope with interests this build has never
+// seen. These tests pin both:
 //
-// So: length parity, tail alignment, and — the one that matters most — that the
-// form can only ever offer values the backend actually accepts.
+//   - the fallback is a verified copy of the backend's BUILT-IN defaults only
+//   - options are matched by id/value, never by position
+//   - an admin-created interest renders, in the visitor's language, in server
+//     order, and submits its canonical value — with no website change
+//   - a disabled interest is not offered
+//   - an unreachable endpoint leaves a working form
 //
-// Static source contracts, run with plain `node --test` from frontend/.
+// Cross-package on purpose: the backend defaults are imported directly.
+// Run with plain `node --test` from frontend/. The components themselves are
+// exercised in a real browser by tests/browser/contactInterests.test.js.
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -24,195 +27,266 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
+import {
+  CONTACT_INTEREST_LANGUAGES,
+  FALLBACK_CONTACT_INTERESTS,
+  contactInterestLabel,
+  findContactInterest,
+  normalizeContactInterests,
+} from '../src/lib/contactInterests.js'
+import {
+  DEFAULT_CONTACT_INTEREST_VALUES,
+  getDefaultPublicContactInterests,
+} from '../../backend/config/contactInterests.js'
+
 const here = dirname(fileURLToPath(import.meta.url))
 
-const LANGS = ['en', 'tr', 'ar', 'de', 'ru', 'ur']
+const readFrontend = (...p) => readFile(join(here, '..', ...p), 'utf8')
 
 const loadTranslations = async () => {
-  const raw = await readFile(join(here, '..', 'src', 'locales', 'translations.js'), 'utf8')
+  const raw = await readFrontend('src', 'locales', 'translations.js')
   const cjs = raw.replace(/^export\s+(default\s+)?/gm, 'module.exports = ')
   const mod = { exports: {} }
   new Function('module', 'exports', cjs)(mod, mod.exports)
   return mod.exports.translations || mod.exports
 }
 
-/** Pulls the first bracketed string-literal list out of a source file. */
-const arrayLiteralAfter = (src, marker) => {
-  const start = src.indexOf(marker)
-  assert.notEqual(start, -1, `marker not found: ${marker}`)
-  const open = src.indexOf('[', start)
-  const close = src.indexOf(']', open)
-  return [...src.slice(open, close).matchAll(/'([^']+)'/g)].map((m) => m[1])
-}
+/** Deep copy through JSON, so frozen objects compare as plain data. */
+const plain = (value) => JSON.parse(JSON.stringify(value))
 
-const loadInterestTypes = async () => {
-  const src = await readFile(join(here, '..', 'src', 'pages', 'ContactPage.jsx'), 'utf8')
-  return arrayLiteralAfter(src, 'const INTEREST_TYPES')
-}
+/** What the API serves after an admin adds one interest and disables Construction. */
+const servedAfterAdminEdits = () => [
+  ...getDefaultPublicContactInterests().filter((interest) => interest.id !== 'construction'),
+  {
+    id: 'investment_consultation',
+    value: 'Investment Consultation',
+    labels: { en: 'Investment Consultation', tr: 'Yatırım Danışmanlığı' },
+    order: 0,
+  },
+]
 
-const readBackend = async (...p) =>
-  readFile(join(here, '..', '..', 'backend', ...p), 'utf8')
+/* ══════════════ THE FALLBACK IS THE BUILT-IN BASELINE ══════════════ */
 
-/* ══════════════ THE OPTION EXISTS ══════════════ */
-
-test('the contact form offers Troubleshoot', async () => {
-  const types = await loadInterestTypes()
-  assert.ok(types.includes('Troubleshoot'),
-    'the technical-support reason is missing from the contact form')
+test('the bundled fallback is exactly the backend’s built-in defaults', () => {
+  assert.deepEqual(plain(FALLBACK_CONTACT_INTERESTS), getDefaultPublicContactInterests(),
+    'the website fallback has drifted from backend/config/contactInterests.js — ' +
+    'update src/lib/contactInterests.js to match')
 })
 
-test('Troubleshoot is appended, so no existing label shifts', async () => {
-  // Placement is load-bearing, not cosmetic. Donor slots its equivalent at
-  // index 6, which pushes 'General' to 7 in every language at once. Appending
-  // leaves indices 0-6 exactly where six translated arrays already expect them.
-  const types = await loadInterestTypes()
-  assert.equal(types[types.length - 1], 'Troubleshoot',
-    'Troubleshoot must stay last — moving it re-indexes every label array')
-  assert.equal(types.indexOf('General'), 6,
-    'General moved; the six label arrays are now off by one after index 6')
+test('the fallback holds only the nine built-ins — admin-created interests come from the API', () => {
+  assert.equal(FALLBACK_CONTACT_INTERESTS.length, 9)
+  assert.equal(findContactInterest(FALLBACK_CONTACT_INTERESTS, 'investment_consultation'), undefined)
 })
 
-/* ══════════════ THE INDEX COUPLING ══════════════ */
-
-test('every language supplies exactly one label per canonical value', async () => {
-  const types = await loadInterestTypes()
-  const t = await loadTranslations()
-
-  for (const lang of LANGS) {
-    const labels = t[lang]?.contactPage?.interests
-    assert.ok(Array.isArray(labels), `${lang}: contactPage.interests is missing`)
-    assert.equal(labels.length, types.length,
-      `${lang}: ${labels.length} labels for ${types.length} values — ` +
-      'every option after the shortfall renders the wrong label')
-  }
+test('the fallback offers Troubleshoot and Construction', () => {
+  const byId = Object.fromEntries(FALLBACK_CONTACT_INTERESTS.map((i) => [i.id, i.value]))
+  assert.equal(byId.troubleshoot, 'Troubleshoot')
+  assert.equal(byId.construction, 'Construction')
 })
 
-test('the last label in every language belongs to Troubleshoot', async () => {
-  const types = await loadInterestTypes()
-  const t = await loadTranslations()
-  const i = types.indexOf('Troubleshoot')
-
-  // The exact strings, so a copy-paste that leaves English in place is caught
-  // rather than passing as "a label exists".
-  const EXPECTED = {
-    en: 'Troubleshoot',
-    tr: 'Sorun Giderme',
-    ar: 'استكشاف الأخطاء',
-    de: 'Problembehebung',
-    ru: 'Решение проблемы',
-    ur: 'مسئلہ حل کرنا',
-  }
-
-  for (const lang of LANGS) {
-    const labels = t[lang].contactPage.interests
-    assert.equal(labels[i], EXPECTED[lang], `${lang}: wrong label at the Troubleshoot index`)
-    assert.equal(labels[i], labels[labels.length - 1],
-      `${lang}: the label is not in the tail position`)
-  }
-})
-
-test('no language leaves an interest label empty or duplicated', async () => {
-  const t = await loadTranslations()
-
-  for (const lang of LANGS) {
-    const labels = t[lang].contactPage.interests
-    for (const [i, label] of labels.entries()) {
-      assert.ok(typeof label === 'string' && label.trim().length > 0,
-        `${lang}: interests[${i}] is blank`)
+test('every fallback entry carries a label in all six languages', () => {
+  for (const interest of FALLBACK_CONTACT_INTERESTS) {
+    for (const lang of CONTACT_INTEREST_LANGUAGES) {
+      assert.ok(typeof interest.labels[lang] === 'string' && interest.labels[lang].trim(),
+        `${interest.id} has no ${lang} label`)
     }
-    assert.equal(new Set(labels).size, labels.length,
-      `${lang}: two options share a label — a visitor cannot tell them apart`)
   }
 })
 
-/* ══════════════ VALUE, NOT LABEL, IS SUBMITTED ══════════════ */
-
-test('the select submits the canonical value and renders the label separately', async () => {
-  const src = await readFile(join(here, '..', 'src', 'pages', 'ContactPage.jsx'), 'utf8')
-
-  // The original bug: value={translatedLabel} meant every non-English visitor
-  // was rejected by the enum. The value must come from the canonical array.
-  assert.ok(
-    /<option key=\{canonical\} value=\{canonical\}>\{c\.interests\?\.\[i\] \|\| canonical\}<\/option>/.test(src),
-    'the option no longer submits the canonical value while displaying the localized label'
-  )
+test('every value the offline form can offer is a built-in value the backend always accepts', () => {
+  for (const { value } of FALLBACK_CONTACT_INTERESTS) {
+    assert.ok(DEFAULT_CONTACT_INTEREST_VALUES.includes(value),
+      `the form would offer '${value}', which is not guaranteed to be registered`)
+  }
 })
 
-test('no translated label is ever used as a canonical value', async () => {
-  const types = await loadInterestTypes()
+/* ══════════════ MATCHED BY ID, NEVER BY POSITION ══════════════ */
+
+test('a reordered payload keeps every label attached to its own entry', () => {
+  const served = getDefaultPublicContactInterests()
+  const normalized = normalizeContactInterests({ success: true, interests: [...served].reverse() })
+
+  assert.deepEqual(normalized.map((i) => i.id), served.map((i) => i.id), 'entries are not re-sorted by order')
+  for (const interest of normalized) {
+    const original = served.find((s) => s.id === interest.id)
+    assert.deepEqual(interest.labels, original.labels, `${interest.id} picked up another entry's labels`)
+    assert.equal(interest.value, original.value)
+  }
+})
+
+test('the response body and a bare array are both accepted', () => {
+  const served = getDefaultPublicContactInterests()
+  assert.deepEqual(normalizeContactInterests({ success: true, interests: served }), served)
+  assert.deepEqual(normalizeContactInterests(served), served)
+})
+
+test('malformed entries are ignored and unknown fields are not copied', () => {
+  const good = getDefaultPublicContactInterests()[0]
+
+  const result = normalizeContactInterests({
+    interests: [
+      null,
+      'Buying',
+      42,
+      { value: 'No Id', labels: { en: 'No id' }, order: 1 },
+      { id: 'Interior Design', value: 'Spaced Id', labels: { en: 'x' }, order: 1 },
+      { id: 'no_value', labels: { en: 'No value' }, order: 1 },
+      { id: 'blank_value', value: '   ', labels: { en: 'Blank' }, order: 1 },
+      { id: 'no_english', value: 'No English', labels: { tr: 'Türkçe' }, order: 1 },
+      { id: 'retired', value: 'Retired', labels: { en: 'Retired' }, order: 1, enabled: false },
+      { ...good, recipients: [{ email: 'leak@example.test' }], futureField: true },
+      { ...good, value: 'Duplicate id' },
+      { id: 'duplicate_value', value: good.value, labels: { en: 'Dup' }, order: 2 },
+    ],
+  })
+
+  assert.deepEqual(result.map((i) => i.id), [good.id])
+  assert.deepEqual(Object.keys(result[0]).sort(), ['id', 'labels', 'order', 'value'],
+    'an unknown server field was copied into client state')
+})
+
+test('garbage payloads normalize to nothing rather than throwing', () => {
+  for (const payload of [undefined, null, '', 'oops', 7, {}, { interests: 'nope' }, { interests: null }]) {
+    assert.deepEqual(normalizeContactInterests(payload), [])
+  }
+})
+
+/* ══════════════ ADMIN-MANAGED INTERESTS (Phase 1B) ══════════════ */
+
+test('an admin-created interest from the API is offered with no website change', () => {
+  const list = normalizeContactInterests({ success: true, interests: servedAfterAdminEdits() })
+  const investment = findContactInterest(list, 'investment_consultation')
+
+  assert.ok(investment, 'a well-formed unknown id was dropped')
+  assert.equal(investment.value, 'Investment Consultation')
+})
+
+test('an admin-created interest shows its translation, and English where it has none', () => {
+  const investment = findContactInterest(normalizeContactInterests(servedAfterAdminEdits()), 'investment_consultation')
+
+  assert.equal(contactInterestLabel(investment, 'tr'), 'Yatırım Danışmanlığı')
+  assert.equal(contactInterestLabel(investment, 'ar'), 'Investment Consultation')
+  assert.equal(contactInterestLabel(investment, 'ur'), 'Investment Consultation')
+})
+
+test('whatever language is shown, the canonical value is what the option submits', () => {
+  const investment = findContactInterest(normalizeContactInterests(servedAfterAdminEdits()), 'investment_consultation')
+  for (const lang of CONTACT_INTEREST_LANGUAGES) {
+    assert.notEqual(investment.value, contactInterestLabel(investment, 'tr'))
+    assert.equal(investment.value, 'Investment Consultation', `${lang} changed the submitted value`)
+  }
+})
+
+test('the server’s order is respected, so an interest moved to the top renders first', () => {
+  const list = normalizeContactInterests(servedAfterAdminEdits())
+  assert.equal(list[0].id, 'investment_consultation')
+  assert.deepEqual(list.slice(1).map((i) => i.id), getDefaultPublicContactInterests()
+    .filter((i) => i.id !== 'construction').map((i) => i.id))
+})
+
+test('a disabled interest is not offered — whether omitted by the server or flagged', () => {
+  const omitted = normalizeContactInterests(servedAfterAdminEdits())
+  assert.equal(findContactInterest(omitted, 'construction'), undefined)
+
+  const flagged = normalizeContactInterests([
+    ...getDefaultPublicContactInterests(),
+    { id: 'land_acquisition', value: 'Land Acquisition', labels: { en: 'Land Acquisition' }, order: 12, enabled: false },
+  ])
+  assert.equal(findContactInterest(flagged, 'land_acquisition'), undefined)
+})
+
+/* ══════════════ LABEL FOLLOWS LANGUAGE, VALUE NEVER DOES ══════════════ */
+
+test('the current language label is shown, with English as the fallback', () => {
+  const buying = findContactInterest(FALLBACK_CONTACT_INTERESTS, 'buying')
+
+  assert.equal(contactInterestLabel(buying, 'tr'), 'Satın Alma')
+  assert.equal(contactInterestLabel(buying, 'ar'), 'الشراء')
+  assert.equal(contactInterestLabel(buying, 'xx'), 'Buying', 'unknown languages fall back to English')
+  assert.equal(contactInterestLabel({ value: 'Only Value', labels: {} }, 'tr'), 'Only Value')
+})
+
+test('entries can be found by stable id or by canonical value', () => {
+  assert.equal(findContactInterest(FALLBACK_CONTACT_INTERESTS, 'interior_design')?.value, 'Interior Design')
+  assert.equal(findContactInterest(FALLBACK_CONTACT_INTERESTS, 'Interior Design')?.id, 'interior_design')
+  assert.equal(findContactInterest(FALLBACK_CONTACT_INTERESTS, 'gardening'), undefined)
+  assert.equal(findContactInterest(FALLBACK_CONTACT_INTERESTS, undefined), undefined)
+})
+
+/* ══════════════ THE FORM ══════════════ */
+
+test('ContactPage renders from the served list and submits the canonical value', async () => {
+  const src = await readFrontend('src', 'pages', 'ContactPage.jsx')
+
+  assert.ok(src.includes('useContactInterests()'), 'ContactPage does not read the served list')
+  assert.ok(/<option key=\{interest\.id\} value=\{interest\.value\}>\{contactInterestLabel\(interest, language\)\}<\/option>/.test(src),
+    'the option must submit interest.value and display the localized label')
+  assert.equal(src.includes('INTEREST_TYPES'), false, 'a hand-written interest list is back')
+  assert.equal(/interests\?\.\[/.test(src), false, 'an index-coupled label lookup is back')
+})
+
+test('ContactPage never submits an interest the current list does not offer', async () => {
+  // e.g. the default 'Buying' after an admin disabled Buying.
+  const src = await readFrontend('src', 'pages', 'ContactPage.jsx')
+  assert.ok(src.includes('interests.some((interest) => interest.value === form.interestType)'))
+})
+
+test('an unreachable endpoint leaves the bundled list in place', async () => {
+  const src = await readFrontend('src', 'lib', 'useContactInterests.js')
+
+  assert.ok(src.includes('useState(FALLBACK_CONTACT_INTERESTS)'),
+    'the form must render the fallback before the request returns')
+  assert.ok(/\.catch\(/.test(src), 'a failed request must be caught, not thrown into the page')
+  assert.ok(src.includes('next.length > 0'),
+    'an empty or malformed response must not replace a working list')
+})
+
+test('no language still carries a positional interest label array', async () => {
   const t = await loadTranslations()
-
-  const translated = new Set()
-  for (const lang of LANGS.filter((l) => l !== 'en')) {
-    for (const label of t[lang].contactPage.interests) translated.add(label)
-  }
-
-  for (const value of types) {
-    assert.equal(translated.has(value), false,
-      `'${value}' is a localized label, not a canonical English value`)
-  }
-})
-
-/* ══════════════ THE FORM CANNOT OUTRUN THE BACKEND ══════════════ */
-
-test('every reason the form offers is accepted by the contact validator', async () => {
-  // Cross-package on purpose. This is the assertion that would have caught the
-  // whole class of bug this feature came out of: a value offered in the UI that
-  // the API rejects with a 400 the visitor only sees as "Failed to send message".
-  const types = await loadInterestTypes()
-  const accepted = arrayLiteralAfter(await readBackend('routes', 'contact.js'), "body('interestType')")
-
-  for (const value of types) {
-    assert.ok(accepted.includes(value),
-      `the form offers '${value}' but routes/contact.js would reject it`)
+  for (const lang of CONTACT_INTEREST_LANGUAGES) {
+    assert.equal(t[lang]?.contactPage?.interests, undefined,
+      `${lang}: contactPage.interests is back — labels belong to the interest entries`)
   }
 })
 
 /* ══════════════ ADMIN LEAD ROUTING ══════════════ */
 
-test('admin lead routing knows every type the backend serves', async () => {
-  const src = await readFile(join(here, '..', 'src', 'pages', 'AdminLeadRouting.jsx'), 'utf8')
-  const allTypes = arrayLiteralAfter(src, 'const ALL_TYPES')
-  const served = arrayLiteralAfter(await readBackend('routes', 'leadRouting.js'), 'const ALL_TYPES')
+test('lead routing rows come from the server; the fallback only fills the first paint', async () => {
+  const src = await readFrontend('src', 'pages', 'AdminLeadRouting.jsx')
 
-  assert.deepEqual([...allTypes].sort(), [...served].sort(),
-    'the admin list has drifted from routes/leadRouting.js — rows arrive unrecognised')
+  assert.ok(src.includes("api.get('/lead-routing')"))
+  assert.ok(src.includes('setRouting(r.data.routing)'), 'server rows no longer replace the placeholders')
+  assert.ok(src.includes('FALLBACK_CONTACT_INTERESTS.map((interest) => interest.value)'))
+  assert.equal(/const ALL_TYPES = \[/.test(src), false, 'a hand-written ALL_TYPES list is back')
 })
 
-test('admin lead routing offers both Construction and Troubleshoot', async () => {
-  const src = await readFile(join(here, '..', 'src', 'pages', 'AdminLeadRouting.jsx'), 'utf8')
-  const allTypes = arrayLiteralAfter(src, 'const ALL_TYPES')
+test('every built-in value has its own icon, and any other interest gets the default icon', async () => {
+  const src = await readFrontend('src', 'pages', 'AdminLeadRouting.jsx')
+  const block = src.slice(src.indexOf('const TYPE_ICONS'), src.indexOf('const DEFAULT_TYPE_ICON'))
 
-  assert.ok(allTypes.includes('Troubleshoot'),
-    'the owner cannot configure technical recipients without this row')
-  assert.ok(allTypes.includes('Construction'),
-    'Construction was already served by the backend and must stay listed')
-})
-
-test('every routing type has an icon', async () => {
-  // Construction was served by the backend but absent from ALL_TYPES and
-  // TYPE_ICONS, so its card rendered with an empty icon slot. This pins the fix
-  // and stops the next added type from repeating it.
-  const src = await readFile(join(here, '..', 'src', 'pages', 'AdminLeadRouting.jsx'), 'utf8')
-  const allTypes = arrayLiteralAfter(src, 'const ALL_TYPES')
-
-  const block = src.slice(src.indexOf('const TYPE_ICONS'), src.indexOf('const emptyRecipient'))
-  for (const type of allTypes) {
-    const key = /\s/.test(type) ? `'${type}':` : `${type}:`
-    assert.ok(block.includes(key),
-      `TYPE_ICONS has no entry for '${type}' — the card renders iconless`)
+  for (const value of DEFAULT_CONTACT_INTEREST_VALUES) {
+    const key = /\s/.test(value) ? `'${value}':` : `${value}:`
+    assert.ok(block.includes(key), `TYPE_ICONS has no entry for '${value}'`)
   }
+  assert.ok(src.includes('TYPE_ICONS[interestType] ?? DEFAULT_TYPE_ICON'),
+    'an admin-created interest would render without an icon')
+})
+
+test('disabled interests stay listed in lead routing, marked as disabled', async () => {
+  const src = await readFrontend('src', 'pages', 'AdminLeadRouting.jsx')
+  assert.ok(src.includes('enabled === false'))
+  assert.equal(/routing\.filter\([^)]*enabled/.test(src), false, 'disabled rows are being hidden')
+})
+
+test('saving lead routing sends only interestType and recipients', async () => {
+  const src = await readFrontend('src', 'pages', 'AdminLeadRouting.jsx')
+  assert.ok(src.includes('routing.map(({ interestType, recipients }) => ({ interestType, recipients }))'))
 })
 
 /* ══════════════ THE BUSINESS DISTINCTION ══════════════ */
 
-test('Construction and Troubleshoot stay separate categories', async () => {
-  // Construction = commissioning a new build.
-  // Troubleshoot = a problem with something already built, for the technical team.
-  // They exist to route to different recipients, so neither may absorb the other.
-  const served = arrayLiteralAfter(await readBackend('routes', 'leadRouting.js'), 'const ALL_TYPES')
-
-  assert.ok(served.includes('Construction'))
-  assert.ok(served.includes('Troubleshoot'))
-  assert.equal(new Set(served).size, served.length, 'the routing vocabulary has a duplicate')
+test('Construction and Troubleshoot stay separate built-in categories', () => {
+  assert.ok(DEFAULT_CONTACT_INTEREST_VALUES.includes('Construction'))
+  assert.ok(DEFAULT_CONTACT_INTEREST_VALUES.includes('Troubleshoot'))
+  assert.equal(new Set(DEFAULT_CONTACT_INTEREST_VALUES).size, DEFAULT_CONTACT_INTEREST_VALUES.length)
 })

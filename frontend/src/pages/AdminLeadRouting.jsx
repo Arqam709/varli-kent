@@ -4,15 +4,15 @@ import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { FALLBACK_CONTACT_INTERESTS } from '../lib/contactInterests.js'
 
-// Mirrors routes/leadRouting.js's ALL_TYPES. It had drifted: the backend already
-// served a 'Construction' row that this list did not know about, so the card
-// rendered with an empty icon slot. Both are present now.
-//
-// 'Construction' (commissioning a new build) and 'Troubleshoot' (a problem with
-// something already built, routed to the technical team) are separate categories
-// with separate recipients — see models/ContactSubmission.js.
-const ALL_TYPES = ['Buying', 'Selling', 'Renting', 'Renovation', 'Interior Design', 'Architecture', 'Construction', 'General', 'Troubleshoot']
+// Placeholder rows, shown only until GET /api/lead-routing answers. The real
+// categories come from the server: every registered contact interest,
+// including ones an admin created under Page Content → Contact and ones that
+// are disabled (older apps can still send those, so their recipients are
+// kept). 'Construction' (a new build) and 'Troubleshoot' (a problem with
+// something already built) stay separate rows with separate recipients.
+const ALL_TYPES = FALLBACK_CONTACT_INTERESTS.map((interest) => interest.value)
 
 const TYPE_ICONS = {
   Buying: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>,
@@ -25,6 +25,9 @@ const TYPE_ICONS = {
   General: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>,
   Troubleshoot: <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
 }
+
+// Interests created in the admin have no bespoke icon.
+const DEFAULT_TYPE_ICON = <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
 
 const emptyRecipient = { email: '', label: '' }
 
@@ -69,10 +72,13 @@ const AdminLeadRouting = () => {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await api.put('/lead-routing', { routing })
+      // Only what the server stores; label and enabled are display data.
+      await api.put('/lead-routing', {
+        routing: routing.map(({ interestType, recipients }) => ({ interestType, recipients })),
+      })
       toast.success('Lead routing saved')
-    } catch {
-      toast.error('Failed to save routing config')
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to save routing config')
     } finally {
       setSaving(false)
     }
@@ -111,11 +117,17 @@ const AdminLeadRouting = () => {
           <strong className="text-[#202a36]">{p.howItWorks || 'How it works'}:</strong> {p.howItWorksDesc || 'When a lead comes in via the Contact form, the system sends an email notification to the owner and any recipients configured below for that inquiry type. Add a label (e.g. "Sales Agent") to help identify each recipient.'}
         </div>
 
+        {routing.some((row) => row.enabled === false) ? (
+          <p className="px-1 text-xs text-slate-500">
+            {p.disabledNote || 'Interests marked disabled are hidden from the Contact form, but older app versions can still send them, so their recipients are kept.'}
+          </p>
+        ) : null}
+
         {loading ? (
           <div className="flex justify-center py-10"><div className="h-10 w-10 animate-spin rounded-full border-4 border-[#4b6741] border-t-transparent" /></div>
         ) : (
           <div className="space-y-3">
-            {routing.map(({ interestType, recipients }) => {
+            {routing.map(({ interestType, label, enabled, recipients }) => {
               const isOpen = expanded === interestType
               return (
                 <div key={interestType} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -125,8 +137,16 @@ const AdminLeadRouting = () => {
                     className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-[#4b6741]">{TYPE_ICONS[interestType]}</span>
+                      <span className="text-[#4b6741]">{TYPE_ICONS[interestType] ?? DEFAULT_TYPE_ICON}</span>
                       <span className="font-semibold text-[#202a36]">{interestType}</span>
+                      {label && label !== interestType ? (
+                        <span className="text-xs text-slate-400">{label}</span>
+                      ) : null}
+                      {enabled === false ? (
+                        <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                          {p.disabledBadge || 'Disabled'}
+                        </span>
+                      ) : null}
                       <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
                         {recipients.length} {recipients.length === 1 ? (p.recipient || 'recipient') : (p.recipients || 'recipients')}
                       </span>

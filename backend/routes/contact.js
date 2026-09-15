@@ -4,8 +4,13 @@ import ContactSubmission from '../models/ContactSubmission.js'
 import { protect } from '../middleware/auth.js'
 import { requireRole, requirePermission } from '../middleware/checkPermission.js'
 import { sendContactNotification } from '../utils/email.js'
+import { CLIENT_CONTACT_SOURCES } from '../config/contactInterests.js'
+import { isRegisteredContactInterestValue } from '../services/contactInterests.js'
 
 const router = express.Router()
+
+// The interest vocabulary (GET /api/contact/interests and its admin API) lives
+// in routes/contactInterests.js, mounted ahead of this router in server.js.
 
 // POST /api/contact
 router.post(
@@ -14,19 +19,49 @@ router.post(
     body('name').notEmpty().withMessage('Name is required'),
     body('email').isEmail().withMessage('Valid email is required'),
     body('phone').notEmpty().withMessage('Phone is required'),
-    body('interestType')
-      .isIn(['Buying', 'Selling', 'Renting', 'Renovation', 'Interior Design', 'Architecture', 'Construction', 'General', 'Troubleshoot'])
-      .withMessage('Valid interest type is required'),
     body('message').notEmpty().withMessage('Message is required'),
   ],
   async (req, res, next) => {
     try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ success: false, errors: errors.array() })
+      const errors = validationResult(req).array()
+
+      // interestType is checked against the ContactInterest collection rather
+      // than a fixed list, so admin-created interests are accepted — and so are
+      // DISABLED ones, which older apps and old links may still send. An id or
+      // a translated label is not a registered value and is refused.
+      // Reported in the same express-validator shape as the checks above.
+      const { interestType } = req.body
+      if (!(await isRegisteredContactInterestValue(interestType))) {
+        errors.push({
+          type: 'field',
+          value: interestType,
+          msg: 'Valid interest type is required',
+          path: 'interestType',
+          location: 'body',
+        })
       }
 
-      const submission = await ContactSubmission.create(req.body)
+      if (errors.length > 0) {
+        return res.status(400).json({ success: false, errors })
+      }
+
+      // Only the fields a public visitor is entitled to set. Passing req.body
+      // straight through let any caller also write status, createdAt, or an
+      // ai_assistant source onto their own submission.
+      const { name, email, phone, message } = req.body
+      const source = CLIENT_CONTACT_SOURCES.includes(req.body.source) ? req.body.source : undefined
+
+      const submission = await ContactSubmission.create({
+        name,
+        email,
+        phone,
+        interestType,
+        message,
+        // Omitted rather than defaulted here, so the schema default stays the
+        // single meaning of "a client that sent nothing" — which is every
+        // build released before Phase 1.
+        ...(source ? { source } : {}),
+      })
       await sendContactNotification(submission)
 
       res.status(201).json({ success: true, message: 'Your message has been received. We will be in touch soon.' })

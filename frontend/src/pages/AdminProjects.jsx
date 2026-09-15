@@ -158,7 +158,7 @@ const AdminProjects = () => {
       </div>
 
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-8 bg-black/50 backdrop-blur-sm overflow-y-auto">
+        <div className="vk-scroll-gold fixed inset-0 z-50 flex items-start justify-center p-4 pt-8 bg-black/50 backdrop-blur-sm overflow-y-auto">
           <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl mb-8">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-lg font-bold text-[#202a36]">

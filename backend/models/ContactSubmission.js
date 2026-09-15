@@ -1,17 +1,21 @@
 import mongoose from 'mongoose'
+import { CONTACT_SOURCES } from '../config/contactInterests.js'
 
 const contactSubmissionSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true },
   phone: { type: String, required: true },
-  // 'Construction' and 'Troubleshoot' are deliberately separate, not synonyms:
-  // Construction is a visitor commissioning a new build; Troubleshoot is a
-  // visitor reporting a problem with existing work and asking for technical
-  // support. They route to different LeadRouting recipients, so collapsing
-  // them would send support requests to the sales/build inbox.
+  // The canonical VALUE of a registered contact interest ('Interior Design'),
+  // never an id or a translated label.
+  //
+  // No enum since Phase 1B: admins create interests at runtime, and a fixed
+  // list here would reject them on save. Registration is enforced where
+  // submissions enter — POST /api/contact checks the value against the
+  // ContactInterest collection (enabled OR disabled) via
+  // services/contactInterests.js. The chatbot lead flow writes only built-in
+  // values. Existing rows are untouched.
   interestType: {
     type: String,
-    enum: ['Buying', 'Selling', 'Renting', 'Renovation', 'Interior Design', 'Architecture', 'Construction', 'General', 'Troubleshoot'],
     required: true,
   },
   message: { type: String, required: true },
@@ -23,7 +27,9 @@ const contactSubmissionSchema = new mongoose.Schema({
   },
   source: {
     type: String,
-    enum: ['website', 'ai_assistant'],
+    // 'mobile' was added in Phase 1. Additive: every existing row keeps its
+    // value, and a client that sends nothing still gets 'website'.
+    enum: [...CONTACT_SOURCES],
     default: 'website',
   },
   

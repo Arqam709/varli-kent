@@ -9,6 +9,8 @@ import { registerRealtime } from './realtime/socket.js'
 import authRoutes from './routes/auth.js'
 import propertyRoutes from './routes/properties.js'
 import contactRoutes from './routes/contact.js'
+import contactInterestRoutes from './routes/contactInterests.js'
+import { ensureDefaultContactInterests } from './services/contactInterests.js'
 import userRoutes from './routes/users.js'
 import uploadRoutes from './routes/upload.js'
 import reviewRoutes from './routes/reviews.js'
@@ -50,6 +52,9 @@ app.use(activityLogger)
 
 app.use('/api/auth', authRoutes)
 app.use('/api/properties', propertyRoutes)
+// Before /api/contact on purpose: the interest vocabulary and its admin API,
+// whose literal paths must never reach that router's /:id handlers.
+app.use('/api/contact/interests', contactInterestRoutes)
 app.use('/api/contact', contactRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/upload', uploadRoutes)
@@ -131,7 +136,19 @@ app.set('io', io)
 
 const PORT = process.env.PORT || 5000
 
-connectDB().then(() => {
+connectDB().then(async () => {
+  // Contact interests: insert any missing built-in default BEFORE accepting
+  // requests. Insert-only ($setOnInsert), so restarts never overwrite admin
+  // edits. A failure is logged rather than fatal: POST /api/contact accepts
+  // the built-in values without a database record, and both clients keep
+  // their bundled list if the public endpoint returns nothing.
+  try {
+    const { inserted } = await ensureDefaultContactInterests()
+    if (inserted > 0) console.log(`[contact-interests] inserted ${inserted} default interest(s)`)
+  } catch (error) {
+    console.error(`[contact-interests] default bootstrap failed: ${error.message}`)
+  }
+
   server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`)
     console.log(`[realtime] Socket.IO ready; allowed origins: ${ALLOWED_ORIGINS.join(', ')}`)

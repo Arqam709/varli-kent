@@ -17,9 +17,9 @@ const Section = ({ title, description, children }) => (
   </div>
 )
 
-const Field = ({ label, children }) => (
+const Field = ({ id, label, children }) => (
   <div>
-    <label className="block mb-1.5 text-sm font-medium" style={{ color: 'var(--t-text)' }}>{label}</label>
+    <label htmlFor={id} className="block mb-1.5 text-sm font-medium" style={{ color: 'var(--t-text)' }}>{label}</label>
     {children}
   </div>
 )
@@ -37,7 +37,7 @@ const Input = (props) => (
   />
 )
 
-const PrimaryBtn = ({ loading, children, ...props }) => (
+const PrimaryBtn = ({ loading, savingText, children, ...props }) => (
   <button
     {...props}
     disabled={loading || props.disabled}
@@ -46,7 +46,7 @@ const PrimaryBtn = ({ loading, children, ...props }) => (
     onMouseEnter={e => e.currentTarget.style.background = 'var(--t-accent-h)'}
     onMouseLeave={e => e.currentTarget.style.background = 'var(--t-accent)'}
   >
-    {loading ? 'Saving...' : children}
+    {loading ? savingText : children}
   </button>
 )
 
@@ -239,6 +239,8 @@ const AiChatHistorySection = () => {
   )
 }
 const SettingsPage = () => {
+  const { language, t } = useLanguage()
+  const s = t.settingsPage
   const { user, portal, updateUser, logout } = useAuth()
   const { theme, setTheme, themes } = useTheme()
   const navigate = useNavigate()
@@ -251,22 +253,19 @@ const SettingsPage = () => {
   const [pw, setPw] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
   const [pwLoading, setPwLoading] = useState(false)
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deleteWord, setDeleteWord] = useState('')
-
   const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5 MB'); return }
+    if (file.size > 5 * 1024 * 1024) { toast.error(s.toastImageTooLarge); return }
     setAvatarLoading(true)
     try {
       const form = new FormData()
       form.append('avatar', file)
       const res = await api.put('/users/me/avatar', form, { headers: { 'Content-Type': 'multipart/form-data' } })
       updateUser(res.data.user)
-      toast.success('Profile picture updated')
+      toast.success(s.toastAvatarUpdated)
     } catch {
-      toast.error('Failed to upload image')
+      toast.error(s.toastAvatarFailed)
     } finally {
       setAvatarLoading(false)
     }
@@ -274,14 +273,14 @@ const SettingsPage = () => {
 
   const handleProfileSave = async (e) => {
     e.preventDefault()
-    if (!profile.name.trim()) { toast.error('Name cannot be empty'); return }
+    if (!profile.name.trim()) { toast.error(s.toastNameEmpty); return }
     setProfileLoading(true)
     try {
       const res = await api.put('/users/me/profile', { name: profile.name, email: profile.email })
       updateUser(res.data.user)
-      toast.success('Profile updated')
+      toast.success(s.toastProfileUpdated)
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update profile')
+      toast.error(err.response?.data?.message || s.toastProfileFailed)
     } finally {
       setProfileLoading(false)
     }
@@ -289,16 +288,16 @@ const SettingsPage = () => {
 
   const handlePasswordSave = async (e) => {
     e.preventDefault()
-    if (!pw.currentPassword || !pw.newPassword || !pw.confirmPassword) { toast.error('Please fill in all password fields'); return }
-    if (pw.newPassword !== pw.confirmPassword) { toast.error('New passwords do not match'); return }
-    if (pw.newPassword.length < 6) { toast.error('New password must be at least 6 characters'); return }
+    if (!pw.currentPassword || !pw.newPassword || !pw.confirmPassword) { toast.error(s.toastPasswordFieldsRequired); return }
+    if (pw.newPassword !== pw.confirmPassword) { toast.error(s.toastPasswordMismatch); return }
+    if (pw.newPassword.length < 6) { toast.error(s.toastPasswordTooShort); return }
     setPwLoading(true)
     try {
       await api.put('/users/me/password', pw)
-      toast.success('Password changed successfully')
+      toast.success(s.toastPasswordChanged)
       setPw({ currentPassword: '', newPassword: '', confirmPassword: '' })
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to change password')
+      toast.error(err.response?.data?.message || s.toastPasswordFailed)
     } finally {
       setPwLoading(false)
     }
@@ -307,10 +306,10 @@ const SettingsPage = () => {
   const handleLogout = async () => {
     await logout()
     navigate('/')
-    toast.success('Signed out')
+    toast.success(s.toastSignedOut)
   }
 
-  const roleLabel = user?.role === 'owner' ? 'Owner' : user?.role === 'admin' ? 'Admin' : user?.role === 'agent' ? 'Agent' : 'Member'
+  const roleLabel = user?.role === 'owner' ? s.roleOwner : user?.role === 'admin' ? s.roleAdmin : user?.role === 'agent' ? s.roleAgent : s.roleMember
   const roleColor = user?.role === 'owner'
     ? { background: '#fef3c7', color: '#92400e' }
     : user?.role === 'admin'
@@ -321,20 +320,20 @@ const SettingsPage = () => {
     <div className="min-h-screen" style={{ background: 'var(--t-bg)' }}>
       {/* Top bar */}
       <div className="border-b sticky top-0 z-30" style={{ background: 'var(--t-surface)', borderColor: 'var(--t-border)' }}>
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 min-h-14 py-3 flex flex-wrap gap-3 items-center justify-between">
           <div className="flex items-center gap-3">
             <Link to="/" className="inline-flex items-center gap-1.5 text-xs transition cursor-pointer" style={{ color: 'var(--t-muted)' }}>
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-3.5 w-3.5 rtl:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
-              Home
+              {s.home}
             </Link>
             <span style={{ color: 'var(--t-border)' }}>|</span>
             <span style={{ fontFamily: 'Cinzel, serif', color: 'var(--t-text)' }} className="text-sm font-bold">
               VARLI<span style={{ color: 'var(--t-accent)' }}>KENT</span>
             </span>
           </div>
-          <span className="text-sm font-medium" style={{ color: 'var(--t-muted)' }}>Account Settings</span>
+          <span className="text-sm font-medium" style={{ color: 'var(--t-muted)' }}>{s.accountSettings}</span>
         </div>
       </div>
 
@@ -356,7 +355,7 @@ const SettingsPage = () => {
               disabled={avatarLoading}
               className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full flex items-center justify-center text-white cursor-pointer transition"
               style={{ background: 'var(--t-accent)' }}
-              title="Change photo"
+              title={s.changePhoto}
             >
               {avatarLoading
                 ? <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
@@ -369,13 +368,13 @@ const SettingsPage = () => {
             <p className="font-semibold text-base text-white truncate">{user?.name}</p>
             <p className="text-sm truncate" style={{ color: 'rgba(255,255,255,0.55)' }}>{user?.email}</p>
           </div>
-          <span className="ml-auto shrink-0 text-xs font-semibold px-3 py-1 rounded-full" style={roleColor}>
+          <span className="ms-auto shrink-0 text-xs font-semibold px-3 py-1 rounded-full" style={roleColor}>
             {roleLabel}
           </span>
         </div>
 
         {/* Theme picker */}
-        <Section title="Appearance" description="Choose a theme for your Varlikent experience.">
+        <Section title={s.appearanceTitle} description={s.appearanceDesc}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {themes.map(th => {
               const active = theme === th.id
@@ -383,7 +382,8 @@ const SettingsPage = () => {
                 <button
                   key={th.id}
                   onClick={() => setTheme(th.id)}
-                  className="flex items-center gap-3 rounded-xl px-4 py-3 text-left transition cursor-pointer"
+                  aria-pressed={active}
+                  className="flex items-center gap-3 rounded-xl px-4 py-3 text-start transition cursor-pointer"
                   style={{
                     border: active ? '2px solid var(--t-accent)' : '2px solid var(--t-border)',
                     background: active ? 'rgba(var(--vk-green-rgb, 77,107,69), 0.08)' : 'var(--t-input-bg)',
@@ -400,7 +400,7 @@ const SettingsPage = () => {
                     <p className="text-xs leading-snug mt-0.5" style={{ color: 'var(--t-muted)' }}>{th.description}</p>
                   </div>
                   {active && (
-                    <svg className="ml-auto shrink-0 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--t-accent)' }}>
+                    <svg className="ms-auto shrink-0 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--t-accent)' }}>
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                     </svg>
                   )}
@@ -411,48 +411,48 @@ const SettingsPage = () => {
         </Section>
 
         {/* Profile info */}
-        <Section title="Profile Information" description="Update your display name and email address.">
+        <Section title={s.profileInfoTitle} description={s.profileInfoDesc}>
           <form onSubmit={handleProfileSave} className="space-y-4">
-            <Field label="Full Name">
-              <Input type="text" value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} placeholder="Your full name" required />
+            <Field id="settings-name" label={s.fullName}>
+              <Input id="settings-name" type="text" value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} placeholder={s.fullNamePlaceholder} required />
             </Field>
-            <Field label="Email Address">
-              <Input type="email" value={profile.email} onChange={e => setProfile(p => ({ ...p, email: e.target.value }))} placeholder="you@example.com" required />
+            <Field id="settings-email" label={s.emailAddress}>
+              <Input id="settings-email" type="email" value={profile.email} onChange={e => setProfile(p => ({ ...p, email: e.target.value }))} placeholder={s.emailPlaceholder} required />
             </Field>
             <div className="flex justify-end pt-1">
-              <PrimaryBtn type="submit" loading={profileLoading}>Save Changes</PrimaryBtn>
+              <PrimaryBtn type="submit" loading={profileLoading} savingText={s.saving}>{s.saveChanges}</PrimaryBtn>
             </div>
           </form>
         </Section>
 
         {/* Change password */}
-        <Section title="Change Password" description="Enter your current password, then choose a new one.">
+        <Section title={s.changePasswordTitle} description={s.changePasswordDesc}>
           <form onSubmit={handlePasswordSave} className="space-y-4">
-            <Field label="Current Password">
-              <Input type="password" value={pw.currentPassword} onChange={e => setPw(p => ({ ...p, currentPassword: e.target.value }))} placeholder="••••••••" required />
+            <Field id="settings-current-password" label={s.currentPassword}>
+              <Input id="settings-current-password" type="password" value={pw.currentPassword} onChange={e => setPw(p => ({ ...p, currentPassword: e.target.value }))} placeholder="••••••••" required />
             </Field>
-            <Field label="New Password">
-              <Input type="password" value={pw.newPassword} onChange={e => setPw(p => ({ ...p, newPassword: e.target.value }))} placeholder="Min. 6 characters" required />
+            <Field id="settings-new-password" label={s.newPassword}>
+              <Input id="settings-new-password" type="password" value={pw.newPassword} onChange={e => setPw(p => ({ ...p, newPassword: e.target.value }))} placeholder={s.newPasswordPlaceholder} required />
             </Field>
-            <Field label="Confirm New Password">
-              <Input type="password" value={pw.confirmPassword} onChange={e => setPw(p => ({ ...p, confirmPassword: e.target.value }))} placeholder="Repeat new password" required />
+            <Field id="settings-confirm-password" label={s.confirmNewPassword}>
+              <Input id="settings-confirm-password" type="password" value={pw.confirmPassword} onChange={e => setPw(p => ({ ...p, confirmPassword: e.target.value }))} placeholder={s.confirmNewPasswordPlaceholder} required />
             </Field>
             <div className="flex justify-end pt-1">
-              <PrimaryBtn type="submit" loading={pwLoading}>Update Password</PrimaryBtn>
+              <PrimaryBtn type="submit" loading={pwLoading} savingText={s.saving}>{s.updatePassword}</PrimaryBtn>
             </div>
           </form>
         </Section>
 
         {/* Account info */}
-        <Section title="Account Details" description="Read-only information about your account.">
+        <Section title={s.accountDetailsTitle} description={s.accountDetailsDesc}>
           <div className="space-y-0">
             {[
-              { label: 'Account ID', value: user?._id || 'N/A' },
-              { label: 'Role', value: user ? roleLabel : 'N/A' },
-              { label: 'Member since', value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A' },
+              { label: s.accountId, value: user?._id || s.notAvailable },
+              { label: s.role, value: user ? roleLabel : s.notAvailable },
+              { label: s.memberSince, value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString(language, { day: 'numeric', month: 'long', year: 'numeric' }) : s.notAvailable },
               {
-  label: 'Status',
-  value: user ? (user.isActive === false ? 'Suspended' : 'Active') : 'N/A'
+  label: s.status,
+  value: user ? (user.isActive === false ? s.suspended : s.active) : s.notAvailable
 }
             ].map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between py-3 border-b last:border-0" style={{ borderColor: 'var(--t-border)' }}>
@@ -467,21 +467,21 @@ const SettingsPage = () => {
         <AiChatHistorySection />
 
         {/* Quick links */}
-        <Section title="Quick Links">
-          <div className="grid grid-cols-2 gap-3">
+        <Section title={s.quickLinksTitle}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Link to="/privacy" className="flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-medium transition cursor-pointer" style={{ borderColor: 'var(--t-border)', color: 'var(--t-text)', background: 'var(--t-input-bg)' }}>
               <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--t-accent)' }}>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-              Privacy Policy
+              {t.privacyPolicy.title}
             </Link>
             {[
-              { to: '/properties', label: 'Browse Properties', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-              { to: '/favourites', label: 'My Favourites', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
-              { to: '/contact', label: 'Contact Us', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
+              { to: '/properties', label: s.browseProperties, icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+              { to: '/favourites', label: s.myFavourites, icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
+              { to: '/contact', label: s.contactUs, icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
               // Same derivation the Navbar uses — one definition of "which
               // staff portal, if any" instead of a hand-rolled role check here.
-              ...(portal ? [{ to: portal.to, label: portal.label, icon: 'M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7' }] : []),
+              ...(portal ? [{ to: portal.to, label: portal.to === '/agent/dashboard' ? s.agentPanel : s.adminPanel, icon: 'M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7' }] : []),
             ].map(({ to, label, icon }) => (
               <Link key={to} to={to} className="flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-medium transition cursor-pointer" style={{ borderColor: 'var(--t-border)', color: 'var(--t-text)', background: 'var(--t-input-bg)' }}>
                 <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--t-accent)' }}>
@@ -494,60 +494,27 @@ const SettingsPage = () => {
         </Section>
 
         {/* Sign out */}
-        <Section title="Session">
+        <Section title={s.sessionTitle}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium" style={{ color: 'var(--t-text)' }}>Sign out</p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--t-muted)' }}>You'll need to log in again to access your account.</p>
+              <p className="text-sm font-medium" style={{ color: 'var(--t-text)' }}>{s.signOut}</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--t-muted)' }}>{s.signOutDesc}</p>
             </div>
-            <SecondaryBtn onClick={handleLogout} type="button">Sign Out</SecondaryBtn>
+            <SecondaryBtn onClick={handleLogout} type="button">{s.signOutButton}</SecondaryBtn>
           </div>
         </Section>
 
-        {/* Danger zone */}
-        <div className="rounded-2xl border overflow-hidden" style={{ background: '#fff1f2', borderColor: '#fecdd3' }}>
-          <div className="px-6 py-5 border-b" style={{ borderColor: '#fecdd3' }}>
-            <h2 className="text-base font-semibold text-red-700">Danger Zone</h2>
-            <p className="mt-0.5 text-sm text-red-400">Irreversible actions. Proceed with caution.</p>
-          </div>
-          <div className="px-6 py-6">
-            {!showDeleteConfirm ? (
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium" style={{ color: 'var(--t-text)' }}>Delete account</p>
-                  <p className="text-xs mt-0.5 text-red-400">Permanently remove your account and all data.</p>
-                </div>
-                <button onClick={() => setShowDeleteConfirm(true)} className="rounded-full px-5 py-2 text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-100 transition cursor-pointer">
-                  Delete Account
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <p className="text-sm" style={{ color: 'var(--t-text)' }}>
-                  Type <strong>DELETE</strong> to confirm. This cannot be undone.
-                </p>
-                <input
-                  type="text"
-                  value={deleteWord}
-                  onChange={e => setDeleteWord(e.target.value)}
-                  placeholder='Type "DELETE" to confirm'
-                  className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none"
-                  style={{ borderColor: '#fca5a5', background: '#fff' }}
-                />
-                <div className="flex gap-3">
-                  <button onClick={() => { setShowDeleteConfirm(false); setDeleteWord('') }} className="rounded-full px-5 py-2 text-sm font-medium border border-red-200 text-red-500 hover:bg-red-50 transition cursor-pointer">Cancel</button>
-                  <button disabled={deleteWord !== 'DELETE'} onClick={() => toast.info('Account deletion requires support — contact info@varlikent.com')} className="rounded-full px-5 py-2 text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-40 cursor-pointer">
-                    Permanently Delete
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Account removal is handled by support; there is no self-delete API. */}
+        <Section title={s.accountRemovalTitle} description={s.accountRemovalDesc}>
+          <Link to="/contact" className="inline-flex rounded-full border px-5 py-2.5 text-sm font-semibold transition hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2"
+            style={{ borderColor: 'var(--t-border)', color: 'var(--t-text)' }}>
+            {s.contactSupport}
+          </Link>
+        </Section>
 
         <p className="text-center text-xs pb-4" style={{ color: 'var(--t-muted)' }}>
-          Varlikent · Istanbul Luxury Real Estate ·{' '}
-          <Link to="/" className="hover:underline" style={{ color: 'var(--t-accent)' }}>Back to Home</Link>
+          {s.footerTagline}{' '}
+          <Link to="/" className="hover:underline" style={{ color: 'var(--t-accent)' }}>{s.backToHome}</Link>
         </p>
       </div>
     </div>
