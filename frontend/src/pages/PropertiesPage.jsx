@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../lib/api'
 import PropertyCard from '../components/PropertyCard'
@@ -152,6 +152,8 @@ const PropertiesPage = () => {
   })
   const [searchParams, setSearchParams] = useSearchParams()
   const [properties, setProperties] = useState([])
+  const [loadError, setLoadError] = useState(false)
+  const propertiesRequest = useRef(0)
   const [areas, setAreas] = useState([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -205,6 +207,50 @@ const PropertiesPage = () => {
     }
     return initial
   })
+
+  // Reconcile external navigation before rendering controls or issuing requests.
+  // The guard also handles our own URL replacement without remounting sections.
+  const urlSearch = searchParams.toString()
+  const [restoredSearch, setRestoredSearch] = useState(urlSearch)
+  if (urlSearch !== restoredSearch) {
+    setRestoredSearch(urlSearch)
+    setListingType(searchParams.get('listingType') || '')
+    setDistrict(searchParams.get('district') || '')
+    setPropertyType(searchParams.get('propertyType') || '')
+    setMinPrice(searchParams.get('minPrice') || '')
+    setMaxPrice(searchParams.get('maxPrice') || '')
+    setRooms(searchParams.get('rooms') || '')
+    setMinSqm(searchParams.get('minSqm') || '')
+    setMaxSqm(searchParams.get('maxSqm') || '')
+    setFloor(searchParams.get('floor') || '')
+    setTotalFloors(searchParams.get('totalFloors') || '')
+    setFurnished(searchParams.get('furnished') || '')
+    setBalcony(searchParams.get('balcony') || '')
+    setElevator(searchParams.get('elevator') || '')
+    setPool(searchParams.get('pool') || '')
+    setGarden(searchParams.get('garden') || '')
+    setBaths(searchParams.get('baths') || '')
+    setMinNetSqm(searchParams.get('minNetSqm') || '')
+    setMaxNetSqm(searchParams.get('maxNetSqm') || '')
+    setMinOpenArea(searchParams.get('minOpenArea') || '')
+    setMaxOpenArea(searchParams.get('maxOpenArea') || '')
+    setMinCoefficient(searchParams.get('minCoefficient') || '')
+    setMaxCoefficient(searchParams.get('maxCoefficient') || '')
+    setListedSince(searchParams.get('listedSince') || '')
+    setHeating(searchParams.getAll('heating'))
+    setParking(searchParams.getAll('parking'))
+    setBuildingAge(searchParams.getAll('buildingAge'))
+    setFloorLocation(searchParams.getAll('floorLocation'))
+    setKitchenType(searchParams.getAll('kitchenType'))
+    setUsageStatus(searchParams.getAll('usageStatus'))
+    setTitleDeedStatus(searchParams.getAll('titleDeedStatus'))
+    setNearbyTransport(searchParams.getAll('nearbyTransport'))
+    const nextTriState = {}
+    for (const field of [...TRISTATE_AMENITIES, ...TRISTATE_LEGAL, 'hasVirtualTour']) {
+      nextTriState[field] = searchParams.get(field) || ''
+    }
+    setTriState(nextTriState)
+  }
 
   useEffect(() => {
     api.get('/properties/areas').then(r => setAreas(r.data.areas || [])).catch(() => {})
@@ -276,14 +322,27 @@ const PropertiesPage = () => {
   )
 
   const fetchProperties = useCallback(() => {
+    const requestId = ++propertiesRequest.current
     setLoading(true)
-    api.get(`/properties${queryString ? '?' + queryString : ''}`)
-      .then(r => { setProperties(r.data.properties || []); setTotal(r.data.count || 0) })
-      .catch(() => { setProperties([]); setTotal(0) })
-      .finally(() => setLoading(false))
+    setLoadError(false)
+    return api.get(`/properties${queryString ? '?' + queryString : ''}`)
+      .then(r => {
+        if (requestId !== propertiesRequest.current) return
+        setProperties(r.data.properties || [])
+        setTotal(r.data.count || 0)
+      })
+      .catch(() => {
+        if (requestId !== propertiesRequest.current) return
+        setLoadError(true)
+      })
+      .finally(() => { if (requestId === propertiesRequest.current) setLoading(false) })
   }, [queryString])
 
-  useEffect(() => { fetchProperties() }, [fetchProperties])
+  useEffect(() => {
+    fetchProperties()
+    const requests = propertiesRequest
+    return () => { requests.current++ }
+  }, [fetchProperties])
 
   /*
    * Keeps the address bar in step, so a filtered search survives a refresh and
@@ -694,7 +753,7 @@ const PropertiesPage = () => {
         <div className="flex gap-8">
           {/* Sidebar */}
           <aside className="hidden lg:block w-72 shrink-0">
-            <div className="sticky top-24 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm max-h-[calc(100vh-7rem)] overflow-y-auto">
+            <div className="vk-scroll-gold sticky top-24 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm max-h-[calc(100vh-7rem)] overflow-y-auto">
               <h3 style={{ fontFamily: 'Cinzel, serif' }} className="mb-5 text-base font-semibold text-[#1E1E1C]">{t.propertiesPage?.filters || 'Filters'}</h3>
               {renderFilterPanel('desktop')}
             </div>
@@ -705,6 +764,11 @@ const PropertiesPage = () => {
             {loading ? (
               <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+              </div>
+            ) : loadError ? (
+              <div role="alert" className="rounded-2xl border p-8 text-center" style={{ borderColor: 'var(--vk-border)', color: 'var(--vk-text)' }}>
+                <p>{pp.loadError}</p>
+                <button type="button" onClick={fetchProperties} className="mt-3 underline cursor-pointer">{pp.retry}</button>
               </div>
             ) : properties.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -731,7 +795,7 @@ const PropertiesPage = () => {
       {mobileFilterOpen && (
         <div className="fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileFilterOpen(false)} />
-          <div className="relative ml-auto h-full w-80 overflow-y-auto bg-white p-6 shadow-xl">
+          <div className="vk-scroll-gold relative ms-auto h-full w-80 max-w-full overflow-y-auto bg-white p-6 shadow-xl">
             <div className="mb-6 flex items-center justify-between">
               <h3 style={{ fontFamily: 'Cinzel, serif' }} className="text-lg font-semibold text-[#1E1E1C]">{t.propertiesPage?.filters || 'Filters'}</h3>
               <button onClick={() => setMobileFilterOpen(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">

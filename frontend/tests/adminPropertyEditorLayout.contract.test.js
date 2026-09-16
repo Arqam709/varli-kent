@@ -299,7 +299,6 @@ test('the editor still has both ways out and one submit', async () => {
   const block = await editor()
 
   assert.ok(/<button type="submit"/.test(block), 'the Save button is gone')
-  assert.ok(/type="button"[^>]*onClick=\{\(\) => setFormOpen\(false\)\}/.test(block)
-    || /onClick=\{\(\) => setFormOpen\(false\)\}[^>]*type="button"/.test(block),
+  assert.ok(/type="button"[^>]*onClick=\{closeForm\}[^>]*disabled=\{saving\}/.test(block),
     'Cancel is missing or is not type="button"')
 })

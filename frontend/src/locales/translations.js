@@ -411,6 +411,8 @@ const translations = {
       browse: 'Browse Properties',
     },
     propertiesPage: {
+      loadError: "Could not load properties. Please try again.",
+      retry: "Retry",
       // ── Wave 10B4: extended public filters ──
       baths: "Bathrooms",
       any: "Any",
@@ -850,6 +852,15 @@ const translations = {
         videosLabel: 'videos',
       },
       properties: {
+        noListings: "No listings in this category yet.",
+        loadError: "Could not load properties. Please try again.",
+        propertyAdded: "Property added",
+        propertyUpdated: "Property updated",
+        propertyDeleted: "Property deleted",
+        deleteFailed: "Delete failed",
+        confirmDelete: "Delete this property? This cannot be undone.",
+        filesUploaded: "{n} file(s) uploaded",
+
         title: 'Property Management', totalListings: 'total listings',
         addProperty: '+ Add Property', editProperty: 'Edit Property', addPropertyTitle: 'Add Property',
         titleLabel: 'Title', listingType: 'Listing Type', price: 'Price (number)',
@@ -1790,6 +1801,8 @@ forgotPasswordPage: {
       browse: 'Mülklere Göz At',
     },
     propertiesPage: {
+      loadError: "İlanlar yüklenemedi. Lütfen tekrar deneyin.",
+      retry: "Tekrar dene",
       // ── Wave 10B4: extended public filters ──
       baths: "Banyo Sayısı",
       any: "Farketmez",
@@ -2229,6 +2242,15 @@ forgotPasswordPage: {
         videosLabel: 'video',
       },
       properties: {
+        noListings: "Bu kategoride henüz ilan yok.",
+        loadError: "İlanlar yüklenemedi. Lütfen tekrar deneyin.",
+        propertyAdded: "Mülk eklendi",
+        propertyUpdated: "Mülk güncellendi",
+        propertyDeleted: "Mülk silindi",
+        deleteFailed: "Silme başarısız",
+        confirmDelete: "Bu mülk silinsin mi? Bu işlem geri alınamaz.",
+        filesUploaded: "{n} dosya yüklendi",
+
         title: 'Mülk Yönetimi', totalListings: 'toplam ilan',
         addProperty: '+ Mülk Ekle', editProperty: 'Mülkü Düzenle', addPropertyTitle: 'Mülk Ekle',
         titleLabel: 'Başlık', listingType: 'İlan Türü', price: 'Fiyat (sayı)',
@@ -3170,6 +3192,8 @@ forgotPasswordPage: {
       browse: 'تصفح العقارات',
     },
     propertiesPage: {
+      loadError: "تعذّر تحميل العقارات. يُرجى المحاولة مرة أخرى.",
+      retry: "إعادة المحاولة",
       // ── Wave 10B4: extended public filters ──
       baths: "عدد الحمامات",
       any: "الكل",
@@ -3609,6 +3633,15 @@ forgotPasswordPage: {
         videosLabel: 'فيديو',
       },
       properties: {
+        noListings: "لا توجد إعلانات في هذه الفئة بعد.",
+        loadError: "تعذّر تحميل العقارات. يُرجى المحاولة مرة أخرى.",
+        propertyAdded: "تمت إضافة العقار",
+        propertyUpdated: "تم تحديث العقار",
+        propertyDeleted: "تم حذف العقار",
+        deleteFailed: "فشل الحذف",
+        confirmDelete: "هل تريد حذف هذا العقار؟ لا يمكن التراجع عن ذلك.",
+        filesUploaded: "تم رفع {n} ملف",
+
         title: 'إدارة العقارات', totalListings: 'إجمالي الإعلانات',
         addProperty: '+ إضافة عقار', editProperty: 'تعديل العقار', addPropertyTitle: 'إضافة عقار',
         titleLabel: 'العنوان', listingType: 'نوع الإعلان', price: 'السعر (رقم)',
@@ -4561,6 +4594,8 @@ forgotPasswordPage: {
       browse: 'Immobilien durchsuchen',
     },
     propertiesPage: {
+      loadError: "Immobilien konnten nicht geladen werden. Bitte erneut versuchen.",
+      retry: "Erneut versuchen",
       // ── Wave 10B4: extended public filters ──
       baths: "Badezimmer",
       any: "Beliebig",
@@ -4817,6 +4852,15 @@ forgotPasswordPage: {
         videosLabel: 'Videos',
       },
       properties: {
+        noListings: "Noch keine Angebote in dieser Kategorie.",
+        loadError: "Immobilien konnten nicht geladen werden. Bitte erneut versuchen.",
+        propertyAdded: "Immobilie hinzugefügt",
+        propertyUpdated: "Immobilie aktualisiert",
+        propertyDeleted: "Immobilie gelöscht",
+        deleteFailed: "Löschen fehlgeschlagen",
+        confirmDelete: "Diese Immobilie löschen? Dies kann nicht rückgängig gemacht werden.",
+        filesUploaded: "{n} Datei(en) hochgeladen",
+
         title: 'Immobilienverwaltung', totalListings: 'Angebote insgesamt',
         addProperty: '+ Immobilie hinzufügen', editProperty: 'Immobilie bearbeiten', addPropertyTitle: 'Immobilie hinzufügen',
         titleLabel: 'Titel', listingType: 'Angebotsart', price: 'Preis (Zahl)',
@@ -5824,6 +5868,8 @@ forgotPasswordPage: {
       browse: 'Просмотреть объекты',
     },
     propertiesPage: {
+      loadError: "Не удалось загрузить объекты. Попробуйте ещё раз.",
+      retry: "Повторить",
       // ── Wave 10B4: extended public filters ──
       baths: "Санузлы",
       any: "Любой",
@@ -6080,6 +6126,15 @@ forgotPasswordPage: {
         videosLabel: 'видео',
       },
       properties: {
+        noListings: "В этой категории пока нет объявлений.",
+        loadError: "Не удалось загрузить объекты. Попробуйте ещё раз.",
+        propertyAdded: "Объект добавлен",
+        propertyUpdated: "Объект обновлён",
+        propertyDeleted: "Объект удалён",
+        deleteFailed: "Не удалось удалить",
+        confirmDelete: "Удалить этот объект? Это действие нельзя отменить.",
+        filesUploaded: "Загружено файлов: {n}",
+
         title: 'Управление объектами', totalListings: 'всего объявлений',
         addProperty: '+ Добавить объект', editProperty: 'Редактировать объект', addPropertyTitle: 'Добавить объект',
         titleLabel: 'Название', listingType: 'Тип объявления', price: 'Цена (число)',
@@ -7087,6 +7142,8 @@ forgotPasswordPage: {
       browse: 'جائیدادیں دیکھیں',
     },
     propertiesPage: {
+      loadError: "جائیدادیں لوڈ نہیں ہو سکیں۔ دوبارہ کوشش کریں۔",
+      retry: "دوبارہ کوشش کریں",
       // ── Wave 10B4: extended public filters ──
       baths: "غسل خانے",
       any: "کوئی بھی",
@@ -7343,6 +7400,15 @@ forgotPasswordPage: {
         videosLabel: 'ویڈیوز',
       },
       properties: {
+        noListings: "اس زمرے میں ابھی کوئی اشتہار نہیں۔",
+        loadError: "جائیدادیں لوڈ نہیں ہو سکیں۔ دوبارہ کوشش کریں۔",
+        propertyAdded: "جائیداد شامل ہو گئی",
+        propertyUpdated: "جائیداد اپ ڈیٹ ہو گئی",
+        propertyDeleted: "جائیداد حذف ہو گئی",
+        deleteFailed: "حذف نہیں ہو سکا",
+        confirmDelete: "یہ جائیداد حذف کریں؟ یہ عمل واپس نہیں ہو سکتا۔",
+        filesUploaded: "{n} فائلیں اپ لوڈ ہو گئیں",
+
         title: 'جائیداد کا انتظام', totalListings: 'کل فہرستیں',
         addProperty: '+ جائیداد شامل کریں', editProperty: 'جائیداد میں ترمیم کریں', addPropertyTitle: 'جائیداد شامل کریں',
         titleLabel: 'عنوان', listingType: 'فہرست کی قسم', price: 'قیمت (نمبر)',

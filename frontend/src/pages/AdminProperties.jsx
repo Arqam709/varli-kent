@@ -307,6 +307,11 @@ const AdminProperties = () => {
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [images, setImages] = useState([])
+  const [mainImage, setMainImage] = useState('')
+  const editorSession = useRef(0)
+  const locationRequest = useRef(0)
+  const propertiesRequest = useRef(0)
+  const [loadError, setLoadError] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [agents, setAgents] = useState([])
@@ -328,10 +333,21 @@ const AdminProperties = () => {
   const [locationDraftError, setLocationDraftError] = useState(false)
 
   const fetchProperties = () => {
+    const requestId = ++propertiesRequest.current
     setLoading(true)
-    api.get('/properties').then(r => setProperties(r.data.properties || [])).finally(() => setLoading(false))
+    setLoadError(false)
+    return api.get('/properties')
+      .then(r => { if (requestId === propertiesRequest.current) setProperties(r.data.properties || []) })
+      .catch(() => { if (requestId === propertiesRequest.current) setLoadError(true) })
+      .finally(() => { if (requestId === propertiesRequest.current) setLoading(false) })
   }
   useEffect(() => { fetchProperties() }, [])
+  useEffect(() => () => {
+    propertiesRequest.current++
+    editorSession.current++
+    locationRequest.current++
+    agentsRequest.current++
+  }, [])
 
   /**
    * Real agent accounts for the selector — never a hardcoded list. The
@@ -481,6 +497,10 @@ const AdminProperties = () => {
   }
 
   const openAdd = () => {
+    editorSession.current++
+    locationRequest.current++
+    setUploading(false)
+    setMainImage('')
     setEditingId(null)
     setForm(emptyForm)
     setDetails(emptyDetails)
@@ -501,6 +521,8 @@ const AdminProperties = () => {
    * location controls, which is the correct outcome rather than a bug.
    */
   const loadAdminLocation = async (propertyId) => {
+    const requestId = ++locationRequest.current
+    const session = editorSession.current
     if (!hasPermission('edit_listing')) {
       resetLocationState({ status: 'unknown' })
       return
@@ -510,8 +532,10 @@ const AdminProperties = () => {
 
     try {
       const r = await api.get(`/properties/${propertyId}/admin-location`)
+      if (session !== editorSession.current || requestId !== locationRequest.current) return
       resetLocationState(locationStateFromApi(r.data?.location))
     } catch {
+      if (session !== editorSession.current || requestId !== locationRequest.current) return
       // Deliberately NOT LOCATION_NONE. Treating a failed request as "no
       // location" is how a stored pin gets silently destroyed on the next save.
       resetLocationState({ status: 'unknown' })
@@ -521,7 +545,13 @@ const AdminProperties = () => {
 
   // One way out, shared by the header X, Cancel and Escape, so the three
   // cannot drift into doing different cleanup.
-  const closeForm = useCallback(() => setFormOpen(false), [])
+  const closeForm = useCallback(() => {
+    if (saving) return
+    editorSession.current++
+    locationRequest.current++
+    agentsRequest.current++
+    setFormOpen(false)
+  }, [saving])
 
   // Escape closes the editor. Bound only while it is open and removed on
   // close/unmount, so no listener outlives the form. Deliberately does NOT
@@ -539,6 +569,9 @@ const AdminProperties = () => {
   }, [formOpen, saving, closeForm])
 
   const openEdit = (prop) => {
+    editorSession.current++
+    setUploading(false)
+    setMainImage(prop.mainImage || '')
     setEditingId(prop._id)
     loadAdminLocation(prop._id)
     setForm({ title: prop.title, listingType: prop.listingType, price: prop.price, priceLabel: prop.priceLabel || '', district: prop.district, address: prop.address, propertyType: prop.propertyType, beds: prop.beds, baths: prop.baths, sqm: prop.sqm, description: prop.description || '', agent: agentIdOf(prop.agent), agentPhone: prop.agentPhone || '', agentEmail: prop.agentEmail || '', whatsappNumber: prop.whatsappNumber || '', featured: prop.featured ?? false, status: prop.status })
@@ -550,6 +583,8 @@ const AdminProperties = () => {
   }
 
   const handleImage = async (e) => {
+  const input = e.target
+  const session = editorSession.current
   const files = Array.from(e.target.files || [])
 
   if (!files.length) return
@@ -567,22 +602,32 @@ const AdminProperties = () => {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
 
+      if (session !== editorSession.current) return
       uploadedUrls.push(r.data.url)
+      // Retain successful files even if a later file in this batch fails.
+      setImages(prev => [...prev, r.data.url])
     }
 
-    setImages(prev => [...prev, ...uploadedUrls])
-    toast.success(`${uploadedUrls.length} file(s) uploaded`)
+    toast.success(p.filesUploaded.replace('{n}', uploadedUrls.length))
   } catch (err) {
+    if (session !== editorSession.current) return
     console.error(err)
-    toast.error('Upload failed')
+    toast.error(c.uploadFailed || 'Upload failed')
   } finally {
-    setUploading(false)
-    e.target.value = ''
+    if (session === editorSession.current) setUploading(false)
+    input.value = ''
   }
 }
 
+  const removeImage = (index) => {
+    const remaining = images.filter((_, i) => i !== index)
+    if (images[index] === mainImage && !remaining.includes(mainImage)) setMainImage(remaining[0] || '')
+    setImages(remaining)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (uploading || saving) return
 
     // A half-typed coordinate is a UI mistake, not something to hand to the
     // server and hope. The backend is still the authority; this is usability.
@@ -606,7 +651,7 @@ const AdminProperties = () => {
       baths: Number(form.baths),
       sqm: Number(form.sqm),
       images,
-      mainImage: images[0] || '',
+      mainImage: mainImage || images[0] || '',
     }
 
     /*
@@ -632,28 +677,30 @@ const AdminProperties = () => {
     try {
       if (editingId) {
         await api.put(`/properties/${editingId}`, payload)
-        toast.success('Property updated')
+        toast.success(p.propertyUpdated)
       } else {
         await api.post('/properties', payload)
-        toast.success('Property added')
+        toast.success(p.propertyAdded)
       }
       setFormOpen(false)
+      editorSession.current++
+      locationRequest.current++
       fetchProperties()
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Save failed')
+      toast.error(err.response?.data?.message || c.saveFailed || 'Save failed')
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this property?')) return
+    if (!confirm(p.confirmDelete)) return
     try {
       await api.delete(`/properties/${id}`)
-      toast.success('Deleted')
+      toast.success(p.propertyDeleted)
       fetchProperties()
     } catch {
-      toast.error('Delete failed')
+      toast.error(p.deleteFailed)
     }
   }
 
@@ -848,11 +895,11 @@ const AdminProperties = () => {
             and there is no unsaved-changes guard, so a stray click must not
             discard it. The X, Cancel and Escape are the deliberate ways out.
           */
-          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4 py-10">
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto vk-scroll-gold bg-black/50 backdrop-blur-sm p-4 py-10">
           <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-6">
               <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-lg font-semibold text-[#202a36]">{editingId ? (p.editProperty || 'Edit Property') : (p.addPropertyTitle || 'Add Property')}</h2>
-              <button type="button" onClick={closeForm} aria-label={c.close || 'Close'} className="text-slate-400 hover:text-slate-700 cursor-pointer">
+              <button type="button" onClick={closeForm} disabled={saving} aria-label={c.close || 'Close'} className="text-slate-400 hover:text-slate-700 cursor-pointer">
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
@@ -1202,7 +1249,7 @@ const AdminProperties = () => {
                   {images.map((img, i) => (
                     <div key={i} className="relative group">
                       <img src={img} alt="" className="h-20 w-28 rounded-xl object-cover border border-slate-200" />
-                      <button type="button" onClick={() => setImages(prev => prev.filter((_, j) => j !== i))}
+                      <button type="button" onClick={() => removeImage(i)} disabled={saving}
                         className="absolute -top-2 -right-2 hidden group-hover:flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white cursor-pointer">
                         <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
                       </button>
@@ -1216,17 +1263,17 @@ const AdminProperties = () => {
   multiple
   onChange={handleImage}
   className="hidden"
-  disabled={uploading}
+  disabled={uploading || saving}
 />
                   </label>
                 </div>
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button type="submit" disabled={saving} className="rounded-full bg-[#202a36] px-8 py-3 text-sm font-semibold text-white hover:bg-[#4b6741] transition disabled:opacity-60 cursor-pointer">
+                <button type="submit" disabled={saving || uploading} className="rounded-full bg-[#202a36] px-8 py-3 text-sm font-semibold text-white hover:bg-[#4b6741] transition disabled:opacity-60 cursor-pointer">
                   {saving ? (c.saving || 'Saving...') : editingId ? (p.updateProperty || 'Update Property') : (p.saveProperty || 'Save Property')}
                 </button>
-                <button type="button" onClick={() => setFormOpen(false)} className="rounded-full border border-slate-200 px-8 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">{c.cancel || 'Cancel'}</button>
+                <button type="button" onClick={closeForm} disabled={saving} className="rounded-full border border-slate-200 px-8 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">{c.cancel || 'Cancel'}</button>
               </div>
             </form>
           </div>
@@ -1235,6 +1282,13 @@ const AdminProperties = () => {
 
         {loading ? (
           <div className="flex justify-center py-10"><div className="h-10 w-10 animate-spin rounded-full border-4 border-[#4b6741] border-t-transparent" /></div>
+        ) : loadError ? (
+          <div role="alert" className="rounded-2xl border p-6 text-center" style={{ borderColor: 'var(--vk-border)', color: 'var(--vk-text)' }}>
+            <p>{p.loadError}</p>
+            <button type="button" onClick={fetchProperties} className="mt-3 underline cursor-pointer">{p.locationRetry}</button>
+          </div>
+        ) : visibleProperties.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-16 text-center text-sm text-slate-400">{p.noListings}</div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {visibleProperties.map(prop => (

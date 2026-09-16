@@ -1,0 +1,15 @@
+{
+  "hash": "1bb97e69",
+  "configHash": "c2cb2fff",
+  "lockfileHash": "e3b0c442",
+  "browserHash": "eae1f23c",
+  "optimized": {
+    "@azure/msal-browser/redirect-bridge": {
+      "src": "../../frontend/node_modules/@azure/msal-browser/dist/redirect_bridge/index.mjs",
+      "file": "@azure_msal-browser_redirect-bridge.js",
+      "fileHash": "66553355",
+      "needsInterop": false
+    }
+  },
+  "chunks": {}
+}

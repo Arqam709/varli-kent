@@ -195,7 +195,8 @@ test('Apply only exists where it does something', async () => {
   // a real job: closing it over the results it just filtered.
   assert.ok(/\{onDone && \(/.test(src),
     'the Apply button is unconditional — on desktop it would suggest filters are not yet applied')
-  assert.equal(/onClick=\{fetchProperties\}/.test(src), false,
+  const panel = src.slice(src.indexOf('const renderFilterPanel ='), src.indexOf('/* Hero banner */'))
+  assert.equal(/onClick=\{fetchProperties\}/.test(panel), false,
     'a manual refetch button is back; filtering is already immediate')
 })
 
