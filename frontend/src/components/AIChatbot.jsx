@@ -33,6 +33,50 @@ const PlusIcon = () => (
   </svg>
 )
 
+const TrashIcon = () => (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16" />
+  </svg>
+)
+
+// Confirm dialog for the two destructive history actions (donor visual:
+// centered card, danger-red confirm), drawn inside the chat panel with the
+// widget's own theme tokens. `busy` disables both buttons while the delete is
+// in flight so Cancel cannot dismiss a request that is still running.
+const ChatConfirmModal = ({ message, onConfirm, onCancel, confirmLabel, cancelLabel, busy = false }) => (
+  <div className="absolute inset-0 z-10 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-describedby="vk-chat-confirm-message"
+      className="w-full max-w-[280px] rounded-2xl p-5 text-center shadow-2xl"
+      style={{ backgroundColor: C.cardBg }}
+    >
+      <p id="vk-chat-confirm-message" className="text-sm leading-relaxed" style={{ color: C.textDark }}>{message}</p>
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="flex-1 rounded-xl border py-2 text-xs font-semibold uppercase tracking-wide transition hover:opacity-80 disabled:opacity-50"
+          style={{ borderColor: C.border, color: C.muted }}
+        >
+          {cancelLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={busy}
+          className="flex-1 rounded-xl py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:opacity-90 disabled:opacity-60"
+          style={{ backgroundColor: '#dc2626' }}
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </div>
+  </div>
+)
+
 const EmptyHistoryIcon = () => (
   <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path
@@ -48,7 +92,11 @@ const EmptyHistoryIcon = () => (
 // formatting follows the chosen website language rather than silently
 // deferring to the browser/OS locale (the previous `undefined`-locale
 // behavior).
-const LOCALE_MAP = { en: 'en-US', tr: 'tr-TR', ar: 'ar' }
+const LOCALE_MAP = { en: 'en-US', tr: 'tr-TR', ar: 'ar', de: 'de-DE', ru: 'ru-RU', ur: 'ur-PK' }
+
+// Same right-to-left set LanguageContext stamps on <html dir>. The panel sets
+// its own `dir`, so leaving a language out here would force it back to LTR.
+const RTL_LANGUAGES = ['ar', 'ur']
 
 // Stable module-level fallback (never recreated per render) so `c` keeps a
 // stable identity across renders when translations.chatbot is ever missing —
@@ -107,7 +155,7 @@ export default function AIChatbot() {
   // matchReason) is untouched in this phase and must keep rendering exactly
   // as received.
   const c = t.chatbot || EMPTY_CHATBOT_TRANSLATIONS
-  const isRTL = language === 'ar'
+  const isRTL = RTL_LANGUAGES.includes(language)
 
   const {
     open,
@@ -332,7 +380,9 @@ export default function AIChatbot() {
           dir={isRTL ? 'rtl' : 'ltr'}
           className="fixed bottom-6 right-4 sm:right-6 z-[9998] flex items-center gap-3 rounded-full px-4 sm:px-5 py-3.5 text-xs font-semibold uppercase tracking-widest shadow-2xl transition-all duration-300 hover:-translate-y-1"
           style={{
-            backgroundColor: C.green,
+            // --vk-green-brand is the theme token meant for fills under light
+            // text; --vk-green is a pale step in most themes (down to ~1.2:1).
+            backgroundColor: C.accent,
             color: C.textLight,
             border: `1px solid ${C.gold}`,
           }}
@@ -512,7 +562,7 @@ export default function AIChatbot() {
               </div>
 
               {/* Scrollable rows only */}
-              <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ backgroundColor: C.softWhite }}>
+              <div className="vk-scroll-gold flex-1 overflow-y-auto overflow-x-hidden" style={{ backgroundColor: C.softWhite }}>
                 {conversationsLoading && (
                   <p className="px-4 py-8 text-center text-sm" style={{ color: C.muted }}>
                     {c.history?.loading || 'Loading conversations...'}
@@ -640,7 +690,7 @@ export default function AIChatbot() {
             <>
           {/* Messages */}
           <div
-            className="flex-1 space-y-4 overflow-y-auto px-4 py-5"
+            className="vk-scroll-gold flex-1 space-y-4 overflow-y-auto px-4 py-5"
             style={{ backgroundColor: C.softWhite }}
           >
             {messages.map((msg, index) => {
@@ -654,7 +704,7 @@ export default function AIChatbot() {
                   <div
                     className="max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm"
                     style={{
-                      backgroundColor: isUser ? C.green : C.cardBg,
+                      backgroundColor: isUser ? C.accent : C.cardBg,
                       color: isUser ? C.textLight : C.textDark,
                       border: isUser ? 'none' : `1px solid ${C.border}`,
                     }}
@@ -733,7 +783,7 @@ export default function AIChatbot() {
 
                               <p
                                 className="mt-2 text-xs font-semibold"
-                                style={{ color: C.green }}
+                                style={{ color: C.accent }}
                               >
                                 {property.priceLabel || property.price}
                               </p>
@@ -753,7 +803,7 @@ export default function AIChatbot() {
                                 onClick={closeChat}
                                 className="mt-3 inline-flex rounded-full px-3 py-2 text-[10px] font-semibold uppercase tracking-widest"
                                 style={{
-                                  backgroundColor: C.green,
+                                  backgroundColor: C.accent,
                                   color: C.textLight,
                                 }}
                               >
@@ -794,7 +844,7 @@ export default function AIChatbot() {
               borderTop: `1px solid ${C.border}`,
             }}
           >
-            <div className="flex gap-2 overflow-x-auto pb-1" dir={isRTL ? 'rtl' : 'ltr'}>
+            <div className="vk-scroll-gold flex gap-2 overflow-x-auto pb-1" dir={isRTL ? 'rtl' : 'ltr'}>
               {pageConfig.quickQuestions.map((question) => (
                 <button
                   key={question}
