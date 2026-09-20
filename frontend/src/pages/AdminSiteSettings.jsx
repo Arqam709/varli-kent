@@ -11,6 +11,7 @@ const AdminSiteSettings = () => {
   const { setSettings } = useSiteSettings()
   const { t } = useLanguage()
   const p = t.adminPages?.settings || {}
+  const c = t.adminPages?.common || {}
   const [form, setForm] = useState({
     email: '', phone: '', whatsapp: '', address: '', mapsUrl: '', instagram: '', linkedin: '',
     showroomEnabled: { architecture: true, interior: true, construction: true, renovation: true },
@@ -31,9 +32,9 @@ const AdminSiteSettings = () => {
     try {
       const r = await api.put('/settings', form)
       setSettings(r.data.settings)
-      toast.success('Settings saved')
+      toast.success(c.saved || 'Settings saved')
     } catch {
-      toast.error('Failed to save settings')
+      toast.error(c.saveFailed || 'Failed to save settings')
     } finally {
       setSaving(false)
     }

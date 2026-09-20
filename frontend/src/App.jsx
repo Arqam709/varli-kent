@@ -7,6 +7,7 @@ import PublicLayout from './components/PublicLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 import ScrollToTop from './components/ScrollToTop'
 import PrivacyBanner from './components/PrivacyBanner'
+import ErrorBoundary from './components/ErrorBoundary'
 import HomePage from './pages/HomePage'
 import PropertiesPage from './pages/PropertiesPage'
 import PropertyDetailsPage from './pages/PropertyDetailsPage'
@@ -59,8 +60,9 @@ const App = ({ ready }) => (
       <ScrollToTop />
       <ToastContainer position="top-right" theme="dark" />
       {ready && <PrivacyBanner />}
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
           <Route path="/" element={<PublicLayout><HomePage /></PublicLayout>} />
           <Route path="/properties" element={<PublicLayout><PropertiesPage /></PublicLayout>} />
           <Route path="/properties/:id" element={<PublicLayout><PropertyDetailsPage /></PublicLayout>} />
@@ -117,8 +119,9 @@ const App = ({ ready }) => (
           <Route path="/agent/messages/:id" element={<ProtectedRoute requiredRole="agent"><AgentMessages /></ProtectedRoute>} />
           <Route path="/agent/profile" element={<ProtectedRoute requiredRole="agent"><AgentProfile /></ProtectedRoute>} />
           <Route path="*" element={<PublicLayout><HomePage /></PublicLayout>} />
-        </Routes>
-      </Suspense>
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
     </SiteSettingsProvider>
     </ThemeProvider>
   </BrowserRouter>

@@ -11,6 +11,7 @@ import useSeo from '../lib/useSeo'
 import { buildPropertyJsonLd } from '../lib/propertyJsonLd'
 import { C } from '../contexts/ThemeContext'
 
+const isVideoUrl = (url = '') => /\/video\/|\.(mp4|mov|webm|avi)(?:[?#]|$)/i.test(url)
 
 /*
  * Present, NOT truthy.
@@ -97,7 +98,7 @@ const PropertyDetailsPage = () => {
   const [similar, setSimilar] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeImg, setActiveImg] = useState(0)
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   // New namespace introduced by Wave 9c; this page had no translated strings
   // before, so only the location block below reads from it.
   const pd = t.propertyDetails || {}
@@ -302,14 +303,22 @@ const PropertyDetailsPage = () => {
         <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
           <div>
             {/* Gallery */}
-            <div className="overflow-hidden rounded-2xl shadow-lg">
-              <img src={images[activeImg]} alt={property.title} className="h-96 w-full object-cover" loading="lazy" />
+            <div className="overflow-hidden rounded-2xl bg-black shadow-lg">
+              {isVideoUrl(images[activeImg]) ? (
+                <video src={images[activeImg]} aria-label={property.title} className="h-96 w-full object-contain" controls playsInline />
+              ) : (
+                <img src={images[activeImg]} alt={property.title} className="h-96 w-full object-cover" loading="lazy" />
+              )}
             </div>
             {images.length > 1 && (
               <div className="vk-scroll-gold mt-3 flex gap-3 overflow-x-auto pb-2">
                 {images.map((img, i) => (
                   <button key={i} onClick={() => setActiveImg(i)} className={`shrink-0 overflow-hidden rounded-xl cursor-pointer ${activeImg === i ? 'ring-2 ring-[#4b6741]' : 'opacity-70 hover:opacity-100'}`}>
-                    <img src={img} alt={`${property.title} — photo ${i + 1}`} className="h-20 w-28 object-cover" loading="lazy" />
+                    {isVideoUrl(img) ? (
+                      <video src={img} aria-label={`${property.title} — video ${i + 1}`} className="h-20 w-28 bg-black object-cover" muted playsInline preload="metadata" />
+                    ) : (
+                      <img src={img} alt={`${property.title} — photo ${i + 1}`} className="h-20 w-28 object-cover" loading="lazy" />
+                    )}
                   </button>
                 ))}
               </div>
@@ -500,7 +509,7 @@ const PropertyDetailsPage = () => {
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sticky top-24">
               <p className="text-sm uppercase tracking-wide text-slate-500">Price</p>
               <p style={{ fontFamily: 'Cinzel, serif' }} className="mt-1 text-3xl font-bold text-[#d97706]">
-                {formatPrice(property.price, property.listingType, property.priceLabel)}
+                {formatPrice(property.price, property.listingType, property.priceLabel, language)}
               </p>
 
               <hr className="my-5 border-slate-100" />

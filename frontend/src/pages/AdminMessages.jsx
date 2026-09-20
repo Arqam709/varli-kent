@@ -21,13 +21,13 @@ const AdminMessages = () => {
   }, [])
 
   const deleteMessage = async (id) => {
-    if (!confirm('Delete this message permanently?')) return
+    if (!confirm(p.deleteConfirm || 'Delete this message permanently?')) return
     try {
       await api.delete(`/contact/${id}`)
       setMessages(prev => prev.filter(m => m._id !== id))
-      toast.success('Message deleted')
+      toast.success(p.deleted || 'Message deleted')
     } catch {
-      toast.error('Failed to delete message')
+      toast.error(p.deleteFailed || 'Failed to delete message')
     }
   }
 
@@ -35,9 +35,9 @@ const AdminMessages = () => {
     try {
       await api.patch(`/contact/${id}/status`, { status })
       setMessages(prev => prev.map(m => m._id === id ? { ...m, status } : m))
-      toast.success(`Marked as ${status}`)
+      toast.success((p.markedAs || 'Marked as {status}').replace('{status}', status))
     } catch {
-      toast.error('Failed to update status')
+      toast.error(p.updateStatusFailed || 'Failed to update status')
     }
   }
 

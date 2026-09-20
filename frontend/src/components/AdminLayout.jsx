@@ -139,6 +139,12 @@ const AdminLayout = ({ children }) => {
 
   return (
     <div className="flex h-screen bg-slate-100">
+      <a
+        href="#admin-main-content"
+        className="sr-only fixed left-4 top-4 z-[100] rounded bg-white px-4 py-2 text-slate-900 shadow-lg focus:not-sr-only"
+      >
+        {t.accessibility?.skipToContent || 'Skip to content'}
+      </a>
       <aside className="hidden lg:flex w-64 shrink-0 flex-col overflow-hidden">
         <Sidebar />
       </aside>
@@ -170,7 +176,7 @@ const AdminLayout = ({ children }) => {
             ))}
           </div>
         </header>
-        <main className="vk-scroll-gold flex-1 min-h-0 overflow-y-auto p-6 lg:p-8">{children}</main>
+        <main id="admin-main-content" tabIndex="-1" className="vk-scroll-gold flex-1 min-h-0 overflow-y-auto p-6 lg:p-8">{children}</main>
       </div>
     </div>
   )

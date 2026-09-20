@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
 import { useAuth } from '../contexts/AuthContext'
@@ -40,13 +40,31 @@ const AdminActivity = () => {
   const a = t.adminPages?.activity || {}
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const loadGeneration = useRef(0)
 
   const load = useCallback(() => {
-    api.get('/activity?limit=150').then(r => setLogs(r.data.logs || [])).catch(() => {}).finally(() => setLoading(false))
+    const generation = ++loadGeneration.current
+    api.get('/activity?limit=150')
+      .then(r => {
+        if (generation !== loadGeneration.current) return
+        setLogs(r.data.logs || [])
+        setLoadError('')
+      })
+      .catch(err => {
+        if (generation !== loadGeneration.current) return
+        setLoadError(err.response?.status
+          ? 'Request failed (HTTP ' + err.response.status + ')'
+          : 'Network error — could not reach the server')
+      })
+      .finally(() => {
+        if (generation === loadGeneration.current) setLoading(false)
+      })
   }, [])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => () => { loadGeneration.current++ }, [])
   useEffect(() => {
     if (!autoRefresh) return
     const id = setInterval(load, 15000)
@@ -82,6 +100,10 @@ const AdminActivity = () => {
 
         {loading ? (
           <div className="flex justify-center py-10"><div className="h-10 w-10 animate-spin rounded-full border-4 border-[#4b6741] border-t-transparent" /></div>
+        ) : loadError ? (
+          <div role="alert" className="rounded-2xl border-2 border-dashed border-red-200 bg-red-50 p-12 text-center text-sm text-red-700">
+            {(a.loadFailed || 'Could not load activity — {error}. Try Refresh above.').replace('{error}', loadError)}
+          </div>
         ) : logs.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-slate-200 p-12 text-center text-sm text-slate-400">
             {a.empty || 'No activity recorded yet. Actions will start appearing here as admins and owners make changes.'}

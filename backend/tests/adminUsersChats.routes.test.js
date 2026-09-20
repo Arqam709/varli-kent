@@ -41,6 +41,10 @@ mock.module('../models/ChatConversation.js', { defaultExport: {
 mock.module('../models/ChatMessage.js', { defaultExport: { find: () => query(() => [{ _id: id(90), role: 'user', text: 'Private fixture message' }]) } })
 mock.module('../models/Property.js', { defaultExport: {} })
 mock.module('../models/ContactSubmission.js', { defaultExport: {} })
+// Account deletion also removes the user's room photos and visualizations
+// (services/designRoomPhotos/lifecycle.js, services/designGenerations/lifecycle.js).
+mock.module('../models/DesignRoomPhoto.js', { defaultExport: { updateMany: async () => ({ modifiedCount: 0 }), find: async () => [] } })
+mock.module('../models/DesignGeneration.js', { defaultExport: { updateMany: async () => ({ modifiedCount: 0 }), find: async () => [] } })
 let server, base
 before(async () => {
   const app = express(); app.use(express.json())

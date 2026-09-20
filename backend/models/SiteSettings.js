@@ -8,6 +8,10 @@ const siteSettingsSchema = new mongoose.Schema({
   mapsUrl: { type: String, default: 'https://maps.google.com/?q=Levent+Besiktas+Istanbul' },
   instagram: { type: String, default: '' },
   linkedin: { type: String, default: '' },
+  // Room visualization (Design My Space → Visualize in My Room). OFF until a
+  // provider is integrated: with it on and no worker running, requests would
+  // queue and never finish. Owner-only, through PUT /api/settings.
+  designGenerationsEnabled: { type: Boolean, default: false },
   showroomEnabled: {
     architecture: { type: Boolean, default: true },
     interior: { type: Boolean, default: true },

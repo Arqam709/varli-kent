@@ -24,6 +24,7 @@ beforeEach(() => {
 const finishRequest = async ({
   method = 'POST',
   path = '/api/properties',
+  originalUrl = path,
   statusCode = 200,
   user = admin,
   body = undefined,
@@ -31,7 +32,7 @@ const finishRequest = async ({
 } = {}) => {
   let finishListener
   let nextCalled = false
-  const req = { method, path, user, body, headers }
+  const req = { method, path, originalUrl, user, body, headers }
   const res = {
     statusCode,
     on(event, listener) {
@@ -71,6 +72,24 @@ test('a successful admin mutation is logged', async () => {
   assert.equal(createdLogs.length, 1)
   assert.equal(createdLogs[0].actorRole, 'admin')
   assert.equal(createdLogs[0].action, 'created')
+})
+
+test('uses originalUrl after a mounted router restores req.path', async () => {
+  await finishRequest({
+    method: 'PATCH',
+    path: '/',
+    originalUrl: '/api/properties/0123456789abcdef01234567?source=admin',
+  })
+
+  assert.equal(createdLogs.length, 1)
+  assert.equal(createdLogs[0].path, '/api/properties/0123456789abcdef01234567')
+  assert.equal(createdLogs[0].resource, 'properties')
+  assert.equal(createdLogs[0].action, 'updated')
+})
+
+test('applies skip rules to originalUrl after a mounted router unwinds', async () => {
+  await finishRequest({ path: '/', originalUrl: '/api/agent/profile?tab=contact' })
+  assert.equal(createdLogs.length, 0)
 })
 
 test('a successful owner mutation is logged', async () => {

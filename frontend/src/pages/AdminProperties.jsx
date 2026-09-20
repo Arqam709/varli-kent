@@ -5,6 +5,19 @@ import AdminLayout from '../components/AdminLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { formatPrice } from '../lib/formatPrice'
+
+const isVideoUrl = (url = '') => /\/video\/|\.(mp4|mov|webm|avi)(?:[?#]|$)/i.test(url)
+
+const PropertyThumbnail = ({ property }) => {
+  const candidates = [property.mainImage, ...(property.images || [])].filter(Boolean)
+  const media = candidates.find(url => !isVideoUrl(url)) || candidates[0]
+
+  return isVideoUrl(media) ? (
+    <video src={media} aria-label={property.title} className="h-28 w-40 shrink-0 rounded-xl bg-black object-cover" muted playsInline preload="metadata" />
+  ) : (
+    <img src={media || 'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=200&q=60'} alt={property.title} className="h-28 w-40 shrink-0 rounded-xl object-cover" loading="lazy" />
+  )
+}
 import PropertyLocationPicker from '../components/PropertyLocationPicker'
 import AdminPropertyAssistant from '../components/AdminPropertyAssistant'
 
@@ -1309,7 +1322,7 @@ const AdminProperties = () => {
                     {p.featuredBadge || 'Featured on Homepage'}
                   </span>
                 )}
-                <img src={prop.mainImage || prop.images?.[0] || 'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=200&q=60'} alt={prop.title} className="h-28 w-40 shrink-0 rounded-xl object-cover" loading="lazy" />
+                <PropertyThumbnail property={prop} />
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <h3 className="font-semibold text-[#202a36] truncate">{prop.title}</h3>

@@ -367,7 +367,7 @@ function useFeaturedCards() {
   return cards
 }
 
-function FeaturedCarousel({ loading, featured, t, cms, navigate, C, mv, vp, SectionLabel, bgColor }) {
+function FeaturedCarousel({ loading, featured, t, cms, navigate, C, mv, vp, SectionLabel, bgColor, dark }) {
   const [idx, setIdx] = useState(0)
   const cardsVisible = useFeaturedCards()
   const maxIdx = Math.max(0, featured.length - Math.floor(cardsVisible))
@@ -391,13 +391,13 @@ function FeaturedCarousel({ loading, featured, t, cms, navigate, C, mv, vp, Sect
       <div className="py-20 md:py-28">
         {/* Header */}
         <motion.div initial="hidden" whileInView="show" viewport={vp} variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09 } } }} className="mb-10 md:mb-14 text-center px-4 sm:px-6">
-          <motion.div variants={mv.fadeIn()}><SectionLabel>{cms('featuredLabel', t.featured?.label || 'Handpicked')}</SectionLabel></motion.div>
+          <motion.div variants={mv.fadeIn()}><SectionLabel dark={dark}>{cms('featuredLabel', t.featured?.label || 'Handpicked')}</SectionLabel></motion.div>
           <div style={{ overflow: 'hidden' }}>
-            <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.8rem)', color: C.charcoal, margin: 0 }}>
+            <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.8rem)', color: dark ? C.marble : C.charcoal, margin: 0 }}>
               {cms('featuredHeading', t.featured?.heading || 'Featured Properties')}
             </motion.h2>
           </div>
-          <motion.p variants={mv.slideUp(0.12)} className="mx-auto mt-4 text-sm leading-relaxed max-w-lg" style={{ color: C.muted }}>
+          <motion.p variants={mv.slideUp(0.12)} className="mx-auto mt-4 text-sm leading-relaxed max-w-lg" style={{ color: dark ? C.mutedOnDark : C.muted }}>
             {cms('featuredSubtitle', t.featured?.subtitle || 'Exclusive homes curated for discerning buyers and renters across Istanbul.')}
           </motion.p>
         </motion.div>
@@ -524,6 +524,10 @@ export default function HomePage() {
   const mv       = useMotionVariants()
   const { get: cms, isSectionVisible, bandFor } = usePageContent('home', SECTION_ORDER, DEFAULT_BANDS)
   const bg = (key) => sectionBackground(key, bandFor(key), DEFAULT_BANDS, SECTION_BG, CANONICAL_BG)
+  const isDark = (key) => bandFor(key) === 'dark'
+  const fg = (key) => (isDark(key) ? C.marble : C.charcoal)
+  const fgMuted = (key) => (isDark(key) ? C.mutedOnDark : C.muted)
+  const fgFaint = (key) => (isDark(key) ? C.faintOnDark : 'rgba(30,30,28,0.45)')
   const prefersReducedMotion = useReducedMotion()
 
   const scrollToServices = () => {
@@ -572,13 +576,13 @@ export default function HomePage() {
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.6), transparent)' }} />
           <div className="relative mx-auto max-w-7xl px-6 py-28">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-16 text-center">
-              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{cms('servicesLabel', t.services?.label || 'What We Do')}</SectionLabel></motion.div>
+              <motion.div variants={mv.fadeIn()}><SectionLabel dark={isDark('services')}>{cms('servicesLabel', t.services?.label || 'What We Do')}</SectionLabel></motion.div>
               <div className="overflow-hidden">
-                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: C.marble, lineHeight: 1.15 }}>
+                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: fg('services'), lineHeight: 1.15 }}>
                   {cms('servicesHeading', t.services?.heading || 'Five Services. One Company.')}
                 </motion.h2>
               </div>
-              <motion.p variants={mv.slideUp(0.12)} className="mx-auto mt-4 max-w-xl text-sm leading-relaxed" style={{ color: '#9A9A92' }}>
+              <motion.p variants={mv.slideUp(0.12)} className="mx-auto mt-4 max-w-xl text-sm leading-relaxed" style={{ color: fgMuted('services') }}>
                 {cms('servicesSubheading', t.services?.subheading || 'From the first sketch to the final sale — we cover every stage of the property lifecycle.')}
               </motion.p>
             </motion.div>
@@ -586,13 +590,13 @@ export default function HomePage() {
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               {SVC_KEYS.map((key, i) => (
                 <motion.div key={key} initial="hidden" whileInView="show" viewport={vp} variants={mv.slideUp(i * 0.08)}>
-                  <Link to={SVC_HREFS[key]} className="group flex h-full flex-col gap-5 rounded-2xl p-7 transition-all duration-300 hover:-translate-y-1 cursor-pointer" style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(var(--vk-green-rgb), 0.22)', boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}>
+                  <Link to={SVC_HREFS[key]} className="group flex h-full flex-col gap-5 rounded-2xl p-7 transition-all duration-300 hover:-translate-y-1 cursor-pointer" style={{ backgroundColor: isDark('services') ? 'rgba(255,255,255,0.05)' : '#fff', border: '1px solid rgba(var(--vk-green-rgb), 0.18)', boxShadow: isDark('services') ? '0 2px 16px rgba(0,0,0,0.25)' : '0 2px 16px rgba(0,0,0,0.06)' }}>
                     <span style={{ color: C.green }} className="transition-colors duration-300 group-hover:text-[#C9A35A]">{SVC_ICONS[key]}</span>
                     <div className="flex-1">
-                      <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '0.85rem', color: C.marble }} className="mb-2 transition-colors duration-300 group-hover:text-[#C9A35A]">
+                      <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '0.85rem', color: fg('services') }} className="mb-2 transition-colors duration-300 group-hover:text-[#C9A35A]">
                         {t.services?.items?.[key]?.label || key}
                       </h3>
-                      <p className="text-xs leading-relaxed" style={{ color: '#8A8A83' }}>{t.services?.items?.[key]?.desc || ''}</p>
+                      <p className="text-xs leading-relaxed" style={{ color: fgFaint('services') }}>{t.services?.items?.[key]?.desc || ''}</p>
                     </div>
                     <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-widest uppercase opacity-0 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-1" style={{ color: C.gold }}>
                       {t.services?.learnMore || 'Learn more'}
@@ -630,16 +634,16 @@ export default function HomePage() {
               </div>
 
               <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.08)} className="lg:pl-10">
-                <motion.div variants={mv.fadeIn()}><SectionLabel>{cms('aboutLabel', t.about?.label || 'Who We Are')}</SectionLabel></motion.div>
+                <motion.div variants={mv.fadeIn()}><SectionLabel dark={isDark('about')}>{cms('aboutLabel', t.about?.label || 'Who We Are')}</SectionLabel></motion.div>
                 <div className="overflow-hidden mb-6">
-                  <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', color: C.charcoal, lineHeight: 1.18 }}>
+                  <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', color: fg('about'), lineHeight: 1.18 }}>
                     {cms('aboutHeading', t.about?.heading || "Istanbul's Complete Property Company")}
                   </motion.h2>
                 </div>
-                <motion.p variants={mv.slideUp(0.1)} className="mb-4 leading-relaxed text-sm" style={{ color: C.muted }}>
+                <motion.p variants={mv.slideUp(0.1)} className="mb-4 leading-relaxed text-sm" style={{ color: fgMuted('about') }}>
                   {cms('aboutBody1', t.about?.body1 || "VarliKent is Istanbul's full-service property company. We don't just find properties — we design them, build them, renovate them, and bring them to life with exceptional interior work.")}
                 </motion.p>
-                <motion.p variants={mv.slideUp(0.16)} className="mb-10 leading-relaxed text-sm" style={{ color: C.muted }}>
+                <motion.p variants={mv.slideUp(0.16)} className="mb-10 leading-relaxed text-sm" style={{ color: fgMuted('about') }}>
                   {cms('aboutBody2', t.about?.body2 || 'Founded with a vision to unify the property lifecycle under one trusted name, we serve homeowners, developers, and investors seeking excellence at every stage.')}
                 </motion.p>
                 <motion.div variants={mv.slideUp(0.22)}>
@@ -663,9 +667,9 @@ export default function HomePage() {
 
           <div className="relative mx-auto max-w-7xl px-6 py-32">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-20 text-center">
-              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{cms('processLabel', t.process?.label || 'How We Work')}</SectionLabel></motion.div>
+              <motion.div variants={mv.fadeIn()}><SectionLabel dark={isDark('process')}>{cms('processLabel', t.process?.label || 'How We Work')}</SectionLabel></motion.div>
               <div className="overflow-hidden">
-                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: C.marble }}>
+                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: fg('process') }}>
                   {cms('processHeading', t.process?.heading || 'From Vision to Handover')}
                 </motion.h2>
               </div>
@@ -686,8 +690,8 @@ export default function HomePage() {
                       <span style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(3rem, 5.5vw, 4.5rem)', fontWeight: 700, lineHeight: 1, color: 'rgba(var(--vk-gold-rgb), 0.13)', userSelect: 'none', display: 'block' }}>{step.num}</span>
                       <div className="absolute bottom-2 left-0 h-px w-8" style={{ backgroundColor: C.gold, opacity: 0.55 }} />
                     </div>
-                    <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '0.85rem', color: C.marble }} className="mb-3">{step.title}</h3>
-                    <p className="text-xs leading-relaxed" style={{ color: C.muted }}>{step.desc}</p>
+                    <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '0.85rem', color: fg('process') }} className="mb-3">{step.title}</h3>
+                    <p className="text-xs leading-relaxed" style={{ color: fgMuted('process') }}>{step.desc}</p>
                   </motion.article>
                 ))}
               </div>
@@ -715,13 +719,13 @@ export default function HomePage() {
               </motion.div>
 
               <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.08)} className="lg:pl-8">
-                <motion.div variants={mv.fadeIn()}><SectionLabel>{cms('trustLabel', t.trust?.label || 'Why VarliKent')}</SectionLabel></motion.div>
+                <motion.div variants={mv.fadeIn()}><SectionLabel dark={isDark('trust')}>{cms('trustLabel', t.trust?.label || 'Why VarliKent')}</SectionLabel></motion.div>
                 <div className="overflow-hidden mb-6">
-                  <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.7rem, 3.6vw, 2.4rem)', color: C.charcoal, lineHeight: 1.22 }}>
+                  <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.7rem, 3.6vw, 2.4rem)', color: fg('trust'), lineHeight: 1.22 }}>
                     {cms('trustHeading', t.trust?.heading || 'A refined approach to property — from design to delivery.')}
                   </motion.h2>
                 </div>
-                <motion.p variants={mv.slideUp(0.10)} className="mb-10 leading-relaxed text-sm" style={{ color: C.muted }}>
+                <motion.p variants={mv.slideUp(0.10)} className="mb-10 leading-relaxed text-sm" style={{ color: fgMuted('trust') }}>
                   {cms('trustBody', t.trust?.body || 'We bring together market intelligence, architectural expertise, and exceptional service — guiding clients through every stage.')}
                 </motion.p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -749,9 +753,9 @@ export default function HomePage() {
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.6), transparent)' }} />
           <div className="relative mx-auto max-w-7xl px-6 py-28">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-14 text-center">
-              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{cms('browseLabel', t.browse?.label || 'Browse By Type')}</SectionLabel></motion.div>
+              <motion.div variants={mv.fadeIn()}><SectionLabel dark={isDark('browse')}>{cms('browseLabel', t.browse?.label || 'Browse By Type')}</SectionLabel></motion.div>
               <div className="overflow-hidden">
-                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: C.marble }}>
+                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: fg('browse') }}>
                   {cms('browseHeading', t.browse?.heading || 'For Sale or Rent')}
                 </motion.h2>
               </div>
@@ -761,13 +765,13 @@ export default function HomePage() {
               {/* Sale */}
               <motion.div initial="hidden" whileInView="show" viewport={vp} variants={mv.slideLeft()} onClick={() => navigate('/buy')}
                 className="group relative cursor-pointer overflow-hidden rounded-2xl p-12 transition-all duration-300 hover:-translate-y-1"
-                style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: `1px solid rgba(var(--vk-green-rgb), 0.25)`, boxShadow: '0 4px 24px rgba(0,0,0,0.3)' }}>
+                style={{ backgroundColor: isDark('browse') ? 'rgba(255,255,255,0.05)' : '#fff', border: '1px solid rgba(var(--vk-green-rgb), 0.25)', boxShadow: isDark('browse') ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)' }}>
                 <div className="absolute -top-10 -right-10 h-44 w-44 rounded-full opacity-20 blur-3xl transition-opacity duration-300 group-hover:opacity-40" style={{ backgroundColor: C.green }} />
                 <svg className="relative h-10 w-10 mb-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: C.green }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l9-9 9 9M5 10v9a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1v-9" /></svg>
-                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.4rem', color: C.marble }} className="mb-3">{cms('browseSaleTitle', t.browse?.sale?.title || 'Properties for Sale')}</h3>
-                <p className="text-sm leading-relaxed mb-8" style={{ color: '#9A9A92' }}>{cms('browseSaleDesc', t.browse?.sale?.desc || 'Invest in Istanbul — from city apartments to Bosphorus villas.')}</p>
+                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.4rem', color: fg('browse') }} className="mb-3">{cms('browseSaleTitle', t.browse?.sale?.title || 'Properties for Sale')}</h3>
+                <p className="text-sm leading-relaxed mb-8" style={{ color: fgMuted('browse') }}>{cms('browseSaleDesc', t.browse?.sale?.desc || 'Invest in Istanbul — from city apartments to Bosphorus villas.')}</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs" style={{ color: '#7A7A72' }}>{saleCount} {cms('browseListings', t.browse?.listings || 'listings')}</span>
+                  <span className="text-xs" style={{ color: fgFaint('browse') }}>{saleCount} {cms('browseListings', t.browse?.listings || 'listings')}</span>
                   <span className="flex items-center gap-2 rounded-full px-6 py-2.5 text-xs font-semibold uppercase tracking-widest text-white transition-all duration-300 group-hover:opacity-85" style={{ backgroundColor: C.green }}>
                     {cms('browseSaleBtn', t.browse?.sale?.btn || 'Explore Sales')}
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
@@ -778,13 +782,13 @@ export default function HomePage() {
               {/* Rent */}
               <motion.div initial="hidden" whileInView="show" viewport={vp} variants={mv.slideRight()} onClick={() => navigate('/rent')}
                 className="group relative cursor-pointer overflow-hidden rounded-2xl p-12 transition-all duration-300 hover:-translate-y-1"
-                style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: `1px solid rgba(var(--vk-gold-rgb), 0.25)`, boxShadow: '0 4px 24px rgba(0,0,0,0.3)' }}>
+                style={{ backgroundColor: isDark('browse') ? 'rgba(255,255,255,0.05)' : '#fff', border: '1px solid rgba(var(--vk-gold-rgb), 0.25)', boxShadow: isDark('browse') ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)' }}>
                 <div className="absolute -top-10 -right-10 h-44 w-44 rounded-full opacity-20 blur-3xl transition-opacity duration-300 group-hover:opacity-40" style={{ backgroundColor: C.gold }} />
                 <svg className="relative h-10 w-10 mb-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: C.gold }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
-                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.4rem', color: C.marble }} className="mb-3">{cms('browseRentTitle', t.browse?.rent?.title || 'Properties for Rent')}</h3>
-                <p className="text-sm leading-relaxed mb-8" style={{ color: '#9A9A92' }}>{cms('browseRentDesc', t.browse?.rent?.desc || "Flexible rental options across Istanbul's most sought-after neighbourhoods.")}</p>
+                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.4rem', color: fg('browse') }} className="mb-3">{cms('browseRentTitle', t.browse?.rent?.title || 'Properties for Rent')}</h3>
+                <p className="text-sm leading-relaxed mb-8" style={{ color: fgMuted('browse') }}>{cms('browseRentDesc', t.browse?.rent?.desc || "Flexible rental options across Istanbul's most sought-after neighbourhoods.")}</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs" style={{ color: '#7A7A72' }}>{rentCount} {cms('browseListings', t.browse?.listings || 'listings')}</span>
+                  <span className="text-xs" style={{ color: fgFaint('browse') }}>{rentCount} {cms('browseListings', t.browse?.listings || 'listings')}</span>
                   <span className="flex items-center gap-2 rounded-full px-6 py-2.5 text-xs font-semibold uppercase tracking-widest text-white transition-all duration-300 group-hover:opacity-85" style={{ backgroundColor: C.gold }}>
                     {cms('browseRentBtn', t.browse?.rent?.btn || 'Explore Rentals')}
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
@@ -805,6 +809,7 @@ export default function HomePage() {
           t={t}
           cms={cms}
           bgColor={bg('featured')}
+          dark={isDark('featured')}
           navigate={navigate}
           C={C}
           mv={mv}
@@ -819,13 +824,13 @@ export default function HomePage() {
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
           <div className="mx-auto max-w-7xl px-6 py-32">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-14 text-center">
-              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{cms('projectsLabel', t.projects?.label || 'Our Work')}</SectionLabel></motion.div>
+              <motion.div variants={mv.fadeIn()}><SectionLabel dark={isDark('projects')}>{cms('projectsLabel', t.projects?.label || 'Our Work')}</SectionLabel></motion.div>
               <div className="overflow-hidden">
-                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: C.marble }}>
+                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: fg('projects') }}>
                   {cms('projectsHeading', t.projects?.heading || 'Selected Projects')}
                 </motion.h2>
               </div>
-              <motion.p variants={mv.slideUp(0.12)} className="mx-auto mt-4 max-w-xl text-sm leading-relaxed" style={{ color: C.muted }}>
+              <motion.p variants={mv.slideUp(0.12)} className="mx-auto mt-4 max-w-xl text-sm leading-relaxed" style={{ color: fgMuted('projects') }}>
                 {cms('projectsSubtitle', t.projects?.subtitle || 'A glimpse into the spaces we have designed, built and transformed across Istanbul.')}
               </motion.p>
             </motion.div>
@@ -858,7 +863,7 @@ export default function HomePage() {
 
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={mv.slideUp(0.1)} className="mt-14 text-center">
               <Link to="/architecture" className="inline-flex items-center gap-2 rounded-full px-9 py-3.5 text-xs font-semibold uppercase tracking-widest transition-all duration-300 hover:opacity-80"
-                style={{ border: '1px solid rgba(var(--vk-gold-rgb), 0.33)', color: C.marble }}>
+                style={{ border: '1px solid rgba(var(--vk-gold-rgb), 0.33)', color: fg('projects') }}>
                 {cms('projectsViewAll', t.projects?.viewAll || 'See All Projects')}
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </Link>
@@ -881,7 +886,7 @@ export default function HomePage() {
               ].map(({ n, s, l }, i) => (
                 <motion.div key={l} initial="hidden" whileInView="show" viewport={vp} variants={mv.slideUp(i * 0.1)}>
                   <div style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(2rem, 3.8vw, 2.8rem)', color: C.gold, fontWeight: 700 }}><CountUp target={n} suffix={s} /></div>
-                  <div className="mt-2 text-[10px] tracking-[0.32em] uppercase" style={{ color: C.muted }}>{l}</div>
+                  <div className="mt-2 text-[10px] tracking-[0.32em] uppercase" style={{ color: fgMuted('stats') }}>{l}</div>
                 </motion.div>
               ))}
             </div>
@@ -895,9 +900,9 @@ export default function HomePage() {
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
           <div className="mx-auto max-w-7xl px-6 py-32">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-14 text-center">
-              <motion.div variants={mv.fadeIn()}><SectionLabel>{cms('testimonialsLabel', t.testimonials?.label || 'Client Stories')}</SectionLabel></motion.div>
+              <motion.div variants={mv.fadeIn()}><SectionLabel dark={isDark('testimonials')}>{cms('testimonialsLabel', t.testimonials?.label || 'Client Stories')}</SectionLabel></motion.div>
               <div className="overflow-hidden">
-                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: C.charcoal }}>
+                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.9rem, 4vw, 2.8rem)', color: fg('testimonials') }}>
                   {cms('testimonialsHeading', t.testimonials?.heading || 'What Our Clients Say')}
                 </motion.h2>
               </div>
@@ -960,13 +965,13 @@ export default function HomePage() {
 
           <div className="relative z-10 mx-auto max-w-3xl px-6 text-center">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.11)}>
-              <motion.div variants={mv.fadeIn()}><SectionLabel dark>{t.cta?.label || 'Get Started'}</SectionLabel></motion.div>
+              <motion.div variants={mv.fadeIn()}><SectionLabel dark={isDark('cta')}>{t.cta?.label || 'Get Started'}</SectionLabel></motion.div>
               <div className="overflow-hidden mb-6">
-                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(2rem, 4.8vw, 3rem)', color: C.marble, lineHeight: 1.16 }}>
+                <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(2rem, 4.8vw, 3rem)', color: fg('cta'), lineHeight: 1.16 }}>
                   {cms('ctaHeading', t.cta?.heading || 'Ready to Start Your Project?')}
                 </motion.h2>
               </div>
-              <motion.p variants={mv.slideUp(0.12)} className="mx-auto max-w-lg leading-relaxed text-sm" style={{ color: C.muted }}>
+              <motion.p variants={mv.slideUp(0.12)} className="mx-auto max-w-lg leading-relaxed text-sm" style={{ color: fgMuted('cta') }}>
                 {cms('ctaBody', t.cta?.body || 'Whether you are buying, building, renovating or designing — our team guides you from the first conversation to final delivery.')}
               </motion.p>
               <motion.div variants={mv.slideUp(0.20)} className="mt-12 flex flex-wrap items-center justify-center gap-5">
@@ -983,7 +988,7 @@ export default function HomePage() {
   {cms('ctaBrowse', t.cta?.browse || 'Explore Services')}
 </button>
                 <Link to="/contact" className="rounded-full border px-11 py-4 text-xs font-semibold uppercase tracking-widest transition-all duration-300 hover:opacity-75"
-                  style={{ borderColor: 'rgba(var(--vk-gold-rgb), 0.38)', color: C.marble }}>
+                  style={{ borderColor: 'rgba(var(--vk-gold-rgb), 0.38)', color: fg('cta') }}>
                   {cms('ctaContact', t.cta?.contact || 'Contact Us')}
                 </Link>
               </motion.div>

@@ -110,13 +110,13 @@ function ShowroomLightbox({ item, onClose }) {
         </div>
 
         {hasDetail && (
-          <div className="overflow-y-auto p-7 sm:p-9 lg:w-2/5">
+          <div className="vk-scroll-gold min-h-0 flex-1 overflow-y-auto p-7 sm:p-9 lg:w-2/5">
             {(title || caption) && (
-              <h3 style={{ fontFamily: 'Cinzel, serif', color: C.marble }} className="mb-4 text-xl font-semibold">
+              <h3 style={{ fontFamily: 'Cinzel, serif', color: C.marble, overflowWrap: 'anywhere' }} className="mb-4 break-words text-xl font-semibold">
                 {title || caption}
               </h3>
             )}
-            <p className="whitespace-pre-line text-sm leading-relaxed" style={{ color: 'rgba(246,243,237,0.75)' }}>
+            <p className="break-words whitespace-pre-line text-sm leading-relaxed" style={{ color: 'rgba(246,243,237,0.75)', overflowWrap: 'anywhere' }}>
               {detailText}
             </p>
           </div>

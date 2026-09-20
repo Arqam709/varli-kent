@@ -7,6 +7,8 @@ import { protect } from '../middleware/auth.js'
 import { requireRole } from '../middleware/checkPermission.js'
 import { validateRoleChange, canReceiveAdminPermissions } from '../services/roleManagement.js'
 import { adminAgentOption, ADMIN_AGENT_OPTION_FIELDS } from '../services/agentAssignment.js'
+import { deleteAllRoomPhotosForUser } from '../services/designRoomPhotos/lifecycle.js'
+import { deleteAllGenerationsForUser } from '../services/designGenerations/lifecycle.js'
 
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
@@ -351,6 +353,14 @@ router.delete('/:id', protect, requireRole('owner'), async (req, res, next) => {
     if (!target) return res.status(404).json({ success: false, message: 'User not found' })
     if (target.role === 'owner') return res.status(403).json({ success: false, message: 'Cannot delete an owner account' })
     if (target._id.toString() === req.user._id.toString()) return res.status(403).json({ success: false, message: 'Cannot delete your own account' })
+
+    // Private Design My Space data first. If it cannot even be hidden (a
+    // database error), the account is not deleted, so nothing is left behind
+    // owned by nobody. Assets whose physical deletion fails are retried by the
+    // sweep. Visualizations go before their source photos: they are what
+    // references them.
+    await deleteAllGenerationsForUser(target._id)
+    await deleteAllRoomPhotosForUser(target._id)
 
     await User.findByIdAndDelete(req.params.id)
     res.json({ success: true, message: 'User permanently deleted' })

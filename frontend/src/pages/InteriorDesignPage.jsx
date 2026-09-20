@@ -137,6 +137,8 @@ export default function InteriorDesignPage() {
   const p = t.interiorPage
   const { get: cms, isSectionVisible, bandFor } = usePageContent('interior-design', SECTION_ORDER, DEFAULT_BANDS)
   const bg = (key) => sectionBackground(key, bandFor(key), DEFAULT_BANDS, SECTION_BG, CANONICAL_BG)
+  const fg = (key) => (bandFor(key) === 'dark' ? C.textLight : C.charcoal)
+  const fgMuted = (key) => (bandFor(key) === 'dark' ? C.mutedOnDark : C.muted)
   const { settings } = useSiteSettings()
   const [selectedStyle, setSelectedStyle] = useState('')
   const [selectedWall, setSelectedWall] = useState('#e8ddd0')
@@ -196,17 +198,17 @@ export default function InteriorDesignPage() {
 
       {/* 2. Design Style Selector – WHITE */}
       {isSectionVisible('styles') && (
-      <section id="design-styles" style={{ backgroundColor: bg('styles'), color: C.charcoal, position: 'relative' }} className="py-16 md:py-28 px-6">
+      <section id="design-styles" style={{ backgroundColor: bg('styles'), color: fg('styles'), position: 'relative' }} className="py-16 md:py-28 px-6">
         <div className="max-w-5xl mx-auto">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
             {cms('stylesLabel', p.stylesLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
-            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: C.charcoal, marginBottom: '1rem' }} className="text-center">
+            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: fg('styles'), marginBottom: '1rem' }} className="text-center">
             {cms('stylesHeading', p.stylesHeading)}
           </motion.h2>
-          <p className="text-center text-sm mb-8" style={{ color: 'rgba(var(--vk-dark-rgb), 0.5)' }}>
+          <p className="text-center text-sm mb-8" style={{ color: fgMuted('styles') }}>
             {cms('stylesFilterHint', p.stylesFilterHint || 'Select a style to filter the showroom')}
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -245,7 +247,7 @@ export default function InteriorDesignPage() {
               {cms('showroomLabel', p.showroomLabel || 'Our Work')}
             </motion.p>
             <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
-              style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: '#ffffff', marginBottom: '0.75rem', textAlign: 'center' }}>
+              style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: fg('showroom'), marginBottom: '0.75rem', textAlign: 'center' }}>
               {cms('showroomHeading', p.showroomHeading || 'Interior Showcase')}
             </motion.h2>
             {selectedStyle && (
@@ -254,7 +256,7 @@ export default function InteriorDesignPage() {
               </p>
             )}
             {!selectedStyle && <div className="mb-8" />}
-            <ShowroomCarousel images={filteredImages} loading={loadingImages} bgColor='#1E1E1C' />
+            <ShowroomCarousel images={filteredImages} loading={loadingImages} bgColor={bg('showroom')} dark={bandFor('showroom') === 'dark'} />
           </div>
         </section>
       )}
@@ -263,39 +265,39 @@ export default function InteriorDesignPage() {
 
       {/* 4. Wall & Floor Selector – WHITE */}
       {isSectionVisible('finishes') && (
-      <section style={{ backgroundColor: bg('finishes'), color: C.charcoal, position: 'relative' }} className="py-16 md:py-28 px-6">
+      <section style={{ backgroundColor: bg('finishes'), color: fg('finishes'), position: 'relative' }} className="py-16 md:py-28 px-6">
         <div className="max-w-3xl mx-auto">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
             {cms('finishesLabel', p.finishesLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
-            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: C.charcoal, marginBottom: '3rem' }} className="text-center">
+            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: fg('finishes'), marginBottom: '3rem' }} className="text-center">
             {cms('finishesHeading', p.finishesHeading)}
           </motion.h2>
           <div className="space-y-8">
             <div>
-              <p className="text-xs tracking-[0.3em] uppercase mb-4" style={{ color: 'rgba(var(--vk-dark-rgb), 0.5)' }}>{p.wallLabel}</p>
+              <p className="text-xs tracking-[0.3em] uppercase mb-4" style={{ color: fgMuted('finishes') }}>{p.wallLabel}</p>
               <div className="flex flex-wrap gap-3">
                 {wallFinishes.map((f, index) => (
                   <button key={`wall-finish-${index}`} onClick={() => setSelectedWall(f.color)} title={f.label}
                     className="flex flex-col items-center gap-1.5 cursor-pointer group">
                     <div className="h-10 w-10 rounded-full transition-transform group-hover:scale-110"
                       style={{ backgroundColor: f.color, outline: selectedWall === f.color ? `2px solid ${C.gold}` : '1px solid rgba(30,30,28,0.15)', outlineOffset: 3, transform: selectedWall === f.color ? 'scale(1.1)' : '' }} />
-                    <span className="text-xs" style={{ color: 'rgba(var(--vk-dark-rgb), 0.5)' }}>{f.label}</span>
+                    <span className="text-xs" style={{ color: fgMuted('finishes') }}>{f.label}</span>
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <p className="text-xs tracking-[0.3em] uppercase mb-4" style={{ color: 'rgba(var(--vk-dark-rgb), 0.5)' }}>{p.floorLabel}</p>
+              <p className="text-xs tracking-[0.3em] uppercase mb-4" style={{ color: fgMuted('finishes') }}>{p.floorLabel}</p>
               <div className="flex flex-wrap gap-3">
                 {floorFinishes.map((f, index) => (
                   <button key={`floor-finish-${index}`} onClick={() => setSelectedFloor(f.color)} title={f.label}
                     className="flex flex-col items-center gap-1.5 cursor-pointer group">
                     <div className="h-10 w-10 rounded-full transition-transform group-hover:scale-110"
                       style={{ backgroundColor: f.color, outline: selectedFloor === f.color ? `2px solid ${C.gold}` : '1px solid rgba(30,30,28,0.15)', outlineOffset: 3, transform: selectedFloor === f.color ? 'scale(1.1)' : '' }} />
-                    <span className="text-xs" style={{ color: 'rgba(var(--vk-dark-rgb), 0.5)' }}>{f.label}</span>
+                    <span className="text-xs" style={{ color: fgMuted('finishes') }}>{f.label}</span>
                   </button>
                 ))}
               </div>
@@ -305,7 +307,7 @@ export default function InteriorDesignPage() {
               <div className="h-1/2 transition-colors duration-500" style={{ backgroundColor: selectedWall }} />
               <div className="h-1/2 transition-colors duration-500" style={{ backgroundColor: selectedFloor }} />
             </motion.div>
-            <p className="text-xs text-center tracking-wider" style={{ color: 'rgba(var(--vk-dark-rgb), 0.5)' }}>{cms('previewLabel', p.previewLabel)}</p>
+            <p className="text-xs text-center tracking-wider" style={{ color: fgMuted('finishes') }}>{cms('previewLabel', p.previewLabel)}</p>
           </div>
         </div>
       </section>
@@ -319,7 +321,7 @@ export default function InteriorDesignPage() {
         <Glow />
         <div className="max-w-5xl mx-auto relative z-10">
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
-            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: '#ffffff', marginBottom: '3rem' }} className="text-center">
+            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: fg('palette'), marginBottom: '3rem' }} className="text-center">
             {cms('paletteHeading', p.paletteHeading)}
           </motion.h2>
           <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
@@ -327,7 +329,7 @@ export default function InteriorDesignPage() {
               <motion.div key={`material-${i}`} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
                 transition={{ delay: i * 0.05 }} className="flex flex-col items-center gap-2">
                 <div className="w-full aspect-square rounded-lg bg-cover bg-center" style={{ backgroundColor: m.color, backgroundImage: m.image ? `url(${m.image})` : undefined, border: '1px solid rgba(255,255,255,0.08)' }} />
-                <span className="text-xs tracking-wider text-center uppercase leading-tight" style={{ color: 'rgba(246,243,237,0.35)' }}>{m.name}</span>
+                <span className="text-xs tracking-wider text-center uppercase leading-tight" style={{ color: fgMuted('palette') }}>{m.name}</span>
               </motion.div>
             ))}
           </div>
@@ -339,14 +341,14 @@ export default function InteriorDesignPage() {
 
       {/* 6. Services – WHITE */}
       {isSectionVisible('services') && (
-      <section style={{ backgroundColor: bg('services'), color: C.charcoal, position: 'relative' }} className="py-16 md:py-28 px-6">
+      <section style={{ backgroundColor: bg('services'), color: fg('services'), position: 'relative' }} className="py-16 md:py-28 px-6">
         <div className="max-w-6xl mx-auto">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3">
             {cms('servicesLabel', p.servicesLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
-            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.5rem)', color: C.charcoal, marginBottom: '3rem' }}>
+            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.5rem)', color: fg('services'), marginBottom: '3rem' }}>
             {cms('servicesHeading', p.servicesHeading)}
           </motion.h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -354,10 +356,10 @@ export default function InteriorDesignPage() {
               <motion.div key={svc.num} initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }} transition={{ duration: 0.6, delay: i * 0.1 }}
                 className="p-8 rounded-xl transition-colors"
-                style={{ backgroundColor: '#fff', border: '1px solid rgba(var(--vk-green-rgb), 0.15)' }}>
+                style={bandFor('services') === 'dark' ? { backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' } : { backgroundColor: '#fff', border: '1px solid rgba(var(--vk-green-rgb), 0.15)' }}>
                 <div style={{ fontFamily: 'Cinzel, serif', fontSize: '3.5rem', color: 'rgba(var(--vk-dark-rgb), 0.05)', lineHeight: 1 }} className="mb-4">{svc.num}</div>
-                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.1rem', color: C.charcoal }} className="mb-3">{cms(`service${i + 1}Title`, svc.title)}</h3>
-                <p style={{ color: 'rgba(var(--vk-dark-rgb), 0.6)' }} className="leading-relaxed">{cms(`service${i + 1}Desc`, svc.desc)}</p>
+                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.1rem', color: fg('services') }} className="mb-3">{cms(`service${i + 1}Title`, svc.title)}</h3>
+                <p style={{ color: fgMuted('services') }} className="leading-relaxed">{cms(`service${i + 1}Desc`, svc.desc)}</p>
               </motion.div>
             ))}
           </div>
@@ -372,8 +374,8 @@ export default function InteriorDesignPage() {
       <section style={{ backgroundColor: bg('cta'), position: 'relative', overflow: 'hidden' }} className="py-14 md:py-24 text-center px-6">
         <Glow />
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="relative z-10">
-          <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: '#ffffff' }} className="mb-4">{cms('ctaHeading', p.ctaHeading)}</h2>
-          <p style={{ color: 'rgba(246,243,237,0.55)' }} className="mb-8 max-w-md mx-auto">{cms('ctaBody', p.ctaBody)}</p>
+          <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: fg('cta') }} className="mb-4">{cms('ctaHeading', p.ctaHeading)}</h2>
+          <p style={{ color: fgMuted('cta') }} className="mb-8 max-w-md mx-auto">{cms('ctaBody', p.ctaBody)}</p>
           <Link to="/contact" style={{ backgroundColor: C.gold, color: '#000' }}
             className="inline-block px-10 py-4 text-sm font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity">
             {cms('ctaBtn', p.ctaBtn)}

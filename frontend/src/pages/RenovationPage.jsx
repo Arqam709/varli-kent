@@ -231,6 +231,8 @@ export default function RenovationPage() {
   const p = t.renovationPage
   const { get: cms, isSectionVisible, bandFor } = usePageContent('renovation', SECTION_ORDER, DEFAULT_BANDS)
   const bg = (key) => sectionBackground(key, bandFor(key), DEFAULT_BANDS, SECTION_BG, CANONICAL_BG)
+  const fg = (key) => (bandFor(key) === 'dark' ? C.textLight : C.charcoal)
+  const fgMuted = (key) => (bandFor(key) === 'dark' ? C.mutedOnDark : C.muted)
   const { settings } = useSiteSettings()
   const [images, setImages] = useState([])
   const [loadingImages, setLoadingImages] = useState(true)
@@ -278,34 +280,34 @@ export default function RenovationPage() {
 
       {/* Before / After – WHITE */}
       {isSectionVisible('transform') && (
-      <section className="py-16 md:py-28 px-6" style={{ backgroundColor: bg('transform'), color: C.charcoal, position: 'relative' }}>
+      <section className="py-16 md:py-28 px-6" style={{ backgroundColor: bg('transform'), color: fg('transform'), position: 'relative' }}>
         <div className="max-w-5xl mx-auto">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
             {cms('transformLabel', p.transformLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
-            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: C.charcoal, marginBottom: '3rem' }} className="text-center">
+            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: fg('transform'), marginBottom: '3rem' }} className="text-center">
             {cms('transformHeading', p.transformHeading)}
           </motion.h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
-              className="p-8 rounded-xl" style={{ backgroundColor: '#fff', border: '1px solid rgba(30,30,28,0.08)' }}>
-              <p className="text-xs tracking-[0.3em] uppercase mb-5" style={{ color: 'rgba(var(--vk-dark-rgb), 0.55)' }}>{cms('beforeTitle', p.before)}</p>
+              className="p-8 rounded-xl" style={bandFor('transform') === 'dark' ? { backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' } : { backgroundColor: '#fff', border: '1px solid rgba(30,30,28,0.08)' }}>
+              <p className="text-xs tracking-[0.3em] uppercase mb-5" style={{ color: fgMuted('transform') }}>{cms('beforeTitle', p.before)}</p>
               <ul className="space-y-3">
                 {p.beforeItems.map((item, i) => (
-                  <li key={item} className="flex items-center gap-3" style={{ color: 'rgba(var(--vk-dark-rgb), 0.55)' }}>
+                  <li key={item} className="flex items-center gap-3" style={{ color: fgMuted('transform') }}>
                     <span className="w-px h-4 block" style={{ backgroundColor: 'rgba(30,30,28,0.2)' }} />{cms(`beforeItem${i + 1}`, item)}
                   </li>
                 ))}
               </ul>
             </motion.div>
             <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
-              className="p-8 rounded-xl" style={{ backgroundColor: '#fff', border: `1px solid rgba(var(--vk-gold-rgb), 0.3)` }}>
+              className="p-8 rounded-xl" style={bandFor('transform') === 'dark' ? { backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(var(--vk-gold-rgb), 0.4)' } : { backgroundColor: '#fff', border: '1px solid rgba(var(--vk-gold-rgb), 0.3)' }}>
               <p className="text-xs tracking-[0.3em] uppercase mb-5" style={{ color: C.gold }}>{cms('afterTitle', p.after)}</p>
               <ul className="space-y-3">
                 {p.afterItems.map((item, i) => (
-                  <li key={item} className="flex items-center gap-3" style={{ color: C.charcoal }}>
+                  <li key={item} className="flex items-center gap-3" style={{ color: fg('transform') }}>
                     <span className="w-px h-4 block" style={{ backgroundColor: C.gold }} />{cms(`afterItem${i + 1}`, item)}
                   </li>
                 ))}
@@ -329,7 +331,7 @@ export default function RenovationPage() {
             {cms('studioLabel', p.studioLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
-            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: '#ffffff', marginBottom: '0.75rem' }} className="text-center">
+            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: fg('studio'), marginBottom: '0.75rem' }} className="text-center">
             {cms('studioHeading', p.studioHeading)}
           </motion.h2>
           <p className="text-center text-slate-500 text-sm mb-10">{cms('studioDesc', p.studioDesc)}</p>
@@ -344,14 +346,14 @@ export default function RenovationPage() {
 
       {/* Material Palette – WHITE */}
       {isSectionVisible('palette') && (
-      <section className="py-16 md:py-28 px-6" style={{ backgroundColor: bg('palette'), color: C.charcoal, position: 'relative' }}>
+      <section className="py-16 md:py-28 px-6" style={{ backgroundColor: bg('palette'), color: fg('palette'), position: 'relative' }}>
         <div className="max-w-5xl mx-auto">
           <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
             style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
             {cms('paletteLabel', p.paletteLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
-            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: C.charcoal, marginBottom: '3rem' }} className="text-center">
+            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: fg('palette'), marginBottom: '3rem' }} className="text-center">
             {cms('paletteHeading', p.paletteHeading)}
           </motion.h2>
           <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
@@ -359,7 +361,7 @@ export default function RenovationPage() {
               <motion.div key={`material-${i}`} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
                 transition={{ delay: i * 0.05 }} className="flex flex-col items-center gap-2">
                 <div className="w-full aspect-square rounded-lg bg-cover bg-center" style={{ backgroundColor: m.color, backgroundImage: m.image ? `url(${m.image})` : undefined, border: '1px solid rgba(30,30,28,0.12)' }} />
-                <span className="text-xs tracking-wider text-center uppercase leading-tight" style={{ color: 'rgba(var(--vk-dark-rgb), 0.5)' }}>{m.name}</span>
+                <span className="text-xs tracking-wider text-center uppercase leading-tight" style={{ color: fgMuted('palette') }}>{m.name}</span>
               </motion.div>
             ))}
           </div>
@@ -378,7 +380,7 @@ export default function RenovationPage() {
             {cms('servicesLabel', p.servicesLabel)}
           </motion.p>
           <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
-            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.5rem)', color: '#ffffff', marginBottom: '3rem' }}>
+            style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.6rem, 4vw, 2.5rem)', color: fg('services'), marginBottom: '3rem' }}>
             {cms('servicesHeading', p.servicesHeading)}
           </motion.h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -386,10 +388,10 @@ export default function RenovationPage() {
               <motion.div key={svc.num} initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }} transition={{ duration: 0.6, delay: i * 0.1 }}
                 className="p-8 rounded-xl transition-colors"
-                style={{ border: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(255,255,255,0.04)' }}>
+                style={bandFor('services') === 'dark' ? { border: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(255,255,255,0.04)' } : { border: '1px solid rgba(var(--vk-green-rgb), 0.15)', backgroundColor: '#fff' }}>
                 <div style={{ fontFamily: 'Cinzel, serif', fontSize: '3.5rem', color: 'rgba(255,255,255,0.07)', lineHeight: 1 }} className="mb-4">{svc.num}</div>
-                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.1rem', color: '#ffffff' }} className="mb-3">{cms(`service${i + 1}Title`, svc.title)}</h3>
-                <p style={{ color: 'rgba(246,243,237,0.55)' }} className="leading-relaxed">{cms(`service${i + 1}Desc`, svc.desc)}</p>
+                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.1rem', color: fg('services') }} className="mb-3">{cms(`service${i + 1}Title`, svc.title)}</h3>
+                <p style={{ color: fgMuted('services') }} className="leading-relaxed">{cms(`service${i + 1}Desc`, svc.desc)}</p>
               </motion.div>
             ))}
           </div>
@@ -401,17 +403,17 @@ export default function RenovationPage() {
 
       {/* Showroom – WHITE */}
       {isSectionVisible('showroom') && showroomEnabled && (
-        <section className="py-20 px-6" style={{ backgroundColor: bg('showroom'), color: C.charcoal, position: 'relative' }}>
+        <section className="py-20 px-6" style={{ backgroundColor: bg('showroom'), color: fg('showroom'), position: 'relative' }}>
           <div className="max-w-6xl mx-auto">
             <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
               style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
               {cms('showroomLabel', p.showroomLabel || 'Our Work')}
             </motion.p>
             <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
-              style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: C.charcoal, marginBottom: '2.5rem', textAlign: 'center' }}>
+              style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: fg('showroom'), marginBottom: '2.5rem', textAlign: 'center' }}>
               {cms('showroomHeading', p.showroomHeading || 'Renovation Showcase')}
             </motion.h2>
-            <ShowroomCarousel images={images} loading={loadingImages} bgColor='#FCFAF6' />
+            <ShowroomCarousel images={images} loading={loadingImages} bgColor={bg('showroom')} dark={bandFor('showroom') === 'dark'} />
           </div>
         </section>
       )}
@@ -424,8 +426,8 @@ export default function RenovationPage() {
         <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 90% 55% at 50% 0%, rgba(var(--vk-green-rgb), 0.22) 0%, transparent 65%)' }} />
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="relative z-10">
           <span className="section-rule mx-auto block mb-8" />
-          <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: '#ffffff' }} className="mb-4">{cms('ctaHeading', p.ctaHeading)}</h2>
-          <p style={{ color: 'rgba(246,243,237,0.55)' }} className="mb-8 max-w-md mx-auto">{cms('ctaBody', p.ctaBody)}</p>
+          <h2 style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', color: fg('cta') }} className="mb-4">{cms('ctaHeading', p.ctaHeading)}</h2>
+          <p style={{ color: fgMuted('cta') }} className="mb-8 max-w-md mx-auto">{cms('ctaBody', p.ctaBody)}</p>
           <Link to="/contact" style={{ backgroundColor: C.gold, color: '#000' }}
             className="inline-block px-10 py-4 text-sm font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity">
             {cms('ctaBtn', p.ctaBtn)}

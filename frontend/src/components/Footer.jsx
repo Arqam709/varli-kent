@@ -1,9 +1,13 @@
 import { Link } from 'react-router-dom'
 import { useSiteSettings } from '../contexts/SiteSettingsContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import { C } from '../contexts/ThemeContext'
 
 const Footer = () => {
   const { settings } = useSiteSettings()
+  const { t } = useLanguage()
+  const copy = t.footer || {}
+  const links = copy.links || {}
 
   const email = settings?.email || 'info@varlikent.com'
   const phone = settings?.phone || '+90 530 123 4567'
@@ -24,10 +28,10 @@ const Footer = () => {
               </span>
             </Link>
             <p className="text-slate-500 text-sm leading-relaxed max-w-xs">
-              Istanbul's full-service property company — architecture, construction, renovation, interior design and real estate, all under one roof.
+              {copy.description || "Istanbul's full-service property company — architecture, construction, renovation, interior design and real estate, all under one roof."}
             </p>
             <div className="mt-8">
-              <span className="block mb-3 text-xs tracking-[0.3em] uppercase text-slate-600">Contact</span>
+              <span className="block mb-3 text-xs tracking-[0.3em] uppercase text-slate-600">{copy.contact || 'Contact'}</span>
               <a href={`mailto:${email}`} className="text-sm text-slate-400 hover:text-[#C9A35A] transition-colors block mb-1">{email}</a>
               <a href={`tel:${phone.replace(/\s/g, '')}`} className="text-sm text-slate-400 hover:text-[#C9A35A] transition-colors block">{phone}</a>
             </div>
@@ -72,13 +76,13 @@ const Footer = () => {
 
           {/* Company */}
           <div>
-            <h3 style={{ fontFamily: 'Cinzel, serif' }} className="text-xs font-semibold tracking-[0.3em] text-white uppercase mb-6">Company</h3>
+            <h3 style={{ fontFamily: 'Cinzel, serif' }} className="text-xs font-semibold tracking-[0.3em] text-white uppercase mb-6">{copy.company || 'Company'}</h3>
             <ul className="space-y-3">
               {[
-                { label: 'Home', to: '/' },
-                { label: 'About', to: '/about' },
-                { label: 'Properties', to: '/properties' },
-                { label: 'Contact', to: '/contact' },
+                { label: links.home || 'Home', to: '/' },
+                { label: links.about || 'About', to: '/about' },
+                { label: links.properties || 'Properties', to: '/properties' },
+                { label: links.contact || 'Contact', to: '/contact' },
               ].map((link) => (
                 <li key={link.to}>
                   <Link to={link.to} className="text-slate-500 text-sm hover:text-[#C9A35A] transition-colors">{link.label}</Link>
@@ -89,13 +93,13 @@ const Footer = () => {
 
           {/* Browse */}
           <div>
-            <h3 style={{ fontFamily: 'Cinzel, serif' }} className="text-xs font-semibold tracking-[0.3em] text-white uppercase mb-6">Browse</h3>
+            <h3 style={{ fontFamily: 'Cinzel, serif' }} className="text-xs font-semibold tracking-[0.3em] text-white uppercase mb-6">{copy.browse || 'Browse'}</h3>
             <ul className="space-y-3">
               {[
-                { label: 'For Sale', to: '/properties?listingType=Sale' },
-                { label: 'For Rent', to: '/properties?listingType=Rent' },
-                { label: 'Featured', to: '/properties?featured=true' },
-                { label: 'Favourites', to: '/favourites' },
+                { label: links.forSale || 'For Sale', to: '/properties?listingType=Sale' },
+                { label: links.forRent || 'For Rent', to: '/properties?listingType=Rent' },
+                { label: links.featured || 'Featured', to: '/properties?featured=true' },
+                { label: links.favourites || 'Favourites', to: '/favourites' },
               ].map((link) => (
                 <li key={link.to}>
                   <Link to={link.to} className="text-slate-500 text-sm hover:text-[#C9A35A] transition-colors">{link.label}</Link>
@@ -106,13 +110,13 @@ const Footer = () => {
 
           {/* Services */}
           <div>
-            <h3 style={{ fontFamily: 'Cinzel, serif' }} className="text-xs font-semibold tracking-[0.3em] text-white uppercase mb-6">Services</h3>
+            <h3 style={{ fontFamily: 'Cinzel, serif' }} className="text-xs font-semibold tracking-[0.3em] text-white uppercase mb-6">{copy.services || 'Services'}</h3>
             <ul className="space-y-3">
               {[
-                { label: 'Architecture', to: '/architecture' },
-                { label: 'Construction', to: '/construction' },
-                { label: 'Renovation', to: '/renovation' },
-                { label: 'Interior Design', to: '/interior-design' },
+                { label: links.architecture || 'Architecture', to: '/architecture' },
+                { label: links.construction || 'Construction', to: '/construction' },
+                { label: links.renovation || 'Renovation', to: '/renovation' },
+                { label: links.interiorDesign || 'Interior Design', to: '/interior-design' },
               ].map((link) => (
                 <li key={link.to}>
                   <Link to={link.to} className="text-slate-500 text-sm hover:text-[#C9A35A] transition-colors">{link.label}</Link>
@@ -125,8 +129,8 @@ const Footer = () => {
         {/* Bottom bar */}
         <div className="mt-16 pt-8 flex flex-col items-center justify-between gap-4 sm:flex-row"
           style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <p className="text-slate-600 text-xs tracking-wide">© 2025 Varlikent. All rights reserved.</p>
-          <p className="text-slate-700 text-xs tracking-[0.2em] uppercase">Architecture · Construction · Real Estate · Istanbul</p>
+          <p className="text-slate-600 text-xs tracking-wide">{(copy.rights || '© ' + new Date().getFullYear() + ' Varlikent. All rights reserved.').replace('2025', String(new Date().getFullYear()))}</p>
+          <p className="text-slate-700 text-xs tracking-[0.2em] uppercase">{copy.tagline || 'Architecture · Construction · Real Estate · Istanbul'}</p>
         </div>
       </div>
     </footer>

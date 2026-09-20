@@ -28,6 +28,12 @@ import chatConversationRoutes from './routes/chatConversations.js'
 import adminChatRoutes from './routes/adminChats.js'
 import notificationRoutes from './routes/notifications.js'
 import propertyAlertRoutes from './routes/propertyAlerts.js'
+import designBoardRoutes from './routes/designBoards.js'
+import designRoomPhotoRoutes from './routes/designRoomPhotos.js'
+import designGenerationRoutes from './routes/designGenerations.js'
+import { startDesignGenerationSweeper } from './services/designGenerations/lifecycle.js'
+import { startGenerationWorker } from './services/designGenerations/worker.js'
+import { startRoomPhotoSweeper } from './services/designRoomPhotos/lifecycle.js'
 import pushRoutes from './routes/push.js'
 import agentRoutes from './routes/agent.js'
 import propertyConversationRoutes from './routes/propertyConversations.js'
@@ -77,6 +83,15 @@ app.use('/api/chat/conversations', chatConversationRoutes)
 app.use('/api/admin/chats', adminChatRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/property-alerts', propertyAlertRoutes)
+// Design My Space boards for signed-in users. Owner-scoped like property
+// alerts; signed-out visitors keep boards on the device only.
+app.use('/api/design-boards', designBoardRoutes)
+// Private Design My Space room photos. Owner-scoped, stored as authenticated
+// Cloudinary assets and streamed back only to their owner. Never /api/upload.
+app.use('/api/design-room-photos', designRoomPhotoRoutes)
+// Requested room visualizations. Owner-scoped; creation is gated by the
+// designGenerationsEnabled site setting until a provider exists (Phase 2).
+app.use('/api/design-generations', designGenerationRoutes)
 app.use('/api/push', pushRoutes)
 app.use('/api/agent', agentRoutes)
 app.use('/api/activity', activityRoutes)
@@ -152,5 +167,13 @@ connectDB().then(async () => {
   server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`)
     console.log(`[realtime] Socket.IO ready; allowed origins: ${ALLOWED_ORIGINS.join(', ')}`)
+    // Room photo cleanup: deferred and non-blocking; see services/designRoomPhotos/lifecycle.js.
+    startRoomPhotoSweeper()
+    // Lease recovery, retention and purge for visualizations.
+    startDesignGenerationSweeper()
+    // Runs queued visualizations. Stays idle unless this instance is a worker
+    // and an image provider is configured; claims are leased, so several
+    // instances never run the same generation.
+    startGenerationWorker()
   })
 })

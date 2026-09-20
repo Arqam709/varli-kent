@@ -1,6 +1,10 @@
 import { Link } from 'react-router-dom'
 import { useFavourites } from '../contexts/FavouritesContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import { formatPrice } from '../lib/formatPrice'
+import { C } from '../contexts/ThemeContext'
+
+const isVideoUrl = (url = '') => /\/video\/|\.(mp4|mov|webm|avi)(?:[?#]|$)/i.test(url)
 
 const BedIcon = () => (
   <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -36,8 +40,12 @@ const ArrowIcon = () => (
 
 const PropertyCard = ({ property, showFavourite = true }) => {
   const { isFavourite, toggleFavourite } = useFavourites()
+  const { t, language } = useLanguage()
+  const copy = t.propertyCard || {}
   const fav = isFavourite(property._id)
-  const image = property.mainImage || (property.images && property.images[0]) || property.image
+  const candidates = [property.mainImage, ...(property.images || []), property.image].filter(Boolean)
+  const media = candidates.find(url => !isVideoUrl(url)) || candidates[0]
+  const mediaIsVideo = isVideoUrl(media)
 
   const isRent = property.listingType === 'Rent'
   const isFeatured = property.featured && !isRent
@@ -48,12 +56,23 @@ const PropertyCard = ({ property, showFavourite = true }) => {
     <div className="group relative flex flex-col overflow-hidden bg-white border border-slate-100 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:border-slate-200">
       {/* Image */}
       <div className="relative overflow-hidden h-64">
-        <img
-          src={image || 'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=600&q=80'}
-          alt={property.title}
-          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-          loading="lazy"
-        />
+        {mediaIsVideo ? (
+          <video
+            src={media}
+            aria-label={property.title}
+            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+            muted
+            playsInline
+            preload="metadata"
+          />
+        ) : (
+          <img
+            src={media || 'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=600&q=80'}
+            alt={property.title}
+            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+            loading="lazy"
+          />
+        )}
         {/* Dark overlay on hover */}
         <div className="absolute inset-0 bg-[#080a0e]/0 group-hover:bg-[#080a0e]/20 transition-colors duration-300" />
 
@@ -62,7 +81,7 @@ const PropertyCard = ({ property, showFavourite = true }) => {
           className="absolute left-0 top-6 px-4 py-1.5 text-xs font-semibold tracking-widest uppercase text-white"
           style={{ backgroundColor: isRent ? '#4b6741' : isFeatured ? '#c4993a' : '#202a36' }}
         >
-          {isRent ? 'For Rent' : isFeatured ? 'Featured' : 'For Sale'}
+          {isRent ? (copy.forRent || 'For Rent') : isFeatured ? (copy.featured || 'Featured') : (copy.forSale || 'For Sale')}
         </div>
 
         {/* Favourite */}
@@ -83,7 +102,7 @@ const PropertyCard = ({ property, showFavourite = true }) => {
       <div className="flex flex-1 flex-col p-6">
         {/* Price */}
         <p style={{ fontFamily: 'Cinzel, serif' }} className="text-xl font-semibold text-[#202a36] tracking-tight">
-  {formatPrice(property.price, property.listingType, property.priceLabel)}
+  {formatPrice(property.price, property.listingType, property.priceLabel, language)}
 </p>
 
         {/* Title */}
@@ -94,7 +113,7 @@ const PropertyCard = ({ property, showFavourite = true }) => {
         {/* Location */}
         <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
           <PinIcon />
-          <span>{property.district}, Istanbul</span>
+          <span>{property.district}, {copy.istanbul || 'Istanbul'}</span>
         </div>
 
         <div className="mt-1 text-xs text-slate-400 tracking-[0.15em] uppercase">{property.propertyType}</div>
@@ -103,11 +122,11 @@ const PropertyCard = ({ property, showFavourite = true }) => {
         <div className="mt-5 flex items-center gap-5 pt-5 border-t border-slate-100 text-xs text-slate-500">
           <span className="flex items-center gap-1.5">
             <BedIcon />
-            <span>{property.beds} Beds</span>
+            <span>{property.beds} {copy.beds || 'Beds'}</span>
           </span>
           <span className="flex items-center gap-1.5">
             <BathIcon />
-            <span>{property.baths} Baths</span>
+            <span>{property.baths} {copy.baths || 'Baths'}</span>
           </span>
           <span className="flex items-center gap-1.5">
             <AreaIcon />
@@ -119,11 +138,11 @@ const PropertyCard = ({ property, showFavourite = true }) => {
         <Link
           to={`/properties/${property._id}`}
           className="mt-5 flex w-full items-center justify-between px-5 py-3 text-xs font-semibold uppercase tracking-widest text-white transition-colors duration-200 cursor-pointer group/btn"
-          style={{ backgroundColor: '#4b6741' }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#3a5030'}
-          onMouseLeave={e => e.currentTarget.style.backgroundColor = '#4b6741'}
+          style={{ backgroundColor: C.accent }}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = C.deepGreen}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = C.accent}
         >
-          <span>View Details</span>
+          <span>{copy.viewDetails || 'View Details'}</span>
           <ArrowIcon />
         </Link>
       </div>
