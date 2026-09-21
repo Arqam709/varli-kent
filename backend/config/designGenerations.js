@@ -107,19 +107,57 @@ export const DESIGN_GENERATION_SOURCE_PHOTO_HOLD_MS = 2 * 24 * 60 * 60 * 1000
 
 /**
  * Which adapter services/designGenerations/providers/index.js uses.
- * 'gemini' is the only one implemented; 'none' disables generation entirely.
+ *
+ * 'gemini' (the default) or 'cloudflare'. Anything else — including 'none' —
+ * leaves no adapter, which disables generation and keeps the worker idle.
+ *
+ * Read per call rather than captured at import, matching how each adapter
+ * reads its own credentials, so the value is the one the process actually has
+ * when a job runs.
  */
-export const DESIGN_GENERATION_PROVIDER = (process.env.DESIGN_GENERATION_PROVIDER || 'gemini').toLowerCase()
+export const designGenerationProvider = (env = process.env) =>
+  (env.DESIGN_GENERATION_PROVIDER || 'gemini').toLowerCase()
 
 /**
- * The image-editing model.
+ * The Gemini image-editing model.
  *
- * Default: Gemini's image model, which takes an input image plus instructions
- * and returns an edited image — the capability this feature needs. Overridable
- * so a model change never needs a code change. NOTE: Gemini image models have
- * no free tier; the key must be on a paid plan.
+ * Takes an input image plus instructions and returns an edited image — the
+ * capability this feature needs. Overridable so a model change never needs a
+ * code change. NOTE: Gemini image models have no free tier; the key must be on
+ * a paid plan.
  */
 export const DESIGN_GENERATION_MODEL = process.env.DESIGN_GENERATION_MODEL || 'gemini-3.1-flash-image'
+
+/* ── Cloudflare Workers AI ─────────────────────────────────────────────── */
+
+/**
+ * The Workers AI model, which unifies image generation and editing. Reached
+ * over the REST API with CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN, both
+ * read by the adapter itself and never sent anywhere near a client.
+ */
+export const DESIGN_GENERATION_CLOUDFLARE_MODEL =
+  process.env.CLOUDFLARE_DESIGN_MODEL || '@cf/black-forest-labs/flux-2-klein-4b'
+
+/**
+ * Longest edge of the copy of the room photo sent as `input_image_0`.
+ *
+ * Cloudflare documents that every input image must be SMALLER than 512x512,
+ * so this is capped below 512 whatever the environment asks for. 500 is the
+ * size verified by hand against the live model. That copy exists only for the
+ * request: the stored room photo is never resized, replaced or re-uploaded.
+ */
+export const DESIGN_GENERATION_CLOUDFLARE_INPUT_MAX_EDGE = Math.min(
+  511,
+  Math.max(64, Number.parseInt(process.env.CLOUDFLARE_DESIGN_INPUT_MAX_EDGE || '500', 10) || 500)
+)
+
+/**
+ * Longest edge asked of Cloudflare for the generated image. The result is
+ * normalized to at most ROOM_PHOTO_MAX_LONG_EDGE (2048 px) for delivery
+ * anyway, and a larger render costs more and takes longer.
+ */
+export const DESIGN_GENERATION_CLOUDFLARE_OUTPUT_MAX_EDGE =
+  Number.parseInt(process.env.CLOUDFLARE_DESIGN_OUTPUT_MAX_EDGE || '1024', 10) || 1024
 
 /**
  * Output resolution asked of the provider: '1K', '2K' or '4K'.
