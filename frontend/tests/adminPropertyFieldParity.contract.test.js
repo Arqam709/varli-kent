@@ -162,8 +162,14 @@ test('editing repopulates both stores from the saved property', async () => {
     'the edit form no longer repopulates the detail fields')
   assert.ok(/loadAdminLocation\(prop\._id\)/.test(src),
     'the edit form no longer loads the saved location')
-  assert.ok(/setImages\(prop\.images \|\| \[\]\)/.test(src),
+  // The gallery is repopulated through galleryFromProperty rather than from
+  // prop.images raw: the stored cover has to be brought to position 0, because
+  // position 0 is what the editor now presents as the cover and what
+  // handleSubmit sends back as mainImage.
+  assert.ok(/setImages\(galleryFromProperty\(prop\)\)/.test(src),
     'the edit form no longer repopulates images')
+  assert.ok(/const galleryFromProperty = \(prop\) =>/.test(src),
+    'galleryFromProperty is gone, so the stored order and cover are no longer reconciled on edit')
 })
 
 /* ══════════════ THE BACKEND ACTUALLY STORES THEM ══════════════ */

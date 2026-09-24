@@ -8,6 +8,96 @@ import { formatPrice } from '../lib/formatPrice'
 
 const isVideoUrl = (url = '') => /\/video\/|\.(mp4|mov|webm|avi)(?:[?#]|$)/i.test(url)
 
+/* ─────────────────────────── The gallery ───────────────────────────────
+ *
+ * `images` is an ORDERED list of Cloudinary URLs and its order is the whole
+ * contract: PropertyDetailsPage renders `property.images` exactly as stored,
+ * so position here is position on the public site. Position 0 is the cover —
+ * `mainImage` is derived from it at submit rather than tracked separately,
+ * because every reader in the app already falls back to `images[0]` and there
+ * has never been a control that picks a different one.
+ *
+ * These three numbers mirror backend/routes/properties.js and
+ * backend/routes/upload.js. Duplicated deliberately: the server stays the
+ * authority and still refuses anything over them, but a limit the admin only
+ * discovers after a three-minute upload is not a limit, it is a trap.
+ */
+const MAX_PROPERTY_IMAGES = 60
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024
+
+/*
+ * Three at a time.
+ *
+ * The old loop uploaded strictly one after another, so thirty photographs meant
+ * thirty round trips end to end and looked like a hang. Three is a deliberate
+ * middle: it cuts the wall-clock time substantially without opening enough
+ * parallel connections to make the browser or Cloudinary start shedding them —
+ * which would have reintroduced the very failures this is fixing.
+ */
+const UPLOAD_CONCURRENCY = 3
+
+const mb = (bytes) => Math.round(bytes / (1024 * 1024))
+const sizeInMb = (bytes) => (bytes / (1024 * 1024)).toFixed(1)
+
+const fillTemplate = (template, values) =>
+  Object.entries(values).reduce((text, [key, value]) => text.split(`{${key}}`).join(value), template)
+
+/**
+ * Moves one entry and shifts everything between it and its destination.
+ *
+ * splice-out then splice-in, NOT a two-element swap: dragging image 4 between
+ * 1 and 2 has to leave 2 and 3 in their relative order, which a swap would
+ * destroy. Returns the same array reference when nothing moves, so a dragover
+ * that has not crossed a boundary cannot cause a re-render.
+ */
+const moveInArray = (list, from, to) => {
+  if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return list
+  const next = [...list]
+  const [moved] = next.splice(from, 1)
+  next.splice(to, 0, moved)
+  return next
+}
+
+/**
+ * The editor's view of a stored property's gallery.
+ *
+ * Two repairs, both of which keep the COVER THE VISITOR ALREADY SEES exactly
+ * as it is — this must not quietly change which photograph fronts a live
+ * listing:
+ *
+ *   - a stored mainImage that sits further down `images` is moved to the
+ *     front, so that "first in the list" and "the cover" agree. Without this,
+ *     dragging would be meaningless for such a listing: position 0 would not
+ *     be what the cards show.
+ *   - a stored mainImage that is missing from `images` entirely is prepended.
+ *     Cards already render it, the details gallery already does not, and
+ *     leaving it invisible here is how it gets silently dropped on the next
+ *     save. Surfaced, it is a thumbnail the admin can keep or delete.
+ *
+ * Exact repeats are collapsed. Two genuinely separate uploads of one
+ * photograph have different Cloudinary public_ids and so different URLs; only
+ * the same stored asset listed twice can collide here.
+ */
+const galleryFromProperty = (prop) => {
+  const seen = new Set()
+  const ordered = []
+  for (const entry of prop?.images || []) {
+    if (typeof entry !== 'string') continue
+    const url = entry.trim()
+    if (!url || seen.has(url)) continue
+    seen.add(url)
+    ordered.push(url)
+  }
+
+  const cover = typeof prop?.mainImage === 'string' ? prop.mainImage.trim() : ''
+  if (!cover) return ordered
+
+  const at = ordered.indexOf(cover)
+  if (at === -1) return [cover, ...ordered]
+  return moveInArray(ordered, at, 0)
+}
+
 const PropertyThumbnail = ({ property }) => {
   const candidates = [property.mainImage, ...(property.images || [])].filter(Boolean)
   const media = candidates.find(url => !isVideoUrl(url)) || candidates[0]
@@ -319,8 +409,14 @@ const AdminProperties = () => {
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(emptyForm)
+  // The ordered gallery. There is no separate mainImage state: the cover is
+  // whatever sits at position 0, derived once at submit. See galleryFromProperty.
   const [images, setImages] = useState([])
-  const [mainImage, setMainImage] = useState('')
+  // { done, total } while a batch is in flight, null otherwise.
+  const [uploadProgress, setUploadProgress] = useState(null)
+  // Index being dragged, or null. Lives in state rather than a ref because the
+  // thumbnail it points at is styled while the drag is in progress.
+  const [dragIndex, setDragIndex] = useState(null)
   const editorSession = useRef(0)
   const locationRequest = useRef(0)
   const propertiesRequest = useRef(0)
@@ -513,7 +609,8 @@ const AdminProperties = () => {
     editorSession.current++
     locationRequest.current++
     setUploading(false)
-    setMainImage('')
+    setUploadProgress(null)
+    setDragIndex(null)
     setEditingId(null)
     setForm(emptyForm)
     setDetails(emptyDetails)
@@ -584,58 +681,228 @@ const AdminProperties = () => {
   const openEdit = (prop) => {
     editorSession.current++
     setUploading(false)
-    setMainImage(prop.mainImage || '')
+    setUploadProgress(null)
+    setDragIndex(null)
     setEditingId(prop._id)
     loadAdminLocation(prop._id)
     setForm({ title: prop.title, listingType: prop.listingType, price: prop.price, priceLabel: prop.priceLabel || '', district: prop.district, address: prop.address, propertyType: prop.propertyType, beds: prop.beds, baths: prop.baths, sqm: prop.sqm, description: prop.description || '', agent: agentIdOf(prop.agent), agentPhone: prop.agentPhone || '', agentEmail: prop.agentEmail || '', whatsappNumber: prop.whatsappNumber || '', featured: prop.featured ?? false, status: prop.status })
     setDetails(detailsFromProperty(prop))
     setTransportTouched(false)
-    setImages(prop.images || [])
+    // The stored order, with the cover brought to position 0 — see galleryFromProperty.
+    setImages(galleryFromProperty(prop))
     loadAgents()
     setFormOpen(true)
   }
 
+  /**
+   * Turns a failed upload into something the admin can act on.
+   *
+   * The server's own message is preferred because it is the only text that
+   * knows WHY — "photo.jpg is 14.2 MB", "unsupported file type". The previous
+   * handler discarded it entirely and showed "Upload failed" for every cause,
+   * which is what made a large batch impossible to diagnose. A request that
+   * never reached the server has no such message, so it is named as what it is.
+   */
+  const describeUploadError = (err) => {
+    const fromServer = err?.response?.data?.message
+    if (typeof fromServer === 'string' && fromServer.trim()) return fromServer
+    if (err?.response) return p.uploadServerError || 'the server rejected it'
+    return p.uploadNetworkError || 'the connection dropped'
+  }
+
+  /*
+   * One batch of files, uploaded independently.
+   *
+   * ── Why every file is settled separately ─────────────────────────────────
+   * This is the fix for the failure that started all of this. The old loop
+   * awaited each upload inside a single try, so the FIRST rejected file — one
+   * oversized photo out of thirty — threw straight past every remaining file.
+   * The admin saw one generic toast and silently lost the rest of the batch,
+   * which is precisely why five images worked and thirty did not: with thirty
+   * files, something failing at least once is close to certain.
+   *
+   * Now a failure is a recorded result, not an exception that escapes, so one
+   * bad file costs exactly one file.
+   *
+   * ── Why files are checked before anything is sent ────────────────────────
+   * The picker has always advertised 10 MB, but nothing enforced it, so an
+   * oversized photo was uploaded in full and only then refused. Checking type
+   * and size locally refuses it instantly and, more importantly, refuses it
+   * BY NAME, so the admin knows which file to replace.
+   */
   const handleImage = async (e) => {
-  const input = e.target
-  const session = editorSession.current
-  const files = Array.from(e.target.files || [])
+    const input = e.target
+    const session = editorSession.current
+    const picked = Array.from(input.files || [])
+    // Cleared immediately so re-picking the same file after fixing it still
+    // fires a change event.
+    input.value = ''
+    if (!picked.length) return
 
-  if (!files.length) return
+    const rejected = []
+    let accepted = []
 
-  setUploading(true)
-
-  try {
-    const uploadedUrls = []
-
-    for (const file of files) {
-      const fd = new FormData()
-      fd.append('image', file)
-
-      const r = await api.post('/upload', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-
-      if (session !== editorSession.current) return
-      uploadedUrls.push(r.data.url)
-      // Retain successful files even if a later file in this batch fails.
-      setImages(prev => [...prev, r.data.url])
+    for (const file of picked) {
+      const isVideo = file.type.startsWith('video/')
+      const isImage = file.type.startsWith('image/')
+      if (!isImage && !isVideo) {
+        rejected.push(`${file.name}: ${p.unsupportedFile || 'unsupported file type'}`)
+        continue
+      }
+      const cap = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES
+      if (file.size > cap) {
+        rejected.push(
+          `${file.name}: ${fillTemplate(p.fileTooLarge || '{size} MB exceeds the {max} MB limit', {
+            size: sizeInMb(file.size),
+            max: mb(cap),
+          })}`
+        )
+        continue
+      }
+      accepted.push(file)
     }
 
-    toast.success(p.filesUploaded.replace('{n}', uploadedUrls.length))
-  } catch (err) {
+    // The ceiling is applied to what is actually about to be added, so the
+    // admin is told the number before waiting on any upload.
+    const room = MAX_PROPERTY_IMAGES - images.length
+    if (accepted.length > room) {
+      const dropped = accepted.length - Math.max(room, 0)
+      accepted = room > 0 ? accepted.slice(0, room) : []
+      toast.warn(
+        fillTemplate(
+          p.tooManyImages || 'A property can hold {max} images. {n} file(s) were not added.',
+          { max: MAX_PROPERTY_IMAGES, n: dropped }
+        )
+      )
+    }
+
+    if (!accepted.length) {
+      if (rejected.length) toast.error(rejected.slice(0, 3).join('\n'))
+      return
+    }
+
+    setUploading(true)
+    setUploadProgress({ done: 0, total: accepted.length })
+
+    // Indexed by pick order, so the gallery ends up in the order the admin
+    // chose the files even though the uploads finish out of order.
+    const results = new Array(accepted.length).fill(null)
+    let cursor = 0
+    let done = 0
+
+    const worker = async () => {
+      for (;;) {
+        const index = cursor++
+        if (index >= accepted.length) return
+        const file = accepted[index]
+        try {
+          const fd = new FormData()
+          fd.append('image', file)
+          const r = await api.post('/upload', fd, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })
+          results[index] = { ok: true, url: r.data.url }
+        } catch (err) {
+          console.error('[property images] upload failed', file.name, err)
+          results[index] = { ok: false, error: `${file.name}: ${describeUploadError(err)}` }
+        } finally {
+          done++
+          if (session === editorSession.current) setUploadProgress({ done, total: accepted.length })
+        }
+      }
+    }
+
+    try {
+      await Promise.all(
+        Array.from({ length: Math.min(UPLOAD_CONCURRENCY, accepted.length) }, worker)
+      )
+    } finally {
+      // Unconditional: a stuck `uploading` flag disables both the picker and
+      // the Save button, which would strand the admin in a form they cannot
+      // submit. Every per-file failure is already captured in `results`, so
+      // reaching here by exception means something unforeseen — and the form
+      // still has to be usable.
+      if (session === editorSession.current) {
+        setUploading(false)
+        setUploadProgress(null)
+      }
+    }
+
+    // The editor was closed or switched to another property mid-batch. The
+    // uploads still reached Cloudinary, but they belong to a form that no
+    // longer exists, so nothing is written into the current one.
     if (session !== editorSession.current) return
-    console.error(err)
-    toast.error(c.uploadFailed || 'Upload failed')
-  } finally {
-    if (session === editorSession.current) setUploading(false)
-    input.value = ''
+
+    const uploaded = results.filter((r) => r?.ok).map((r) => r.url)
+    const failures = [...rejected, ...results.filter((r) => r && !r.ok).map((r) => r.error)]
+
+    if (uploaded.length) {
+      setImages((prev) => {
+        // Cloudinary issues a distinct URL per upload, so this guards against a
+        // double-fired handler rather than against a legitimate re-upload.
+        const seen = new Set(prev)
+        const next = [...prev]
+        for (const url of uploaded) {
+          if (seen.has(url)) continue
+          seen.add(url)
+          next.push(url)
+        }
+        return next
+      })
+      toast.success((p.filesUploaded || '{n} file(s) uploaded').replace('{n}', uploaded.length))
+    }
+
+    if (failures.length) {
+      const shown = failures.slice(0, 3).join('\n')
+      const rest = failures.length - 3
+      toast.error(rest > 0 ? `${shown}\n+${rest} more` : shown)
+    }
   }
-}
 
   const removeImage = (index) => {
-    const remaining = images.filter((_, i) => i !== index)
-    if (images[index] === mainImage && !remaining.includes(mainImage)) setMainImage(remaining[0] || '')
-    setImages(remaining)
+    // No cover bookkeeping: removing position 0 promotes position 1, because
+    // the cover is derived from position 0 at submit.
+    setImages((prev) => prev.filter((_, i) => i !== index))
+    setDragIndex(null)
+  }
+
+  /*
+   * Reordering.
+   *
+   * Native HTML5 drag events rather than a library: the thumbnails are a
+   * wrapping flex grid, which the sortable helpers already in the bundle model
+   * poorly (they assume a single axis), and this needs no new dependency.
+   *
+   * The list is reordered on dragEnter rather than on drop, so the thumbnails
+   * shuffle under the cursor and the admin can see where the image will land
+   * before releasing. `dragIndex` is moved with it, so a single drag across
+   * several positions keeps tracking the same image.
+   *
+   * moveImage is the ONLY way the order changes, and it touches nothing but
+   * the array — no re-upload, no request. Reordering is free until save.
+   */
+  const moveImage = useCallback((from, to) => {
+    setImages((prev) => moveInArray(prev, from, to))
+  }, [])
+
+  const onThumbDragStart = (index) => (e) => {
+    setDragIndex(index)
+    e.dataTransfer.effectAllowed = 'move'
+    // Firefox refuses to start a drag unless some data is set.
+    e.dataTransfer.setData('text/plain', String(index))
+  }
+
+  const onThumbDragEnter = (index) => () => {
+    if (dragIndex === null || dragIndex === index) return
+    moveImage(dragIndex, index)
+    setDragIndex(index)
+  }
+
+  const onThumbDragOver = (e) => {
+    // Without this the drop is refused and the browser animates the thumbnail
+    // snapping back, which reads as "reordering did not work".
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
   }
 
   const handleSubmit = async (e) => {
@@ -646,6 +913,18 @@ const AdminProperties = () => {
     // server and hope. The backend is still the authority; this is usability.
     if (locationDraftError) {
       toast.error(p.locationIncomplete || 'Enter both latitude and longitude, or clear the location.')
+      return
+    }
+
+    // The server refuses this too; catching it here means the admin is told
+    // before the request rather than after it.
+    if (images.length > MAX_PROPERTY_IMAGES) {
+      toast.error(
+        fillTemplate(p.tooManyImages || 'A property can hold {max} images. {n} file(s) were not added.', {
+          max: MAX_PROPERTY_IMAGES,
+          n: images.length - MAX_PROPERTY_IMAGES,
+        })
+      )
       return
     }
 
@@ -663,8 +942,10 @@ const AdminProperties = () => {
       beds: Number(form.beds),
       baths: Number(form.baths),
       sqm: Number(form.sqm),
+      // Order is the gallery, and position 0 is the cover. Sent together so the
+      // stored cover can never drift out of step with the stored order.
       images,
-      mainImage: mainImage || images[0] || '',
+      mainImage: images[0] || '',
     }
 
     /*
@@ -700,7 +981,22 @@ const AdminProperties = () => {
       locationRequest.current++
       fetchProperties()
     } catch (err) {
-      toast.error(err.response?.data?.message || c.saveFailed || 'Save failed')
+      /*
+       * The server's own message first: it is the only text that knows which
+       * field was refused and why. 413 is called out separately because the
+       * body parser produces it before any route runs, so its message
+       * ("request entity too large") describes a transport fact rather than
+       * anything the admin can act on.
+       */
+      const status = err.response?.status
+      const fromServer = err.response?.data?.message
+      const message =
+        status === 413
+          ? p.payloadTooLarge ||
+            'The property data was too large to send. Remove some images or shorten the description and try again.'
+          : (typeof fromServer === 'string' && fromServer.trim() && fromServer) ||
+            (c.saveFailed || 'Save failed')
+      toast.error(message)
     } finally {
       setSaving(false)
     }
@@ -1254,31 +1550,98 @@ const AdminProperties = () => {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.images || 'Property Images'}</label>
-                  <span className="text-[10px] text-slate-400">JPG, PNG, WEBP, GIF — max 10 MB · MP4, MOV, WEBM — max 100 MB</span>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {p.images || 'Property Images'}
+                    <span className="ml-2 font-normal normal-case tracking-normal text-slate-400">{images.length} / {MAX_PROPERTY_IMAGES}</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">JPG, PNG, WEBP, GIF — max {mb(MAX_IMAGE_BYTES)} MB · MP4, MOV, WEBM — max {mb(MAX_VIDEO_BYTES)} MB</span>
                 </div>
+                {/* Stated rather than implied: nothing about a thumbnail grid
+                    tells an admin it can be rearranged, and the order decides
+                    what the public gallery and the listing card show. */}
+                <p className="mb-2 text-[11px] text-slate-500">
+                  {p.reorderHint || 'Drag the thumbnails to reorder them. The first image is the cover shown on listing cards.'}
+                </p>
                 <div className="flex flex-wrap gap-3 mb-3">
                   {images.map((img, i) => (
-                    <div key={i} className="relative group">
-                      <img src={img} alt="" className="h-20 w-28 rounded-xl object-cover border border-slate-200" />
-                      <button type="button" onClick={() => removeImage(i)} disabled={saving}
-                        className="absolute -top-2 -right-2 hidden group-hover:flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white cursor-pointer">
+                    /* key is the URL, not the index: on an index key React
+                       keeps each <img> in place and only swaps the src, which
+                       during a drag shows the wrong picture moving. */
+                    <div
+                      key={img}
+                      draggable={!saving && !uploading}
+                      onDragStart={onThumbDragStart(i)}
+                      onDragEnter={onThumbDragEnter(i)}
+                      onDragOver={onThumbDragOver}
+                      onDrop={(e) => { e.preventDefault(); setDragIndex(null) }}
+                      onDragEnd={() => setDragIndex(null)}
+                      className={`relative group select-none ${saving || uploading ? '' : 'cursor-grab active:cursor-grabbing'} ${dragIndex === i ? 'opacity-40' : ''}`}
+                    >
+                      {isVideoUrl(img) ? (
+                        <video src={img} className="h-20 w-28 rounded-xl bg-black object-cover border border-slate-200 pointer-events-none" muted playsInline preload="metadata" />
+                      ) : (
+                        <img src={img} alt="" draggable={false} className="h-20 w-28 rounded-xl object-cover border border-slate-200 pointer-events-none" />
+                      )}
+
+                      {i === 0 && (
+                        <span className="absolute bottom-1 left-1 rounded-md bg-[#202a36]/85 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                          {p.coverBadge || 'Cover'}
+                        </span>
+                      )}
+
+                      {/* Keyboard- and touch-reachable equivalent of the drag.
+                          HTML5 drag events do not fire from touch at all, so
+                          without these the feature would be desktop-only. */}
+                      <div className="absolute inset-x-0 bottom-0 hidden justify-center gap-1 pb-1 group-hover:flex group-focus-within:flex">
+                        <button
+                          type="button"
+                          onClick={() => moveImage(i, i - 1)}
+                          disabled={i === 0 || saving || uploading}
+                          aria-label={p.moveEarlier || 'Move earlier'}
+                          className="flex h-5 w-5 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow disabled:opacity-30 cursor-pointer"
+                        >
+                          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveImage(i, i + 1)}
+                          disabled={i === images.length - 1 || saving || uploading}
+                          aria-label={p.moveLater || 'Move later'}
+                          className="flex h-5 w-5 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow disabled:opacity-30 cursor-pointer"
+                        >
+                          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
+                        </button>
+                      </div>
+
+                      <button type="button" onClick={() => removeImage(i)} disabled={saving || uploading}
+                        aria-label={c.removeImage || 'Remove image'}
+                        className="absolute -top-2 -right-2 hidden group-hover:flex group-focus-within:flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white cursor-pointer">
                         <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
                       </button>
                     </div>
                   ))}
-                  <label className="flex h-20 w-28 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-[#4b6741] hover:text-[#4b6741] transition">
-                    {uploading ? <span className="text-xs">{c.uploading || 'Uploading...'}</span> : <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>}
-                    <input
-  type="file"
-  accept="image/*,video/*"
-  multiple
-  onChange={handleImage}
-  className="hidden"
-  disabled={uploading || saving}
-/>
-                  </label>
+                  {images.length < MAX_PROPERTY_IMAGES && (
+                    <label className="flex h-20 w-28 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-[#4b6741] hover:text-[#4b6741] transition">
+                      {uploading ? (
+                        <span className="px-1 text-center text-[10px] leading-tight">
+                          {uploadProgress
+                            ? fillTemplate(p.uploadingProgress || 'Uploading {done} / {total}…', uploadProgress)
+                            : (c.uploading || 'Uploading...')}
+                        </span>
+                      ) : (
+                        <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*,video/*"
+                        multiple
+                        onChange={handleImage}
+                        className="hidden"
+                        disabled={uploading || saving}
+                      />
+                    </label>
+                  )}
                 </div>
               </div>
 

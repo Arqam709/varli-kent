@@ -75,7 +75,12 @@ const localeGuard = (data, context) => {
 test('Batch 9: safe query, agents, exact/private split, six languages and scoped scroll containers', () => {
   queryGuard(page); agentGuard(admin); locationGuard(route); mapGuard(map); localeGuard(translations, language)
   assert.match(model, /agent:\s*\{[\s\S]*?ref: 'User'/)
-  assert.match(admin, /mainImage: mainImage \|\| images\[0\] \|\| ''/)
+  // The cover is now DERIVED from the gallery's first position rather than
+  // held in its own state, so dragging an image to the front also moves the
+  // cover. The guarantee this line has always defended is unchanged: a saved
+  // property never carries a mainImage that is not one of its images.
+  assert.match(admin, /mainImage: images\[0\] \|\| ''/)
+  assert.doesNotMatch(admin, /setMainImage\(/, 'a second source of truth for the cover has come back')
   assert.match(admin, /disabled=\{saving \|\| uploading\}/)
   assert.match(admin, /<AdminPropertyAssistant[\s\S]*onApplyParsedFields=\{applyParsedFields\}/)
   for (const source of [admin, page]) {

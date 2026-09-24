@@ -402,6 +402,110 @@ const stripExtendedFields = (payload) => {
   for (const field of EXTENDED_OWNED_FIELDS) delete payload[field]
 }
 
+/* ─────────────────────── Property images and cover ───────────────────────
+ *
+ * Until now `images` and `mainImage` reached $set straight off req.body, with
+ * no shape check and no ceiling. That is what made a large gallery fail
+ * unpredictably instead of being refused with a number the admin can act on.
+ *
+ * ── Why the array ORDER is the whole contract ────────────────────────────
+ * Nothing else records the order of a property's gallery. PropertyDetailsPage
+ * renders `property.images` exactly as stored, so the position of a URL in
+ * this array IS the position the visitor sees. Every operation below therefore
+ * preserves the order it was given — the admin's drag order is the stored
+ * order, and no step here sorts, groups or re-derives it.
+ *
+ * ── Why 60 ───────────────────────────────────────────────────────────────
+ * Not a technical ceiling — it is a product one, chosen so the limit is an
+ * explicit, early, translatable refusal rather than a surprise. The technical
+ * headroom was measured rather than assumed: a Cloudinary URL on this account
+ * is 96 bytes, so 60 of them add roughly 6 KB to the request. That is well
+ * inside express.json()'s 100 kb default, which a probe put at around a
+ * thousand images — which is exactly why that limit is left ALONE. Raising it
+ * would have been a change with no measurement behind it.
+ */
+export const MAX_PROPERTY_IMAGES = 60
+
+export const PROPERTY_IMAGE_OWNED_FIELDS = ['images', 'mainImage']
+
+/**
+ * Validates `images` / `mainImage` and returns what should be written.
+ *
+ * Follows the same three-state contract as the extended fields: a key the
+ * caller did not send is absent from the result, so an edit that only changes
+ * the price cannot disturb the gallery or its order.
+ */
+export const parsePropertyImages = (body) => {
+  if (!body || typeof body !== 'object') return { ok: true, value: {} }
+
+  const has = (field) => Object.prototype.hasOwnProperty.call(body, field)
+  const out = {}
+
+  if (has('images') && body.images !== null) {
+    const raw = body.images
+    if (!Array.isArray(raw)) {
+      return { ok: false, message: 'images must be an array of image URLs.' }
+    }
+    if (raw.length > MAX_PROPERTY_IMAGES) {
+      return {
+        ok: false,
+        message: `A property can have at most ${MAX_PROPERTY_IMAGES} images. Remove ${raw.length - MAX_PROPERTY_IMAGES} and save again.`,
+      }
+    }
+
+    const seen = new Set()
+    const ordered = []
+    for (const entry of raw) {
+      if (typeof entry !== 'string') {
+        return { ok: false, message: 'images must contain only image URLs.' }
+      }
+      const url = entry.trim()
+      if (!url) continue
+      /*
+       * A repeated URL is dropped, and this does NOT discard a legitimate
+       * upload. Two genuinely separate uploads of the same photograph get two
+       * different Cloudinary public_ids and therefore two different URLs, so
+       * they both survive. The only thing an EXACT repeat can be is the same
+       * stored asset listed twice — a client-state accident, never a choice.
+       * The first occurrence keeps its position.
+       */
+      if (seen.has(url)) continue
+      seen.add(url)
+      ordered.push(url)
+    }
+    out.images = ordered
+  }
+
+  if (has('mainImage') && body.mainImage !== null) {
+    if (typeof body.mainImage !== 'string') {
+      return { ok: false, message: 'mainImage must be an image URL.' }
+    }
+    out.mainImage = body.mainImage.trim()
+  }
+
+  /*
+   * The cover has to be one of the images.
+   *
+   * Repaired rather than rejected, and only when it is genuinely broken —
+   * empty, or naming a URL that is not in the array being written. A cover
+   * that IS in the array is left exactly where the caller put it, so a future
+   * "choose the cover" control would keep working without touching this.
+   *
+   * Position 0 is the fallback because that is what every reader already does
+   * (`mainImage || images[0]`) and what the admin form has always sent.
+   */
+  if (out.images && (!out.mainImage || !out.images.includes(out.mainImage))) {
+    out.mainImage = out.images[0] || ''
+  }
+
+  return { ok: true, value: out }
+}
+
+/** Strips the owned keys so only validated values can be written. */
+const stripPropertyImageFields = (payload) => {
+  for (const field of PROPERTY_IMAGE_OWNED_FIELDS) delete payload[field]
+}
+
 export const parseExtendedPropertyFields = (body) => {
   if (!body || typeof body !== 'object') return { ok: true, value: {} }
 
@@ -878,6 +982,13 @@ router.post(
         return res.status(400).json({ success: false, message: parsedExtended.message })
       }
 
+      // Same reasoning again: an over-long gallery is refused before any agent
+      // lookup or embedding call, and with a message naming the ceiling.
+      const parsedImages = parsePropertyImages(req.body)
+      if (!parsedImages.ok) {
+        return res.status(400).json({ success: false, message: parsedImages.message })
+      }
+
       // Validate the agent BEFORE any other work, so a bad assignment costs
       // nothing and never reaches the database. No existing property on
       // create, so there is no previous agent whose details could go stale.
@@ -895,6 +1006,11 @@ router.post(
       // Strip first, then apply: a skipped value must leave nothing behind.
       stripExtendedFields(propertyData)
       Object.assign(propertyData, parsedExtended.value)
+
+      // Same strip-then-apply rule, so only the validated, de-duplicated,
+      // order-preserving array can reach the database.
+      stripPropertyImageFields(propertyData)
+      Object.assign(propertyData, parsedImages.value)
 
       try {
         const embeddingResult = await generatePropertyEmbedding(req.body)
@@ -966,6 +1082,11 @@ router.put(
         return res.status(400).json({ success: false, message: parsedExtended.message })
       }
 
+      const parsedImages = parsePropertyImages(req.body)
+      if (!parsedImages.ok) {
+        return res.status(400).json({ success: false, message: parsedImages.message })
+      }
+
       const existingProperty = await Property.findById(req.params.id)
       if (!existingProperty) {
         return res.status(404).json({ success: false, message: 'Property not found' })
@@ -1009,6 +1130,19 @@ router.put(
       // preserved rather than being overwritten with '' or null.
       stripExtendedFields(updateData)
       Object.assign(updateData, parsedExtended.value)
+
+      /*
+       * Gallery. Same no-op rule as everything else above: if the request
+       * carried no `images` key, neither key reaches $set and the stored array
+       * — and therefore the stored ORDER — is left exactly as it is. An edit
+       * that only changes the price can never reshuffle the photographs.
+       *
+       * When `images` IS sent, $set replaces the whole array, so the order the
+       * admin dragged is written verbatim.
+       */
+      stripPropertyImageFields(updateData)
+      Object.assign(updateData, parsedImages.value)
+
       if (parsedLocation.value) updateData.location = parsedLocation.value
 
       const updateOps = {}
