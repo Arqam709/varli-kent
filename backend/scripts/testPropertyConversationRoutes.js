@@ -508,7 +508,8 @@ stubOwnedProperties([propertyId])
 
 await call(listHandler, { user: customer, query: {}, body: {} })
 // 'lastMessage.at' is the empty-thread exclusion; see the section below.
-check('customer sees threads they opened', Object.keys(captured.listFilter).sort().join(','), 'customer,lastMessage.at')
+// hiddenFromInbox: rows this user removed with "Delete conversation".
+check('customer sees threads they opened', Object.keys(captured.listFilter).sort().join(','), 'customer,hiddenFromInbox,lastMessage.at')
 check('scoped to their own id', String(captured.listFilter.customer), String(customerId))
 
 resetCaptured()
@@ -609,6 +610,11 @@ const matchesFilter = (row, filter) =>
       return value !== null
     }
     if (key === 'property') return condition.$in.some((id) => String(id) === String(row.property))
+    if (key === 'hiddenFromInbox') {
+      // $ne against an array field: true unless the id is one of its elements
+      // (and true when the field is missing).
+      return !(row.hiddenFromInbox || []).some((id) => String(id) === String(condition.$ne))
+    }
     return String(condition) === String(row[key])
   })
 

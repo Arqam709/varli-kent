@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
 import { useLanguage } from '../contexts/LanguageContext'
+import { nextOrder, orderInputValue } from '../lib/displayOrder'
 
 const STAR_ICON = (
   <svg className="h-4 w-4 text-amber-400 fill-current" viewBox="0 0 20 20">
@@ -37,7 +38,7 @@ const AdminReviews = () => {
 
   useEffect(() => { load() }, [])
 
-  const openAdd = () => { setForm(empty); setModal('add') }
+  const openAdd = () => { setForm({ ...empty, order: nextOrder(reviews) }); setModal('add') }
   const openEdit = (r) => { setForm({ ...r }); setModal(r) }
   const closeModal = () => { setModal(null); setError('') }
 
@@ -177,7 +178,7 @@ const AdminReviews = () => {
                 </div>
                 <div>
                   <label className={labelCls}>{c.order || 'Order'}</label>
-                  <input type="number" className={inputCls} value={form.order} onChange={e => setForm(f => ({ ...f, order: Number(e.target.value) }))} min={0} />
+                  <input type="number" className={inputCls} value={form.order} onChange={e => setForm(f => ({ ...f, order: orderInputValue(e.target.value) }))} min={0} />
                 </div>
                 <div className="flex flex-col justify-end">
                   <label className="flex items-center gap-2 cursor-pointer">

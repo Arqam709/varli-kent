@@ -1,5 +1,6 @@
 //property
 import mongoose from 'mongoose'
+import { localizedField } from '../utils/localizedField.js'
 
 // Optional geographic position for the property map.
 //
@@ -140,7 +141,23 @@ const propertySchema = new mongoose.Schema({
   // and is only ever stored — nothing in this project embeds it.
   hasVirtualTour: { type: Boolean },
   virtualTourUrl: { type: String },
-  description: { type: String },
+  /*
+   * Write-time localized, the same shape and mechanism as TeamMember bios,
+   * ShowroomImage captions and AboutContent prose: routes/properties.js runs
+   * the admin's one plain-language sentence through localizeText() once, at
+   * save time, so a visitor's page view never costs a translation call.
+   *
+   * localizedField() rather than a strict sub-schema ON PURPOSE. This is
+   * `Mixed`, so the plain strings every property written before this change
+   * still holds read back untouched instead of failing to cast against a
+   * nested shape. Both forms are resolved by the same readers — unwrapLocalized
+   * on the server, localizedText on the client — and
+   * scripts/backfillPropertyDescriptions.js converts the legacy ones when you
+   * choose to run it. Nothing breaks if you never do.
+   *
+   * No default text, so an unset description stays genuinely absent.
+   */
+  description: localizedField(),
   images: [{ type: String }],
   mainImage: { type: String },
   // LEGACY. Nothing writes this any more — the property routes strip it and
@@ -166,6 +183,24 @@ const propertySchema = new mongoose.Schema({
     enum: ['Available', 'Sold', 'Rented', 'Pending'],
     default: 'Available',
   },
+
+  /* ── Closing record ───────────────────────────────────────────────────
+   *
+   * The price actually achieved, kept DISTINCT from `price` so the asking
+   * price stays as it was listed — a closed listing is only interesting next
+   * to what it was originally offered at.
+   *
+   * Both optional, both without a default, and only meaningful once `status`
+   * is Sold or Rented. Range-checked in routes/properties.js rather than here,
+   * matching how `location`, `netSqm` and the rest of the detail fields are
+   * handled: one authority for what a valid value is, in the route layer.
+   *
+   * Nothing is inferred from `status` alone — a listing marked Sold with no
+   * soldPrice means "we did not record it", not "it sold for nothing".
+   */
+  soldPrice: { type: Number },
+  soldDate: { type: Date },
+
   createdAt: { type: Date, default: Date.now },
   // Optional — populated by scripts/backfillPropertyEmbeddings.js for
   // semantic (meaning-based) lifestyle search. `default: undefined` keeps
@@ -178,16 +213,45 @@ const propertySchema = new mongoose.Schema({
   embeddingUpdatedAt: { type: Date },
 })
 
+/*
+ * The $text index behind searchByDescription and propertyNameResolver.
+ *
+ * `description` is listed TWICE, deliberately, because it now holds one of two
+ * shapes. MongoDB's text index only indexes string values, so:
+ *
+ *   description       matches a legacy plain-string description, and is simply
+ *                     ignored on a document where the value is an object.
+ *   'description.en'  matches a localized one via its English copy — which
+ *                     every localized description has, whatever language it
+ *                     was typed in, because localizeText always fills `en`.
+ *
+ * Covering both means keyword search keeps working on migrated and
+ * un-migrated properties alike, so running
+ * scripts/backfillPropertyDescriptions.js is an improvement you can schedule
+ * rather than a prerequisite. Indexing only `description.en` — which is what
+ * a nested-only index would do — would make every un-migrated property
+ * invisible to $text the moment this shipped.
+ *
+ * Equal weights on the two, since they are the same field in two storage
+ * shapes and a document only ever matches through one of them.
+ *
+ * MIGRATION NOTE: this replaces an existing text index, and MongoDB permits
+ * only one per collection. The old one must be dropped before this definition
+ * can be created — scripts/backfillPropertyDescriptions.js does that via
+ * Property.syncIndexes().
+ */
 propertySchema.index(
   {
     title: 'text',
     description: 'text',
+    'description.en': 'text',
     district: 'text',
     address: 'text',
   },
   {
     weights: {
       description: 10,
+      'description.en': 10,
       title: 5,
       district: 3,
       address: 2,

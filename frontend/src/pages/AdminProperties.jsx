@@ -5,6 +5,7 @@ import AdminLayout from '../components/AdminLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { formatPrice } from '../lib/formatPrice'
+import { editableText } from '../lib/localizedText'
 
 const isVideoUrl = (url = '') => /\/video\/|\.(mp4|mov|webm|avi)(?:[?#]|$)/i.test(url)
 
@@ -207,7 +208,15 @@ const TRISTATE_BOOLEANS = [
   'sauna','jacuzzi','steamRoom','turkishBath','basement',
   'withinSite','eligibleForCredit','exchange',
 ]
-const OPTIONAL_NUMBERS = ['netSqm','openAreaSqm','coefficient','floor','totalFloors']
+const OPTIONAL_NUMBERS = ['netSqm','openAreaSqm','coefficient','floor','totalFloors','soldPrice']
+
+/*
+ * Optional date fields, held in state as the 'YYYY-MM-DD' string an
+ * <input type="date"> speaks and sent as that same string — the route parses it.
+ * Blank means "not supplied" and is omitted from the payload entirely, exactly
+ * like a blank optional number.
+ */
+const OPTIONAL_DATES = ['soldDate']
 const OPTIONAL_ENUMS = [
   'currency','rooms','floorLocation','buildingAge','heating','parking',
   'kitchenType','usageStatus','titleDeedStatus',
@@ -270,9 +279,21 @@ const emptyDetails = {
   withinSite: '', eligibleForCredit: '', exchange: '', hasVirtualTour: '',
   nearbyTransport: [],
   virtualTourUrl: '',
+  // Closing record. Only meaningful once the status is Sold or Rented.
+  soldPrice: '', soldDate: '',
 }
 
 const numberToInput = (v) => (typeof v === 'number' && Number.isFinite(v) ? String(v) : '')
+/*
+ * A stored Date (which arrives over JSON as an ISO string) as the 'YYYY-MM-DD'
+ * an <input type="date"> requires. Sliced rather than converted through the
+ * local timezone, which could shift the displayed day by one either way.
+ */
+const dateToInput = (v) => {
+  if (!v) return ''
+  const iso = v instanceof Date ? v.toISOString() : String(v)
+  return /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10) : ''
+}
 const stringToInput = (v) => (typeof v === 'string' ? v : '')
 /** true -> 'true', false -> 'false', anything else -> '' (never recorded). */
 const booleanToTriState = (v) => (v === true ? 'true' : v === false ? 'false' : '')
@@ -288,6 +309,7 @@ const detailsFromProperty = (prop) => {
 
   for (const field of OPTIONAL_NUMBERS) out[field] = numberToInput(prop[field])
   for (const field of OPTIONAL_ENUMS) out[field] = stringToInput(prop[field])
+  for (const field of OPTIONAL_DATES) out[field] = dateToInput(prop[field])
   for (const field of CLASSIC_BOOLEANS) out[field] = prop[field] === true
   for (const field of [...TRISTATE_BOOLEANS, 'hasVirtualTour']) {
     out[field] = booleanToTriState(prop[field])
@@ -343,6 +365,11 @@ const buildDetailsPayload = (details, transportTouched) => {
 
   for (const field of OPTIONAL_ENUMS) {
     if (details[field]) out[field] = details[field]
+  }
+
+  for (const field of OPTIONAL_DATES) {
+    const raw = String(details[field]).trim()
+    if (raw !== '') out[field] = raw
   }
 
   for (const field of CLASSIC_BOOLEANS) out[field] = details[field] === true
@@ -685,7 +712,7 @@ const AdminProperties = () => {
     setDragIndex(null)
     setEditingId(prop._id)
     loadAdminLocation(prop._id)
-    setForm({ title: prop.title, listingType: prop.listingType, price: prop.price, priceLabel: prop.priceLabel || '', district: prop.district, address: prop.address, propertyType: prop.propertyType, beds: prop.beds, baths: prop.baths, sqm: prop.sqm, description: prop.description || '', agent: agentIdOf(prop.agent), agentPhone: prop.agentPhone || '', agentEmail: prop.agentEmail || '', whatsappNumber: prop.whatsappNumber || '', featured: prop.featured ?? false, status: prop.status })
+    setForm({ title: prop.title, listingType: prop.listingType, price: prop.price, priceLabel: prop.priceLabel || '', district: prop.district, address: prop.address, propertyType: prop.propertyType, beds: prop.beds, baths: prop.baths, sqm: prop.sqm, description: editableText(prop.description), agent: agentIdOf(prop.agent), agentPhone: prop.agentPhone || '', agentEmail: prop.agentEmail || '', whatsappNumber: prop.whatsappNumber || '', featured: prop.featured ?? false, status: prop.status })
     setDetails(detailsFromProperty(prop))
     setTransportTouched(false)
     // The stored order, with the cover brought to position 0 — see galleryFromProperty.
@@ -1299,6 +1326,46 @@ const AdminProperties = () => {
                     <option value="Pending">{p.pending || 'Pending'}</option>
                   </select>
                 </div>
+                {/*
+                  Closing record, shown only for a closed listing.
+                  `price` above stays the ASKING price; these record what the
+                  deal actually closed at, which is what makes the pair readable
+                  as "listed at X, achieved Y" on the public page.
+
+                  Hidden rather than disabled for Available/Pending, because a
+                  field that cannot apply yet is noise in an already long form.
+                  Hiding is safe: buildDetailsPayload omits a blank value, and
+                  the values stay in `details` state, so flipping the status back
+                  and forth within one editing session does not lose anything the
+                  admin typed. Clearing a recorded figure is done by emptying the
+                  input while the status is still Sold or Rented.
+                */}
+                {(form.status === 'Sold' || form.status === 'Rented') ? (
+                  <>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {form.status === 'Rented' ? (p.letPrice || 'Let Price') : (p.soldPrice || 'Sold Price')}
+                      </label>
+                      <input
+                        type="number"
+                        value={details.soldPrice}
+                        onChange={e => setDetails(prev => ({ ...prev, soldPrice: e.target.value }))}
+                        className={inputCls}
+                        placeholder={p.soldPricePlaceholder || 'Actual price achieved'}
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.soldDate || 'Date Closed'}</label>
+                      <input
+                        type="date"
+                        value={details.soldDate}
+                        onChange={e => setDetails(prev => ({ ...prev, soldDate: e.target.value }))}
+                        className={inputCls}
+                      />
+                    </div>
+                  </>
+                ) : null}
                 <div className="md:col-span-2">
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{p.description || 'Description'}</label>
                   <textarea value={form.description} onChange={e => setForm(prev => ({...prev, description: e.target.value}))} rows={4} className={inputCls} placeholder="Property description..." />

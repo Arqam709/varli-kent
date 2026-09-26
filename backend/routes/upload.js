@@ -24,8 +24,44 @@ const router = express.Router()
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024
 
+/*
+ * A document gets the image cap, not the video one. A portfolio PDF or slide
+ * deck is a document, not a film reel; 10 MB is generous for one and a 100 MB
+ * allowance would only invite an upload nobody wants to wait for.
+ */
+export const MAX_DOCUMENT_BYTES = MAX_IMAGE_BYTES
+
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif']
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm']
+
+/* ──────────────────────── Accepted documents ────────────────────────
+ *
+ * Team "Their Work" attachments. utils/teamWork.js's WORK_FILE_TYPES is the
+ * authority on which extensions the team model stores (pdf, doc, docx, ppt,
+ * pptx) and src/lib/teamWork.js's DOCUMENT_ACCEPT is what the admin picker
+ * offers; this is the upload side of that same set, which was the one link in
+ * the chain that never accepted them. Before this, the picker let an admin
+ * choose a PDF and the request came back 415.
+ *
+ * Both the mimetype AND the extension are checked, because neither alone is
+ * reliable here: browsers report .doc as any of several vendor types (and
+ * occasionally application/octet-stream), while an extension on its own is
+ * just a caller-supplied string. Either signal matching a known document is
+ * enough to route it as one; an unrecognised file still falls through to the
+ * 415 below.
+ */
+const ALLOWED_DOCUMENT_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+]
+
+const DOCUMENT_EXT_RE = /\.(pdf|docx?|pptx?)$/i
+
+const isDocument = (file) =>
+  ALLOWED_DOCUMENT_TYPES.includes(file.mimetype) || DOCUMENT_EXT_RE.test(file.originalname || '')
 
 const mb = (bytes) => Math.round(bytes / (1024 * 1024))
 
@@ -33,10 +69,14 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_VIDEO_BYTES, files: 1 },
   fileFilter: (req, file, cb) => {
-    if (ALLOWED_IMAGE_TYPES.includes(file.mimetype) || ALLOWED_VIDEO_TYPES.includes(file.mimetype)) {
+    if (
+      ALLOWED_IMAGE_TYPES.includes(file.mimetype) ||
+      ALLOWED_VIDEO_TYPES.includes(file.mimetype) ||
+      isDocument(file)
+    ) {
       return cb(null, true)
     }
-    cb(Object.assign(new Error('Unsupported file type. Use JPG, PNG, WEBP, GIF or AVIF for images, or MP4, MOV or WEBM for video.'), { status: 415 }))
+    cb(Object.assign(new Error('Unsupported file type. Use JPG, PNG, WEBP, GIF or AVIF for images, MP4, MOV or WEBM for video, or PDF, DOC, DOCX, PPT or PPTX for documents.'), { status: 415 }))
   },
 })
 
@@ -56,7 +96,7 @@ const singleFile = (req, res, next) =>
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({
           success: false,
-          message: `That file is too large. Images may be up to ${mb(MAX_IMAGE_BYTES)} MB and videos up to ${mb(MAX_VIDEO_BYTES)} MB.`,
+          message: `That file is too large. Images and documents may be up to ${mb(MAX_IMAGE_BYTES)} MB and videos up to ${mb(MAX_VIDEO_BYTES)} MB.`,
         })
       }
       return res.status(400).json({ success: false, message: 'Upload one file per request.' })
@@ -65,10 +105,21 @@ const singleFile = (req, res, next) =>
     return next(err)
   })
 
-const uploadToCloudinary = (buffer, folder) => {
+/*
+ * `resource_type` must be chosen, not left to 'auto'.
+ *
+ * 'auto' only recognises images and video. Cloudinary treats anything else as
+ * an unrecognised image and fails the upload outright, which is the second half
+ * of why documents never worked here. A document has to go up as 'raw' — its
+ * bytes stored and served as-is, with no transformation pipeline.
+ *
+ * Images and video keep 'auto' exactly as before, so nothing about the existing
+ * upload paths changes.
+ */
+const uploadToCloudinary = (buffer, folder, { raw = false } = {}) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: 'auto' }, // auto handles images + videos
+      { folder, resource_type: raw ? 'raw' : 'auto' }, // auto handles images + videos
       (error, result) => {
         if (error) return reject(error)
         resolve(result)
@@ -98,7 +149,19 @@ router.post(
         })
       }
 
-      const result = await uploadToCloudinary(req.file.buffer, 'varlikent')
+      // Same post-arrival check as images, and for the same reason: multer's one
+      // cap has to sit at the video limit, so a document's smaller ceiling can
+      // only be enforced once the size is known. Still refused before Cloudinary
+      // sees it, with a message naming the limit.
+      const document = isDocument(req.file)
+      if (document && req.file.size > MAX_DOCUMENT_BYTES) {
+        return res.status(413).json({
+          success: false,
+          message: `${req.file.originalname || 'That document'} is ${(req.file.size / (1024 * 1024)).toFixed(1)} MB. Documents may be up to ${mb(MAX_DOCUMENT_BYTES)} MB.`,
+        })
+      }
+
+      const result = await uploadToCloudinary(req.file.buffer, 'varlikent', { raw: document })
       res.status(201).json({
         success: true,
         url: result.secure_url,
@@ -119,7 +182,7 @@ router.post(
       if (providerStatus && providerStatus >= 400 && providerStatus < 500) {
         return res.status(400).json({
           success: false,
-          message: 'The media service rejected this file. Check that it is a valid image or video within the size limits.',
+          message: 'The media service rejected this file. Check that it is a valid image, video or document within the size limits.',
         })
       }
 

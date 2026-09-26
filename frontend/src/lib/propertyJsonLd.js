@@ -1,4 +1,5 @@
 import { SITE_URL } from './useSeo.js'
+import { localizedText } from './localizedText.js'
 
 // Property structured data (schema.org JSON-LD) for /properties/:id.
 //
@@ -190,8 +191,18 @@ export const buildPropertyJsonLd = (property, id) => {
     '@context': 'https://schema.org',
     '@type': residenceType(property.propertyType),
     name: title,
+    /*
+     * description is localized — a { sourceLang, en, tr, ... } object, or a plain
+     * string on a listing written before that change. localizedText resolves
+     * either, and is asked for ENGLISH specifically: this is crawler-facing
+     * metadata attached to one canonical URL, not per-visitor copy, so it must
+     * not change language with whoever happened to load the page. Its fallback
+     * chain still yields the admin's own words when no English copy exists, and
+     * it drops provider-warning text, so a poisoned translation is never
+     * published as a factual claim about a listing.
+     */
     description:
-      text(property.description) ||
+      text(localizedText(property.description, 'en')) ||
       (district && (isRent || isSale)
         ? `${isRent ? 'For Rent' : 'For Sale'}: ${title} in ${district}, Istanbul.`
         : undefined),

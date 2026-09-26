@@ -108,6 +108,8 @@ const translations = {
       "contactSupport": "Contact support"
     },
     common: {
+      cancel: "Cancel",
+      delete: "Delete",
       noImagesYet: 'No images yet',
       previous: 'Previous',
       next: 'Next',
@@ -534,6 +536,10 @@ const translations = {
       someLocationsHidden: '{count} listings are not shown on the map because their locations are private or unavailable.',
     },
     propertyDetails: {
+      // ── Closing record: the achieved price next to the asking one ──
+      askingPrice: "Asking Price",
+      soldPrice: "Sold for",
+      letPrice: "Let for",
       // ── Wave 10B3: public detail fields ──
       specsTitle: "Property Specs",
       sizeLayout: "Size & Layout",
@@ -896,6 +902,11 @@ const translations = {
         videosLabel: 'videos',
       },
       properties: {
+        // ── Closing record (admin form) ──
+        soldPrice: "Sold Price",
+        letPrice: "Let Price",
+        soldDate: "Date Closed",
+        soldPricePlaceholder: "Actual price achieved",
         noListings: "No listings in this category yet.",
         loadError: "Could not load properties. Please try again.",
         propertyAdded: "Property added",
@@ -1532,6 +1543,8 @@ const translations = {
       "contactSupport": "Destek ekibine ulaşın"
     },
     common: {
+      cancel: "İptal",
+      delete: "Sil",
       noImagesYet: 'Henüz görsel yok',
       previous: 'Önceki',
       next: 'Sonraki',
@@ -1979,6 +1992,9 @@ forgotPasswordPage: {
       someLocationsHidden: '{count} ilan, konumları özel veya mevcut olmadığı için haritada gösterilmiyor.',
     },
     propertyDetails: {
+      askingPrice: "İstenen Fiyat",
+      soldPrice: "Satış fiyatı",
+      letPrice: "Kiralama fiyatı",
       // ── Wave 10B3: public detail fields ──
       specsTitle: "Taşınmaz Özellikleri",
       sizeLayout: "Boyut ve Plan",
@@ -2341,6 +2357,10 @@ forgotPasswordPage: {
         videosLabel: 'video',
       },
       properties: {
+        soldPrice: "Satış Fiyatı",
+        letPrice: "Kira Fiyatı",
+        soldDate: "Kapanış Tarihi",
+        soldPricePlaceholder: "Gerçekleşen fiyat",
         noListings: "Bu kategoride henüz ilan yok.",
         loadError: "İlanlar yüklenemedi. Lütfen tekrar deneyin.",
         propertyAdded: "Mülk eklendi",
@@ -2977,6 +2997,8 @@ forgotPasswordPage: {
       "contactSupport": "التواصل مع الدعم"
     },
     common: {
+      cancel: "إلغاء",
+      delete: "حذف",
       noImagesYet: 'لا توجد صور بعد',
       previous: 'السابق',
       next: 'التالي',
@@ -3425,6 +3447,9 @@ forgotPasswordPage: {
       someLocationsHidden: '{count} من القوائم لا تظهر على الخريطة لأن مواقعها خاصة أو غير متاحة.',
     },
     propertyDetails: {
+      askingPrice: "السعر المطلوب",
+      soldPrice: "سعر البيع",
+      letPrice: "سعر الإيجار",
       // ── Wave 10B3: public detail fields ──
       specsTitle: "مواصفات العقار",
       sizeLayout: "المساحة والتخطيط",
@@ -3787,6 +3812,10 @@ forgotPasswordPage: {
         videosLabel: 'فيديو',
       },
       properties: {
+        soldPrice: "سعر البيع",
+        letPrice: "سعر الإيجار",
+        soldDate: "تاريخ الإتمام",
+        soldPricePlaceholder: "السعر المحقق فعليًا",
         noListings: "لا توجد إعلانات في هذه الفئة بعد.",
         loadError: "تعذّر تحميل العقارات. يُرجى المحاولة مرة أخرى.",
         propertyAdded: "تمت إضافة العقار",
@@ -4850,6 +4879,9 @@ forgotPasswordPage: {
       someLocationsHidden: '{count} Angebote werden nicht auf der Karte angezeigt, da ihre Standorte privat oder nicht verfügbar sind.',
     },
     propertyDetails: {
+      askingPrice: "Angebotspreis",
+      soldPrice: "Verkauft für",
+      letPrice: "Vermietet für",
       // ── Wave 10B3: public detail fields ──
       specsTitle: "Objektdaten",
       sizeLayout: "Größe & Grundriss",
@@ -4885,6 +4917,8 @@ forgotPasswordPage: {
       beds: 'Schlafzimmer', baths: 'Bäder', viewDetails: 'Details ansehen', istanbul: 'Istanbul',
     },
     common: {
+      cancel: "Abbrechen",
+      delete: "Löschen",
       noImagesYet: 'Noch keine Bilder', previous: 'Zurück', next: 'Weiter', explore: 'Entdecken', close: 'Schließen', image: 'Bild', video: 'Video',
     },
     privacyBanner: {
@@ -5029,6 +5063,10 @@ forgotPasswordPage: {
         videosLabel: 'Videos',
       },
       properties: {
+        soldPrice: "Verkaufspreis",
+        letPrice: "Mietpreis",
+        soldDate: "Abschlussdatum",
+        soldPricePlaceholder: "Tatsächlich erzielter Preis",
         noListings: "Noch keine Angebote in dieser Kategorie.",
         loadError: "Immobilien konnten nicht geladen werden. Bitte erneut versuchen.",
         propertyAdded: "Immobilie hinzugefügt",
@@ -6147,6 +6185,9 @@ forgotPasswordPage: {
       someLocationsHidden: 'Объектов не показано на карте: {count} — их расположение скрыто или недоступно.',
     },
     propertyDetails: {
+      askingPrice: "Запрашиваемая цена",
+      soldPrice: "Продано за",
+      letPrice: "Сдано за",
       // ── Wave 10B3: public detail fields ──
       specsTitle: "Характеристики объекта",
       sizeLayout: "Площадь и планировка",
@@ -6182,6 +6223,8 @@ forgotPasswordPage: {
       beds: 'Спальни', baths: 'Ванные', viewDetails: 'Подробнее', istanbul: 'Стамбул',
     },
     common: {
+      cancel: "Отмена",
+      delete: "Удалить",
       noImagesYet: 'Изображений пока нет', previous: 'Назад', next: 'Далее', explore: 'Подробнее', close: 'Закрыть', image: 'Изображение', video: 'Видео',
     },
     privacyBanner: {
@@ -6326,6 +6369,10 @@ forgotPasswordPage: {
         videosLabel: 'видео',
       },
       properties: {
+        soldPrice: "Цена продажи",
+        letPrice: "Цена аренды",
+        soldDate: "Дата закрытия",
+        soldPricePlaceholder: "Фактически достигнутая цена",
         noListings: "В этой категории пока нет объявлений.",
         loadError: "Не удалось загрузить объекты. Попробуйте ещё раз.",
         propertyAdded: "Объект добавлен",
@@ -7444,6 +7491,9 @@ forgotPasswordPage: {
       someLocationsHidden: '{count} فہرستیں نقشے پر نہیں دکھائی جا رہیں کیونکہ ان کے مقامات نجی یا دستیاب نہیں ہیں۔',
     },
     propertyDetails: {
+      askingPrice: "مطلوبہ قیمت",
+      soldPrice: "فروخت ہوا",
+      letPrice: "کرائے پر دیا گیا",
       // ── Wave 10B3: public detail fields ──
       specsTitle: "جائیداد کی تفصیلات",
       sizeLayout: "رقبہ اور نقشہ",
@@ -7479,6 +7529,8 @@ forgotPasswordPage: {
       beds: 'بیڈ رومز', baths: 'باتھ رومز', viewDetails: 'تفصیلات دیکھیں', istanbul: 'استنبول',
     },
     common: {
+      cancel: "منسوخ کریں",
+      delete: "حذف کریں",
       noImagesYet: 'ابھی تک کوئی تصویر نہیں', previous: 'پچھلا', next: 'اگلا', explore: 'دیکھیں', close: 'بند کریں', image: 'تصویر', video: 'ویڈیو',
     },
     privacyBanner: {
@@ -7623,6 +7675,10 @@ forgotPasswordPage: {
         videosLabel: 'ویڈیوز',
       },
       properties: {
+        soldPrice: "فروخت کی قیمت",
+        letPrice: "کرائے کی قیمت",
+        soldDate: "بندش کی تاریخ",
+        soldPricePlaceholder: "حاصل شدہ اصل قیمت",
         noListings: "اس زمرے میں ابھی کوئی اشتہار نہیں۔",
         loadError: "جائیدادیں لوڈ نہیں ہو سکیں۔ دوبارہ کوشش کریں۔",
         propertyAdded: "جائیداد شامل ہو گئی",

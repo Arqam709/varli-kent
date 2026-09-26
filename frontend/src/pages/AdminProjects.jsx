@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
 import { useLanguage } from '../contexts/LanguageContext'
+import { nextOrder, orderInputValue } from '../lib/displayOrder'
 
 const inputCls = 'w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4b6741] bg-white'
 const labelCls = 'block text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1'
@@ -48,7 +49,7 @@ const AdminProjects = () => {
 
   useEffect(() => { load() }, [])
 
-  const openAdd = () => { setForm({ ...emptyProject, phases: emptyProject.phases.map(ph => ({ ...ph })) }); setModal('add') }
+  const openAdd = () => { setForm({ ...emptyProject, phases: emptyProject.phases.map(ph => ({ ...ph })), order: nextOrder(projects) }); setModal('add') }
   const openEdit = (proj) => { setForm({ ...proj, phases: proj.phases.map(ph => ({ ...ph })) }); setModal(proj) }
   const closeModal = () => { setModal(null); setError('') }
 
@@ -195,7 +196,7 @@ const AdminProjects = () => {
                 </div>
                 <div>
                   <label className={labelCls}>{p.displayOrder || 'Display Order'}</label>
-                  <input type="number" className={inputCls} value={form.order} onChange={e => set('order', Number(e.target.value))} min={0} />
+                  <input type="number" className={inputCls} value={form.order} onChange={e => set('order', orderInputValue(e.target.value))} min={0} />
                 </div>
                 <div className="flex items-end gap-6 pb-0.5">
                   <label className="flex items-center gap-2 cursor-pointer">

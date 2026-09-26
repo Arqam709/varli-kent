@@ -6,6 +6,7 @@ import { generatePropertyEmbedding, embeddingSourceFieldsChanged } from '../serv
 import { resolveAgentContact, publicAgent, AGENT_POPULATE_FIELDS } from '../services/agentAssignment.js'
 import { handlePropertyAgentReassignment } from '../services/propertyMessaging.js'
 import { notifyNewPropertyCreated } from '../services/propertyCreatedPush.js'
+import { localizeFields } from '../utils/autoTranslate.js'
 // Not called directly — importing it registers the 'User' model with Mongoose,
 // which populate('agent') below depends on.
 import '../models/User.js'
@@ -13,6 +14,33 @@ import '../models/User.js'
 const router = express.Router()
 
 const PUBLIC_PROPERTY_EXCLUDE = '-descriptionEmbedding -embeddingUpdatedAt'
+
+/* ───────────────────── Localized property description ─────────────────────
+ *
+ * The admin types one description in one language. localizeFields expands it
+ * into all six at save time, so a visitor's page view never costs a translation
+ * call — the same write-time pattern routes/showroom.js and routes/about.js
+ * already use, reused here rather than reimplemented.
+ *
+ * What localizeFields gives us over a bare localizeText call:
+ *
+ *   - a key the client did not send is left alone, so an update that only
+ *     changes the price cannot disturb the description;
+ *   - a value that is ALREADY a localized object passes through untouched,
+ *     which is what makes a round-trip of an unedited form free;
+ *   - an unchanged source string is recognised (isUnchangedSource) and the
+ *     stored translations are kept, so re-saving a property the admin did not
+ *     retype spends no translation quota;
+ *   - a failed target keeps whatever real translation it already had instead
+ *     of being overwritten with the source text.
+ *
+ * An empty string resolves to a blank localized shape without calling the
+ * provider — localizeText returns early for text it cannot use.
+ */
+const LOCALIZED_PROPERTY_FIELDS = ['description']
+
+const localizePropertyDescription = (payload, existing = undefined) =>
+  localizeFields(payload, LOCALIZED_PROPERTY_FIELDS, existing)
 
 /* ───────────────────────── Property location ─────────────────────────
  *
@@ -321,7 +349,20 @@ const EXTENDED_ENUMS = {
 
 // [field, minimum]. `coefficient` has no minimum because the donor documents no
 // business meaning for it, and inventing a bound would be inventing a rule.
-const EXTENDED_NUMBERS = [['netSqm', 0], ['openAreaSqm', 0], ['coefficient', null]]
+//
+// `soldPrice` is the price actually achieved (see Property.js). Floored at 0 for
+// the same reason `price` is: a negative amount is not a discount, it is a typo.
+const EXTENDED_NUMBERS = [['netSqm', 0], ['openAreaSqm', 0], ['coefficient', null], ['soldPrice', 0]]
+
+/**
+ * Optional date fields, validated here rather than left to Mongoose's cast.
+ *
+ * Mongoose would turn an unparseable string into a CastError — a 500 — where
+ * this returns a 400 naming the field, matching how every other detail field in
+ * this parser reports a bad value. A cleared form input sends '', which means
+ * "not supplied" and is skipped, exactly like the enums above.
+ */
+const EXTENDED_DATES = ['soldDate']
 
 const EXTENDED_BOOLEANS = [
   'sauna', 'jacuzzi', 'steamRoom', 'turkishBath', 'basement',
@@ -393,6 +434,7 @@ export const EXTENDED_OWNED_FIELDS = [
   ...EXTENDED_NUMBERS.map(([field]) => field),
   ...EXTENDED_BOOLEANS,
   ...Object.keys(EXTENDED_ENUMS),
+  ...EXTENDED_DATES,
   'nearbyTransport',
   'virtualTourUrl',
 ]
@@ -528,6 +570,15 @@ export const parseExtendedPropertyFields = (body) => {
     // coerced into a confident claim about a property.
     if (typeof body[field] !== 'boolean') return fail(`${field} must be true or false.`)
     out[field] = body[field]
+  }
+
+  for (const field of EXTENDED_DATES) {
+    if (!has(field) || body[field] === null || body[field] === '') continue
+    const raw = body[field]
+    if (typeof raw !== 'string' && !(raw instanceof Date)) return fail(`${field} must be a date.`)
+    const parsed = raw instanceof Date ? raw : new Date(raw)
+    if (Number.isNaN(parsed.getTime())) return fail(`${field} must be a valid date.`)
+    out[field] = parsed
   }
 
   for (const [field, allowed] of Object.entries(EXTENDED_ENUMS)) {
@@ -995,6 +1046,10 @@ router.post(
       let propertyData = await applyAgentContact(req.body, res, null)
       if (!propertyData) return
 
+      // Nothing stored yet on create, so there are no previous translations to
+      // preserve and no unchanged-source shortcut to take.
+      propertyData = await localizePropertyDescription(propertyData)
+
       // On create there is nothing to preserve and nothing to clear, so the
       // only two outcomes are "store the normalised object" and "no location".
       if (parsedLocation.value) {
@@ -1013,7 +1068,11 @@ router.post(
       Object.assign(propertyData, parsedImages.value)
 
       try {
-        const embeddingResult = await generatePropertyEmbedding(req.body)
+        // propertyData, not req.body — its description is the localized object
+        // actually being stored. buildPropertyEmbeddingText resolves that back
+        // to the admin's source-language sentence, which is the same text the
+        // raw body held, so existing embeddings stay comparable.
+        const embeddingResult = await generatePropertyEmbedding(propertyData)
         if (embeddingResult) {
           propertyData = { ...propertyData, ...embeddingResult }
         }
@@ -1098,13 +1157,24 @@ router.put(
       let updateData = await applyAgentContact(req.body, res, existingProperty)
       if (!updateData) return
 
-      if (embeddingSourceFieldsChanged(existingProperty, req.body)) {
+      // Localize BEFORE the embedding comparison below, so that check and the
+      // embedding text both see the final shape being written. Passing the
+      // existing document lets localizeFields keep the translations this
+      // description already has when the admin did not retype it.
+      //
+      // The document goes in as-is rather than through toObject(): localizeFields
+      // only ever READS `existing[field]`, and Mongoose's getter already hands
+      // back the stored Mixed value for that. Snapshotting first would buy
+      // nothing and would make this depend on a method a plain object lacks.
+      updateData = await localizePropertyDescription(updateData, existingProperty)
+
+      if (embeddingSourceFieldsChanged(existingProperty, updateData)) {
         try {
           const mergedForEmbedding = {
-            title: req.body.title ?? existingProperty.title,
-            description: req.body.description ?? existingProperty.description,
-            district: req.body.district ?? existingProperty.district,
-            address: req.body.address ?? existingProperty.address,
+            title: updateData.title ?? existingProperty.title,
+            description: updateData.description ?? existingProperty.description,
+            district: updateData.district ?? existingProperty.district,
+            address: updateData.address ?? existingProperty.address,
           }
 
           const embeddingResult = await generatePropertyEmbedding(mergedForEmbedding)

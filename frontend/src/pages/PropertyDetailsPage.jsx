@@ -6,6 +6,7 @@ import { useFavourites } from '../contexts/FavouritesContext'
 import PropertyCard from '../components/PropertyCard'
 import { formatPrice } from '../lib/formatPrice'
 import { useLanguage } from '../contexts/LanguageContext'
+import { localizedText } from '../lib/localizedText'
 import { SinglePropertyMap, isPubliclyMappable, isApproximateLocation } from '../components/PropertyMapView'
 import useSeo from '../lib/useSeo'
 import { buildPropertyJsonLd } from '../lib/propertyJsonLd'
@@ -92,6 +93,26 @@ const safeTourUrl = (raw) => {
   return allowed ? url.toString() : ''
 }
 
+/*
+ * A description trimmed to meta-description length.
+ *
+ * Search engines truncate around 160 characters; cutting at a word boundary and
+ * appending an ellipsis is the difference between a clean summary and a sentence
+ * that stops mid-word. Returns '' for anything unusable so the caller's `||`
+ * falls through to the generated summary.
+ */
+const META_DESCRIPTION_MAX = 160
+
+const metaDescription = (value) => {
+  const trimmed = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
+  if (trimmed === '') return ''
+  if (trimmed.length <= META_DESCRIPTION_MAX) return trimmed
+
+  const cut = trimmed.slice(0, META_DESCRIPTION_MAX)
+  const lastSpace = cut.lastIndexOf(' ')
+  return `${(lastSpace > 80 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`
+}
+
 const PropertyDetailsPage = () => {
   const { id } = useParams()
   const [property, setProperty] = useState(null)
@@ -107,6 +128,19 @@ const PropertyDetailsPage = () => {
   const { isFavourite, toggleFavourite } = useFavourites()
 
   /*
+   * description is localized — a { sourceLang, en, tr, ... } object, or a plain
+   * string on a listing saved before that change. localizedText resolves either
+   * shape in the visitor's language, falls back through English and then the
+   * admin's own words, and drops provider-warning text so a poisoned
+   * translation never renders. Resolved once here because the meta description
+   * and the visible paragraph below must not disagree.
+   */
+  const description = localizedText(property?.description, language)
+
+  // A listing whose deal is done. Only these may show an achieved price.
+  const isClosed = property?.status === 'Sold' || property?.status === 'Rented'
+
+  /*
    * Memoised so the object identity is stable across re-renders. useSeo's
    * effect lists jsonLd as a dependency, so a fresh object every render would
    * re-run the effect (and rewrite the script tag) on every keystroke in the
@@ -120,8 +154,17 @@ const PropertyDetailsPage = () => {
 
   useSeo({
     title: property ? `${property.title} — ${property.district}, Istanbul` : 'Property Details',
+    /*
+     * The listing's own description when it has one, in the visitor's language,
+     * falling back to the generated summary. The real copy is both more useful
+     * in a search result and now actually translated, which the generated
+     * sentence never was — it was assembled from English literals regardless of
+     * the page language. Trimmed to a length a search engine will show rather
+     * than truncate mid-word.
+     */
     description: seoProperty
-      ? `${property.listingType === 'Rent' ? 'For Rent' : 'For Sale'}: ${property.title} in ${property.district}, Istanbul. ${property.beds} bed, ${property.baths} bath, ${property.sqm}m².`
+      ? metaDescription(description) ||
+        `${property.listingType === 'Rent' ? 'For Rent' : 'For Sale'}: ${property.title} in ${property.district}, Istanbul. ${property.beds} bed, ${property.baths} bath, ${property.sqm}m².`
       : 'View property details on Varlikent.',
     image: seoProperty?.mainImage || seoProperty?.images?.[0],
     path: `/properties/${id}`,
@@ -341,7 +384,7 @@ const PropertyDetailsPage = () => {
             {/* Description */}
             <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
               <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-2xl font-semibold text-[#202a36]">About This Property</h2>
-              <p className="mt-4 leading-7 text-slate-600">{property.description || 'A premium property in Istanbul managed by the Varlikent team.'}</p>
+              <p className="mt-4 leading-7 text-slate-600">{description || 'A premium property in Istanbul managed by the Varlikent team.'}</p>
 
               <div className="mt-8 grid grid-cols-2 gap-4 text-sm">
                 {[
@@ -507,10 +550,34 @@ const PropertyDetailsPage = () => {
           <div className="space-y-6">
             {/* Price & Contact */}
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sticky top-24">
-              <p className="text-sm uppercase tracking-wide text-slate-500">Price</p>
+              <p className="text-sm uppercase tracking-wide text-slate-500">{isClosed ? (pd.askingPrice || 'Asking Price') : 'Price'}</p>
               <p style={{ fontFamily: 'Cinzel, serif' }} className="mt-1 text-3xl font-bold text-[#d97706]">
                 {formatPrice(property.price, property.listingType, property.priceLabel, language)}
               </p>
+
+              {/*
+                The achieved price, shown only on a closed listing that actually
+                recorded one. `price` above stays the asking price, so the two
+                together read as the case study they are ("listed at X, achieved
+                Y"). A Sold listing with no soldPrice renders nothing here —
+                nobody recorded the figure, which is not the same as zero.
+              */}
+              {isClosed && typeof property.soldPrice === 'number' ? (
+                <p className="mt-2 text-sm text-slate-600">
+                  <span className="uppercase tracking-wide text-slate-500">
+                    {property.status === 'Rented' ? (pd.letPrice || 'Let for') : (pd.soldPrice || 'Sold for')}
+                  </span>{' '}
+                  <span className="font-semibold text-[#202a36]">
+                    {formatPrice(property.soldPrice, property.listingType, property.priceLabel, language)}
+                  </span>
+                  {property.soldDate ? (
+                    <span className="text-slate-500">
+                      {' — '}
+                      {new Date(property.soldDate).toLocaleDateString(language, { year: 'numeric', month: 'long' })}
+                    </span>
+                  ) : null}
+                </p>
+              ) : null}
 
               <hr className="my-5 border-slate-100" />
 

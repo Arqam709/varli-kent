@@ -126,6 +126,13 @@ const ALL_19 = [
   'nearbyTransport', 'usageStatus', 'titleDeedStatus', 'hasVirtualTour', 'virtualTourUrl',
 ]
 
+/*
+ * The closing record, added after the donor-parity wave and therefore tracked
+ * separately: ALL_19 means "the nineteen fields that came from the donor", and
+ * folding these in would erase that distinction.
+ */
+const CLOSING_FIELDS = ['soldPrice', 'soldDate']
+
 /* ══════════════════════ 1. Schema shape ═══════════════════════════════ */
 
 test('all 19 donor-parity fields exist in the schema', async () => {
@@ -713,9 +720,10 @@ test('an update writes only the normalised owned fields it was given', async () 
   assert.equal('jacuzzi' in set, false, 'untouched amenities stay untouched')
 })
 
-test('EXTENDED_OWNED_FIELDS covers the 19 and excludes priceLabel', async () => {
-  assert.equal(EXTENDED_OWNED_FIELDS.length, 19)
-  assert.deepEqual([...EXTENDED_OWNED_FIELDS].sort(), [...ALL_19].sort())
+test('EXTENDED_OWNED_FIELDS covers the 19 plus the closing record, and excludes priceLabel', async () => {
+  const owned = [...ALL_19, ...CLOSING_FIELDS]
+  assert.equal(EXTENDED_OWNED_FIELDS.length, owned.length)
+  assert.deepEqual([...EXTENDED_OWNED_FIELDS].sort(), [...owned].sort())
   assert.equal(EXTENDED_OWNED_FIELDS.includes('priceLabel'), false)
   for (const untouchable of ['agent', 'location', 'status', 'featured', 'images', 'price']) {
     assert.equal(EXTENDED_OWNED_FIELDS.includes(untouchable), false,

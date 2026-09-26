@@ -37,6 +37,7 @@
 // search is the right path for it.
 
 import { findConceptForWord } from '../utils/lifestyleConcepts.js'
+import { localizedSearchText } from '../utils/localizedField.js'
 
 // Independent local copies, matching this codebase's established convention
 // (see chatPropertySearch.js's normalizeWord note): İ folded before lowercase
@@ -213,7 +214,9 @@ export const evaluateDescriptionEvidence = (coverage = {}) => {
 // Convenience: build the property haystack the same way the search layer does
 // (title + description + address + district), so callers stay consistent.
 export const propertyEvidenceText = (property = {}) =>
-  [property.title, property.description, property.address, property.district].filter(Boolean).join(' ')
+  [property.title, localizedSearchText(property.description), property.address, property.district]
+    .filter(Boolean)
+    .join(' ')
 
 // One-shot helper: does this property lexically verify this requirement?
 // Pure composition of the three steps above — the search layer's per-property

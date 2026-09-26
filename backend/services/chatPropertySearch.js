@@ -26,6 +26,7 @@ import {
 } from './descriptionEvidence.js'
 import { hasSoftDescriptionSearch } from './chatMessageParsing.js'
 import { runProximityPass } from './poiProximitySearch.js'
+import { localizedSearchText } from '../utils/localizedField.js'
 import { LISTING_TYPE_TERMS, PROPERTY_TYPE_TERMS } from '../locales/chatParsingVocabulary.js'
 import { buildHardFilterForDescriptionSearch } from './chatFilters.js'
 import {
@@ -203,7 +204,7 @@ export const evaluateSoftCriteriaEvidence = (properties = [], parsed = {}) => {
   const presentAcrossResults = new Set()
 
   properties.forEach((property) => {
-    const propertyText = [property.title, property.description, property.address, property.district]
+    const propertyText = [property.title, localizedSearchText(property.description), property.address, property.district]
       .filter(Boolean)
       .join(' ')
 

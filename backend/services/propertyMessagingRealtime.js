@@ -127,3 +127,41 @@ export const emitNewPropertyMessage = (io, { conversationId, customerId, current
     return false
   }
 }
+
+/* ── Per-participant visibility ──────────────────────────────────────── */
+
+/**
+ * "Delete for me" happened on one of this user's devices.
+ *   { conversationId, messageId, lastMessage, inInbox }
+ * `lastMessage` is the user's own inbox preview afterwards (null when the row
+ * left their inbox).
+ */
+export const MESSAGE_HIDDEN_EVENT = 'property-message:hidden'
+
+/** "Delete conversation" happened on one of this user's devices. { conversationId } */
+export const CONVERSATION_CLEARED_EVENT = 'property-conversation:cleared'
+
+/**
+ * Tells THIS USER'S OTHER DEVICES about a change to their own view.
+ *
+ * ── Exactly one room, on purpose ────────────────────────────────────────
+ * Only the acting user's room — never the other participant's. Nothing changed
+ * from the other side's point of view, and telling them that their customer
+ * (or agent) removed something would leak a private action.
+ *
+ * Same failure boundary as the new-message emit: the change is already
+ * committed, REST is the source of truth, and every failure is swallowed.
+ */
+export const emitToOwnDevices = (io, userId, event, payload) => {
+  try {
+    if (!io || typeof io.to !== 'function' || !userId) return false
+    io.to(userRoom(String(userId))).emit(event, payload)
+    return true
+  } catch (err) {
+    console.error('[realtime] failed to sync a view change to the same account devices; the change stands', {
+      event,
+      error: err.message,
+    })
+    return false
+  }
+}

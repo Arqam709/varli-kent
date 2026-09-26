@@ -30,13 +30,14 @@ mock.module('../middleware/auth.js', {
 })
 
 // What the fake Cloudinary should do on the next call.
-const cloud = { mode: 'ok' }
+const cloud = { mode: 'ok', lastOptions: null }
 
 mock.module('../config/cloudinary.js', {
   defaultExport: {
     uploader: {
       upload_stream: (options, cb) => ({
         end: () => {
+          cloud.lastOptions = options
           if (cloud.mode === 'reject') {
             // The shape the SDK actually produces for a refused asset.
             return cb(Object.assign(new Error('Invalid image file'), { http_code: 400 }))
@@ -131,10 +132,66 @@ test('a video between the image cap and the video cap is allowed', async () => {
 /* ══════════════════ 3. Unsupported type is 415 ═════════════════════ */
 
 test('an unsupported file type is refused as 415 naming what is accepted', async () => {
-  const r = await send({ type: 'application/pdf', name: 'plan.pdf' })
+  // An executable is the real unsupported case. A PDF is NOT — see the document
+  // block below; it is offered by the admin picker and stored by the team model.
+  const r = await send({ type: 'application/x-msdownload', name: 'setup.exe' })
   assert.equal(r.status, 415)
   assert.match(r.body.message, /JPG/)
   assert.match(r.body.message, /MP4/)
+  assert.match(r.body.message, /PDF/, 'the message must name documents too, now that they are accepted')
+})
+
+/* ══════════════════ 3b. Team "Their Work" documents ════════════════
+ *
+ * src/lib/teamWork.js's DOCUMENT_ACCEPT offers .pdf/.doc/.docx/.ppt/.pptx,
+ * utils/teamWork.js's WORK_FILE_TYPES stores exactly those, and
+ * TeamWorkPortfolio renders them — but this route used to refuse every one of
+ * them with a 415, so the feature could not be used at all. These pin the two
+ * halves of that fix: the type is accepted, and it goes up as `raw`, because
+ * Cloudinary's `auto` only recognises images and video and fails outright on a
+ * document.
+ */
+
+test('a PDF is accepted and uploaded as a raw resource', async () => {
+  cloud.lastOptions = null
+  const r = await send({ type: 'application/pdf', name: 'plan.pdf' })
+  assert.equal(r.status, 201)
+  assert.equal(cloud.lastOptions.resource_type, 'raw')
+})
+
+test('every offered document extension is accepted', async () => {
+  for (const [name, type] of [
+    ['brief.doc', 'application/msword'],
+    ['brief.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    ['deck.ppt', 'application/vnd.ms-powerpoint'],
+    ['deck.pptx', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+  ]) {
+    const r = await send({ type, name })
+    assert.equal(r.status, 201, `${name} must be accepted`)
+    assert.equal(cloud.lastOptions.resource_type, 'raw', `${name} must upload as raw`)
+  }
+})
+
+test('a document recognised only by its extension still goes up as raw', async () => {
+  // Browsers report .doc inconsistently, sometimes as octet-stream. The
+  // extension is the only signal left, so it has to be enough.
+  cloud.lastOptions = null
+  const r = await send({ type: 'application/octet-stream', name: 'portfolio.docx' })
+  assert.equal(r.status, 201)
+  assert.equal(cloud.lastOptions.resource_type, 'raw')
+})
+
+test('an image still uploads as auto, not raw', async () => {
+  cloud.lastOptions = null
+  const r = await send()
+  assert.equal(r.status, 201)
+  assert.equal(cloud.lastOptions.resource_type, 'auto', 'image handling must be unchanged')
+})
+
+test('an oversized document is a 413 naming the document limit', async () => {
+  const r = await send({ type: 'application/pdf', name: 'huge.pdf', bytes: MAX_IMAGE_BYTES + 1 })
+  assert.equal(r.status, 413)
+  assert.match(r.body.message, /Documents may be up to/)
 })
 
 test('a missing file is still a 400', async () => {

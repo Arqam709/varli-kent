@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { editableText } from '../lib/localizedText'
+import { nextOrder, orderInputValue } from '../lib/displayOrder'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
@@ -25,7 +26,13 @@ const wordCount = (value) => (value || '').trim().split(/\s+/).filter(Boolean).l
 
 const isVideo = (url) => url && (url.includes('/video/') || /\.(mp4|mov|webm|avi)$/i.test(url))
 
-const ConfirmModal = ({ message, onConfirm, onCancel }) => (
+/*
+ * Labels are passed in rather than read from a hook here: this is a module-level
+ * component defined outside AdminShowroom/AdminTeam, so it has no access to the
+ * language context of the page rendering it. Both fall back to English, matching
+ * how every other label on these screens degrades when a key is missing.
+ */
+const ConfirmModal = ({ message, onConfirm, onCancel, cancelLabel, confirmLabel }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
     <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl text-center">
       <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
@@ -35,8 +42,8 @@ const ConfirmModal = ({ message, onConfirm, onCancel }) => (
       </div>
       <p className="text-sm text-slate-700 leading-relaxed">{message}</p>
       <div className="mt-5 flex gap-3">
-        <button onClick={onCancel} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">Cancel</button>
-        <button onClick={onConfirm} className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white hover:bg-red-600 transition cursor-pointer">Delete</button>
+        <button onClick={onCancel} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition cursor-pointer">{cancelLabel || 'Cancel'}</button>
+        <button onClick={onConfirm} className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white hover:bg-red-600 transition cursor-pointer">{confirmLabel || 'Delete'}</button>
       </div>
     </div>
   </div>
@@ -75,7 +82,13 @@ const AdminShowroom = () => {
 
   useEffect(() => { load(activeTab) }, [activeTab])
 
-  const openCreate = () => { editorVersion.current += 1; setForm({ ...empty, serviceType: activeTab }); setModal('create') }
+  /*
+   * A new image lands after every image already in this tab, rather than at 0
+   * where it tied with the first one. `images` is reloaded per tab (see the
+   * load(activeTab) effect above), so it is already the right list to measure
+   * against — each serviceType is its own ordered list on the public page.
+   */
+  const openCreate = () => { editorVersion.current += 1; setForm({ ...empty, serviceType: activeTab, order: nextOrder(images) }); setModal('create') }
   const openEdit = (img) => {
     editorVersion.current += 1
     // Wave 12A2 — caption is stored localized; show the admin their own
@@ -445,7 +458,7 @@ const AdminShowroom = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={labelCls}>{p.orderLabel || 'Display Order'}</label>
-                    <input type="number" className={inputCls} value={form.order} onChange={e => setForm(f => ({ ...f, order: Number(e.target.value) }))} />
+                    <input type="number" className={inputCls} value={form.order} onChange={e => setForm(f => ({ ...f, order: orderInputValue(e.target.value) }))} min={0} />
                   </div>
                   <div className="flex flex-col">
                     <label className={labelCls}>{c.visible || 'Visible'}</label>
@@ -472,7 +485,7 @@ const AdminShowroom = () => {
       )}
 
       {cropSession && <ImageCropModal imageSrc={cropSession.src} onCancel={() => setCropSession(null)} onConfirm={handleCropConfirm} />}
-      {confirm && <ConfirmModal message={confirm.message} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />}
+      {confirm && <ConfirmModal message={confirm.message} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} cancelLabel={t.common?.cancel} confirmLabel={t.common?.delete} />}
     </AdminLayout>
   )
 }

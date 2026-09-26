@@ -19,6 +19,7 @@
 
 import { extractConceptIdsFromText, CANONICAL_CONCEPT_IDS } from '../utils/lifestyleConcepts.js'
 import { hasSoftDescriptionSearch } from './chatMessageParsing.js'
+import { localizedSearchText } from '../utils/localizedField.js'
 
 // ─── Shared small helpers (kept as independent copies, matching this
 // codebase's established convention — see chatPropertySearch.js's own note
@@ -51,7 +52,7 @@ export const evaluateSoftMatchForProperty = (property, parsed = {}) => {
     return { requestedConceptIds: [], matchedConceptIds: [], unmatchedConceptIds: [] }
   }
 
-  const propertyText = [property.title, property.description, property.address, property.district]
+  const propertyText = [property.title, localizedSearchText(property.description), property.address, property.district]
     .filter(Boolean)
     .join(' ')
   const presentConceptIds = extractConceptIdsFromText(propertyText)

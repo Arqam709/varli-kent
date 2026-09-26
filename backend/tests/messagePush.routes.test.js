@@ -118,6 +118,10 @@ mock.module('../services/propertyMessagingRealtime.js', {
     emitNewPropertyMessage: (io, payload) => {
       emitCalls.push(payload)
     },
+    // Imported by the router for "Delete for me"; unused by these tests.
+    emitToOwnDevices: () => {},
+    MESSAGE_HIDDEN_EVENT: 'property-message:hidden',
+    CONVERSATION_CLEARED_EVENT: 'property-conversation:cleared',
   },
 })
 

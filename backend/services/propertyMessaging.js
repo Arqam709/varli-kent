@@ -222,6 +222,11 @@ export const HAS_MESSAGES = { 'lastMessage.at': { $ne: null } }
 export const inboxScopeFor = async (user) => ({
   ...(await conversationScopeFor(user)),
   ...HAS_MESSAGES,
+  // Minus the ones THIS user removed ("Delete conversation", or hid their last
+  // visible message) and that have had no new message since. Per user, so the
+  // other participant's inbox is untouched; a plain array condition, so the
+  // exclusion stays in the query and the badge and the list cannot disagree.
+  hiddenFromInbox: { $ne: user._id },
 })
 
 /* ── Serializers ───────────────────────────────────────────────────────── */
@@ -274,8 +279,58 @@ export const PROPERTY_SUMMARY_FIELDS =
  *
  * Expects `property`, `customer` and `agent` to be populated documents.
  */
-export const conversationResponse = (conversation, side) => {
+/* ── Per-participant view ─────────────────────────────────────────────── */
+
+/** This user's private view of the conversation, or null if they have none. */
+export const participantViewOf = (conversation, userId) =>
+  (conversation?.participantViews || []).find((view) => sameId(view.user, userId)) || null
+
+/**
+ * The inbox preview THIS user should see.
+ *
+ * Normally the shared lastMessage. It differs only when the user hid their own
+ * newest message(s), in which case their view carries a private preview of
+ * their newest VISIBLE message — valid only while the shared preview still
+ * describes the message it was computed against (see participantViewSchema).
+ *
+ * Returns the stored shape ({ text, sender, at }), or null when nothing is
+ * visible to them. With no view — every agent on the website today — this is
+ * exactly the shared lastMessage, unchanged.
+ */
+export const effectiveLastMessage = (conversation, userId) => {
+  const shared = conversation?.lastMessage
+  const view = participantViewOf(conversation, userId)
+
+  if (view?.previewThrough && sameId(view.previewThrough, shared?.message)) {
+    return view.preview?.at ? view.preview : null
+  }
+  return shared?.at ? shared : null
+}
+
+/**
+ * Only the sender of a message may remove it from their own view (V1). Callers
+ * must already have authorized the conversation; this is the per-message check.
+ */
+export const isMessageSender = (message, user) =>
+  Boolean(message) && Boolean(user) && sameId(message.sender, user._id)
+
+/** The public shape of a preview: { text, sender, at }, or null. */
+export const lastMessageResponse = (lastMessage) =>
+  lastMessage?.at
+    ? {
+        text: lastMessage.text || '',
+        sender: lastMessage.sender || null,
+        at: lastMessage.at,
+      }
+    : null
+
+/**
+ * `viewerId` selects whose preview to show. Omitted, the shared preview is
+ * used — which is also exactly what any viewer without private state gets.
+ */
+export const conversationResponse = (conversation, side, viewerId = null) => {
   const counterparty = side === 'customer' ? conversation.agent : conversation.customer
+  const lastMessage = viewerId ? effectiveLastMessage(conversation, viewerId) : conversation.lastMessage
 
   return {
     _id: conversation._id,
@@ -285,13 +340,7 @@ export const conversationResponse = (conversation, side) => {
     // which of two ids is theirs.
     counterparty: participantSummary(counterparty),
     role: side,
-    lastMessage: conversation.lastMessage?.at
-      ? {
-          text: conversation.lastMessage.text || '',
-          sender: conversation.lastMessage.sender || null,
-          at: conversation.lastMessage.at,
-        }
-      : null,
+    lastMessage: lastMessageResponse(lastMessage),
     lastActivityAt: conversation.lastActivityAt,
     unreadCount: side === 'customer'
       ? conversation.customerUnreadCount || 0

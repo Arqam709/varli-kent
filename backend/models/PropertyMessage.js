@@ -41,6 +41,17 @@ const propertyMessageSchema = new mongoose.Schema(
       trim: true,
       maxlength: MAX_MESSAGE_LENGTH,
     },
+
+    // ── "Delete for me" ──────────────────────────────────────────────────
+    // The users who removed this message from THEIR OWN view. The message
+    // itself — its text, sender and place in the thread — is never changed:
+    // the other participant is still entitled to see it, exactly as sent.
+    //
+    // Only the sender can add themselves here today (see
+    // services/propertyMessageVisibility.js). Read paths exclude the caller
+    // with `hiddenFor: { $ne: userId }`, which also matches older documents
+    // that have no such field. Never serialized.
+    hiddenFor: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: undefined },
   },
   { timestamps: true }
 )

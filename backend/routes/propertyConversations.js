@@ -21,10 +21,12 @@ import {
   currentPropertyAgentId,
   reconcileConversationAgent,
   conversationResponse,
+  lastMessageResponse,
   messageResponse,
   participantSummary,
   propertySummary,
   validateMessageText,
+  isMessageSender,
   previewOf,
   conversationSendability,
   isValidObjectId,
@@ -32,7 +34,17 @@ import {
   PARTICIPANT_FIELDS,
   PROPERTY_SUMMARY_FIELDS,
 } from '../services/propertyMessaging.js'
-import { emitNewPropertyMessage } from '../services/propertyMessagingRealtime.js'
+import {
+  emitNewPropertyMessage,
+  emitToOwnDevices,
+  MESSAGE_HIDDEN_EVENT,
+  CONVERSATION_CLEARED_EVENT,
+} from '../services/propertyMessagingRealtime.js'
+import {
+  visibleMessagesFilter,
+  hideMessageForUser,
+  clearConversationForUser,
+} from '../services/propertyMessageVisibility.js'
 import { sendNewMessagePush } from '../services/messagePush.js'
 
 const router = express.Router()
@@ -233,8 +245,10 @@ router.get('/', async (req, res, next) => {
     res.json({
       success: true,
       count: conversations.length,
+      // Each row shows the caller's OWN preview — normally the shared one, but
+      // not if they hid their newest message (see effectiveLastMessage).
       conversations: conversations.map((conversation) =>
-        conversationResponse(conversation, side)
+        conversationResponse(conversation, side, req.user._id)
       ),
     })
   } catch (err) {
@@ -289,7 +303,7 @@ router.get('/:id', async (req, res, next) => {
     res.json({
       success: true,
       conversation: {
-        ...conversationResponse(conversation, side),
+        ...conversationResponse(conversation, side, req.user._id),
         // Both sides by name here (not just the counterparty) so a thread view
         // can label messages without a second request.
         customer: participantSummary(conversation.customer),
@@ -321,13 +335,16 @@ router.get('/:id/messages', async (req, res, next) => {
 
     const limit = parseLimit(req.query.limit, MESSAGE_PAGE_DEFAULT, MESSAGE_PAGE_MAX)
 
-    const filter = { conversation: conversation._id }
+    // Only what THIS caller may see: minus messages they hid and history they
+    // cleared. Filtered in the query, so every page is full and exact.
+    const filter = visibleMessagesFilter(conversation, req.user._id)
 
     if (req.query.before) {
       if (!isValidObjectId(req.query.before)) {
         return res.status(400).json({ success: false, message: 'Invalid cursor' })
       }
-      filter._id = { $lt: req.query.before }
+      // Merged with a clear cutoff ($gt) when there is one, never replacing it.
+      filter._id = { ...(filter._id || {}), $lt: req.query.before }
     }
 
     // limit + 1 tells us whether another page exists without a second count.
@@ -418,8 +435,15 @@ router.post('/:id/messages', async (req, res, next) => {
             text: previewOf(validated.text),
             sender: req.user._id,
             at: message.createdAt,
+            // Which message this preview describes; any participant's private
+            // preview computed against an older message stops applying.
+            message: message._id,
           },
           lastActivityAt: message.createdAt,
+          // New activity: the conversation is back in every inbox it had left.
+          // Whatever a participant cleared stays cleared (their cutoff is on
+          // their view); they see this message onwards.
+          hiddenFromInbox: [],
         },
       }
     )
@@ -485,6 +509,88 @@ router.post('/:id/messages', async (req, res, next) => {
     }).catch(() => {})
 
     res.status(201).json({ success: true, message: messageResponse(message) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/* ───────────────────────── Delete for me ───────────────────────── */
+//
+// There is no "delete for everyone". Both routes below change only the
+// CALLER'S view; the other participant keeps every message, their preview and
+// their unread count, and receives no event. See
+// services/propertyMessageVisibility.js.
+
+/**
+ * POST /api/property-conversations/:id/messages/:messageId/hide
+ *
+ * Removes one of the caller's OWN messages from the caller's own view.
+ *
+ *   404  the conversation is not theirs (same indistinguishable 404 as every
+ *        route), or the message is not in this conversation
+ *   403  the message was sent by the other participant — they may already
+ *        read it, so saying it exists leaks nothing
+ *
+ * Idempotent. Allowed on a closed conversation: "closed" means nobody can
+ * answer right now, not that the caller's own view is frozen.
+ */
+router.post('/:id/messages/:messageId/hide', async (req, res, next) => {
+  try {
+    const { conversation } = await loadAuthorizedConversation(req.params.id, req.user)
+    if (!conversation) return notFound(res)
+
+    const messageNotFound = () =>
+      res.status(404).json({ success: false, message: 'Message not found' })
+
+    const { messageId } = req.params
+    if (!isValidObjectId(messageId)) return messageNotFound()
+
+    // Scoped to THIS conversation: an id from another thread is not found here.
+    const message = await PropertyMessage.findOne({ _id: messageId, conversation: conversation._id })
+      .select('_id sender')
+    if (!message) return messageNotFound()
+
+    if (!isMessageSender(message, req.user)) {
+      return res.status(403).json({ success: false, message: 'You can only delete messages you sent' })
+    }
+
+    const { lastMessage, inInbox } = await hideMessageForUser({ conversation, message, user: req.user })
+
+    const payload = {
+      conversationId: String(conversation._id),
+      messageId: String(message._id),
+      lastMessage: lastMessageResponse(lastMessage),
+      inInbox,
+    }
+
+    // The caller's other devices only. Never the other participant.
+    emitToOwnDevices(req.app?.get('io'), req.user._id, MESSAGE_HIDDEN_EVENT, payload)
+
+    res.json({ success: true, ...payload })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * POST /api/property-conversations/:id/clear
+ *
+ * "Delete conversation" for the caller: their history up to now is gone for
+ * them, the row leaves their inbox, and their own unread count is cleared.
+ * The next message from either side brings the row back, showing only what
+ * came after. The conversation itself is never deleted.
+ */
+router.post('/:id/clear', async (req, res, next) => {
+  try {
+    const { conversation, side } = await loadAuthorizedConversation(req.params.id, req.user)
+    if (!conversation) return notFound(res)
+
+    await clearConversationForUser({ conversation, user: req.user, side })
+
+    const payload = { conversationId: String(conversation._id) }
+    emitToOwnDevices(req.app?.get('io'), req.user._id, CONVERSATION_CLEARED_EVENT, payload)
+
+    res.json({ success: true, ...payload })
   } catch (err) {
     next(err)
   }

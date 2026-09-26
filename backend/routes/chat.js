@@ -694,6 +694,20 @@ properties = properties.map((property) => {
   const proximityClause = renderProximityClause(poiProximity, language)
   if (proximityClause) reasons.push(proximityClause)
 
+  /*
+   * `description` is dropped for the same reason `poiProximity` is: it is read
+   * to build the reason above and then has no consumer on the client — the chat
+   * card renders the title, price, district and matchReason, never the
+   * description. It is selected (PROPERTY_SELECT) because the concept-matching
+   * above needs its text, not because a visitor sees it.
+   *
+   * Dropping it matters more since descriptions became localized: the stored
+   * value now holds up to six language copies, and a reply carries five
+   * properties, so forwarding it would multiply the size of every chat response
+   * for text nothing renders. Must stay AFTER buildMatchReason, which reads it.
+   */
+  delete card.description
+
   return {
     ...card,
     matchReason: reasons.filter(Boolean).join(' — '),

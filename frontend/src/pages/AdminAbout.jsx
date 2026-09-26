@@ -3,6 +3,7 @@ import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
 import { useLanguage } from '../contexts/LanguageContext'
 import { localizedText } from '../lib/localizedText'
+import { nextOrder, orderInputValue } from '../lib/displayOrder'
 
 const editable = (value) => {
   if (typeof value === 'string') return value
@@ -126,7 +127,7 @@ const AdminAbout = () => {
 
   const addItem = (listKey, emptyVal) => setForm(f => ({
     ...f,
-    [listKey]: [...f[listKey], { ...emptyVal, order: f[listKey].length }],
+    [listKey]: [...f[listKey], { ...emptyVal, order: nextOrder(f[listKey]) }],
   }))
 
   const removeItem = (listKey, idx) => setForm(f => ({
@@ -274,7 +275,7 @@ const AdminAbout = () => {
                 )}
                 <div>
                   <label className={labelCls}>{p.orderLabel || 'Display Order'}</label>
-                  <input type="number" className="w-24 rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4b6741] bg-white" value={block.order} min={0} onChange={e => setList('contentBlocks', bi, 'order', Number(e.target.value))} />
+                  <input type="number" className="w-24 rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4b6741] bg-white" value={block.order} min={0} onChange={e => setList('contentBlocks', bi, 'order', orderInputValue(e.target.value))} />
                 </div>
               </div>
             ))}
@@ -290,7 +291,7 @@ const AdminAbout = () => {
               <div key={i} className="flex gap-3 items-center">
                 <input className={inputCls} placeholder={p.valueLabel || 'Value e.g. 10+'} value={s.value} onChange={e => setList('stats', i, 'value', e.target.value)} />
                 <input className={inputCls} placeholder="Label e.g. Years Experience" value={s.label} onChange={e => setList('stats', i, 'label', e.target.value)} />
-                <input type="number" className="w-20 rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4b6741] bg-white" placeholder={p.orderLabel || 'Order'} value={s.order} onChange={e => setList('stats', i, 'order', Number(e.target.value))} min={0} />
+                <input type="number" className="w-20 rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4b6741] bg-white" placeholder={p.orderLabel || 'Order'} value={s.order} onChange={e => setList('stats', i, 'order', orderInputValue(e.target.value))} min={0} />
                 <button type="button" onClick={() => removeItem('stats', i)} className="shrink-0 text-red-400 hover:text-red-600 cursor-pointer">
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -331,7 +332,7 @@ const AdminAbout = () => {
                   </div>
                   <div>
                     <label className={labelCls}>{p.orderLabel || 'Order'}</label>
-                    <input type="number" className={inputCls} value={m.order} onChange={e => setList('team', i, 'order', Number(e.target.value))} min={0} />
+                    <input type="number" className={inputCls} value={m.order} onChange={e => setList('team', i, 'order', orderInputValue(e.target.value))} min={0} />
                   </div>
                 </div>
                 <UploadField label={p.avatarPhoto || 'Avatar Photo'} value={m.avatar} onChange={v => setList('team', i, 'avatar', v)} hint="JPG, PNG, WEBP — max 10 MB · Square crop recommended" />
