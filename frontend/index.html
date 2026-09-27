@@ -1,7 +1,20 @@
 <!doctype html>
-<html lang="en" class="scroll-smooth">
+<html lang="tr" class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      The lang above is the INITIAL document state only: Turkish, matching what
+      a first-time visitor with no saved preference now sees. It does not stay
+      Turkish — once React mounts, LanguageProvider (src/contexts/
+      LanguageContext.jsx) rewrites both `lang` and `dir` from the language
+      actually in effect, which is a returning visitor's saved choice when they
+      have one, and keeps rewriting them on every change from the selector.
+
+      og:locale below is deliberately left as en_US: the static title and
+      descriptions in this file are English, and a crawler that does not run JS
+      (which is most social-preview crawlers) sees exactly those, so en_US is an
+      accurate statement about the markup it reads rather than about the app.
+    -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
