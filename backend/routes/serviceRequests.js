@@ -79,6 +79,9 @@ router.post('/', protect, receiveServiceRequest, async (req, res, next) => {
 
   try {
     const { errors, value } = validateServiceRequestPayload(req.serviceRequestPayload)
+    if (errors.some((error) => error.field === 'interiorDesign.design')) {
+      return fail(res, 400, 'DESIGN_REQUIRED', 'An Interior Design request is sent from a saved design.', { errors })
+    }
     if (errors.length > 0) {
       return fail(res, 400, 'VALIDATION_FAILED', 'Please check the request details.', { errors })
     }
@@ -152,7 +155,15 @@ router.post('/', protect, receiveServiceRequest, async (req, res, next) => {
         budget: value.budget,
         timeline: value.timeline,
         notes: value.notes,
-        interiorDesign: value.interiorDesign ? { ...value.interiorDesign, design: design?.design ?? null } : null,
+        interiorDesign: value.interiorDesign
+          ? {
+              // The design's own room when the customer named no other.
+              rooms: value.interiorDesign.rooms.length > 0
+                ? value.interiorDesign.rooms
+                : [design?.room ?? 'other'],
+              design: design?.design ?? null,
+            }
+          : null,
         renovation: value.renovation,
         photos,
         idempotencyKey: value.idempotencyKey,

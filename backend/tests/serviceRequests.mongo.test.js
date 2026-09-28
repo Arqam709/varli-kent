@@ -245,20 +245,37 @@ test('BEFORE: the old consultation lead held no board, photo or visualization �
   }
 })
 
-// ── Interior Design: direct ──────────────────────────────────────────────
+// ── Interior Design: only ever "request this design" ─────────────────────
 
-test('a direct interior design request works without any design', { skip }, async () => {
+test('an Interior Design request with no design is refused, and nothing is filed', { skip }, async () => {
   const { status, body } = await submitJson(alice, interiorPayload())
+  assert.equal(status, 400)
+  assert.equal(body.code, 'DESIGN_REQUIRED')
+  assert.equal(await ServiceRequest.countDocuments(), 0)
+  assert.equal(await ContactSubmission.countDocuments(), 0)
+  assert.equal(emails.length, 0)
+})
+
+test('designing alone files nothing: a board, a photo and a visualization create no request or lead', { skip }, async () => {
+  await designChain(alice)
+  assert.equal(await ServiceRequest.countDocuments(), 0)
+  assert.equal(await ContactSubmission.countDocuments(), 0)
+  assert.equal(emails.length, 0)
+})
+
+test('a board request without rooms takes the design\'s own room', { skip }, async () => {
+  const { board } = await designChain(alice)
+  const { status, body } = await submitJson(
+    alice,
+    interiorPayload({ interiorDesign: { designBoardId: String(board._id) } })
+  )
   assert.equal(status, 201, JSON.stringify(body))
-  assert.equal(body.request.type, 'interior_design')
-  assert.equal(body.request.status, 'submitted')
-  assert.equal(body.request.interiorDesign.design, null)
+  assert.deepEqual(body.request.interiorDesign.rooms, ['living_room'])
 
   const [submission] = await ContactSubmission.find()
   assert.equal(submission.interestType, 'Interior Design')
   assert.equal(submission.source, 'mobile')
   assert.ok(submission.message.startsWith('INTERIOR DESIGN REQUEST · Request ID: '))
-  assert.ok(submission.message.includes('Design attached: No'))
 
   const stored = await ServiceRequest.findById(body.request._id)
   assert.equal(String(stored.user), String(alice._id))
@@ -531,7 +548,8 @@ test('simultaneous identical submits still produce one request', { skip }, async
 // ── My Requests ──────────────────────────────────────────────────────────
 
 test('each customer lists only their own requests, newest first, with derived status', { skip }, async () => {
-  const a1 = await submitJson(alice, interiorPayload())
+  const { board } = await designChain(alice)
+  const a1 = await submitJson(alice, interiorPayload({ interiorDesign: { designBoardId: String(board._id) } }))
   const a2 = await submitJson(alice, renovationPayload())
   await submitJson(bob, renovationPayload({ contact: { ...contact, email: 'bob@example.test' } }))
 

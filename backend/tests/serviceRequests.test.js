@@ -29,7 +29,10 @@ const base = (extra = {}) => ({
   ...extra,
 })
 
-const interior = (extra = {}) => base({ type: 'interior_design', interiorDesign: { rooms: ['living_room'] }, ...extra })
+// Every Interior Design request is made FROM a saved design.
+const BOARD = 'a'.repeat(24)
+const interior = (extra = {}) =>
+  base({ type: 'interior_design', interiorDesign: { rooms: ['living_room'], designBoardId: BOARD }, ...extra })
 const renovation = (extra = {}) =>
   base({ type: 'renovation', renovation: { areas: ['kitchen', 'bathroom'], work: ['plumbing', 'flooring'] }, ...extra })
 
@@ -42,7 +45,20 @@ test('a complete interior design payload is accepted and normalized', () => {
   assert.equal(value.property.sizeSqm, 120)
   assert.equal(value.notes, 'Please call after 6pm')
   assert.deepEqual(value.interiorDesign, { rooms: ['living_room'] })
-  assert.deepEqual(value.designRefs, { boardId: null, generationId: null })
+  assert.deepEqual(value.designRefs, { boardId: BOARD, generationId: null })
+})
+
+test('an Interior Design request without a design is refused', () => {
+  const { errors } = validateServiceRequestPayload(base({ type: 'interior_design', interiorDesign: { rooms: ['kitchen'] } }))
+  assert.deepEqual(errors.map((e) => e.field), ['interiorDesign.design'])
+  const none = validateServiceRequestPayload(base({ type: 'interior_design' }))
+  assert.ok(none.errors.some((e) => e.field === 'interiorDesign.design'))
+})
+
+test('rooms are optional on a design request (the design names its own room)', () => {
+  const { errors, value } = validateServiceRequestPayload(interior({ interiorDesign: { designBoardId: BOARD } }))
+  assert.deepEqual(errors, [])
+  assert.deepEqual(value.interiorDesign.rooms, [])
 })
 
 test('a complete renovation payload is accepted', () => {
@@ -62,7 +78,6 @@ test('size and district are optional', () => {
 test('required choices are enforced', () => {
   const fields = (payload) => validateServiceRequestPayload(payload).errors.map((e) => e.field).sort()
   assert.deepEqual(fields(renovation({ renovation: { areas: [], work: [] } })), ['renovation.areas', 'renovation.work'])
-  assert.deepEqual(fields(interior({ interiorDesign: { rooms: [] } })), ['interiorDesign.rooms'])
   assert.deepEqual(fields(interior({ budget: 'lots', timeline: undefined })), ['budget', 'timeline'])
   assert.deepEqual(fields(interior({ property: {} })), ['property.type'])
 })
@@ -70,7 +85,7 @@ test('required choices are enforced', () => {
 test('unknown ids, labels and free text are refused, never stored', () => {
   const fields = (payload) => validateServiceRequestPayload(payload).errors.map((e) => e.field)
   assert.ok(fields(renovation({ renovation: { areas: ['Kitchen'], work: ['plumbing'] } })).includes('renovation.areas'))
-  assert.ok(fields(interior({ interiorDesign: { rooms: ['garage'] } })).includes('interiorDesign.rooms'))
+  assert.ok(fields(interior({ interiorDesign: { rooms: ['garage'], designBoardId: BOARD } })).includes('interiorDesign.rooms'))
   assert.ok(fields(base({ type: 'architecture' })).includes('type'))
   assert.ok(fields(interior({ property: { type: 'castle' } })).includes('property.type'))
 })
@@ -258,4 +273,16 @@ test('the structured block escapes everything and only links http(s)', () => {
 test('without links, the email says how many photos are stored', () => {
   const html = leadEmailDetailsHtml({ heading: 'h', rows: [['a', 'b']], photoLinks: [], photoCount: 3 })
   assert.ok(html.includes('3 stored privately'))
+})
+
+// ── Designing never files a lead ─────────────────────────────────────────
+
+test('the Design My Space routes cannot create a request, a lead or a lead email', async () => {
+  const { readFile } = await import('node:fs/promises')
+  for (const file of ['routes/designBoards.js', 'routes/designRoomPhotos.js', 'routes/designGenerations.js']) {
+    const source = await readFile(new URL(`../${file}`, import.meta.url), 'utf8')
+    for (const forbidden of ['ContactSubmission', 'ServiceRequest', 'sendContactNotification']) {
+      assert.equal(source.includes(forbidden), false, `${file} reaches ${forbidden}`)
+    }
+  }
 })

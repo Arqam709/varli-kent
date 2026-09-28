@@ -100,13 +100,22 @@ export function validateServiceRequestPayload(raw) {
 
   if (type === 'interior_design') {
     const block = isPlainObject(raw.interiorDesign) ? raw.interiorDesign : {}
-    const rooms = idList(block.rooms, INTERIOR_ROOM_LABELS)
-    if (!rooms || rooms.length === 0) fail('interiorDesign.rooms', 'Choose at least one room')
+    // Rooms are optional: a request is made FROM a design, whose room is filled
+    // in by the route when the customer adds no others.
+    const rooms = block.rooms === undefined ? [] : idList(block.rooms, INTERIOR_ROOM_LABELS)
+    if (!rooms) fail('interiorDesign.rooms', 'Unknown room')
 
     const board = optionalObjectId(block.designBoardId)
     const generation = optionalObjectId(block.generationId)
     if (!board.ok) fail('interiorDesign.designBoardId', 'Invalid design board')
     if (!generation.ok) fail('interiorDesign.generationId', 'Invalid visualization')
+
+    // An Interior Design request is "Request this design": it always starts
+    // from a saved board (with or without a visualization). Designing never
+    // files a lead on its own, and there is no design-less direct request.
+    if (board.ok && generation.ok && !board.value && !generation.value) {
+      fail('interiorDesign.design', 'An Interior Design request needs a saved design')
+    }
 
     interiorDesign = { rooms: rooms ?? [] }
     designRefs = { boardId: board.value ?? null, generationId: generation.value ?? null }
