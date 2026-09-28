@@ -136,7 +136,48 @@ const sendEmailViaResend = async ({ to, subject, html }) => {
  * Exported for tests only; nothing else imports it. Making a pure template
  * builder addressable changes no runtime behaviour.
  */
-export const leadEmailHtml = (submission) => `
+/**
+ * The optional structured block of a lead email — used by mobile service
+ * requests (routes/serviceRequests.js), absent for every other lead, whose
+ * email is therefore byte-for-byte what it was.
+ *
+ * Every value is escaped. Photo links are expiring signed links built by the
+ * backend itself (services/serviceRequests/presentation.js); they are escaped
+ * like everything else and only ever rendered as https/http hrefs.
+ */
+const safeHref = (url) => (typeof url === 'string' && /^https?:\/\//i.test(url) ? escapeHtml(url) : '')
+
+export const leadEmailDetailsHtml = (details) => {
+  if (!details || !Array.isArray(details.rows) || details.rows.length === 0) return ''
+
+  const rows = details.rows
+    .map(([key, value]) => `
+      <tr>
+        <td style="padding:6px 12px 6px 0; font-size:12px; color:#888; vertical-align:top; white-space:nowrap;">${escapeHtml(key)}</td>
+        <td style="padding:6px 0; font-size:14px; color:#1E1E1C;">${escapeHtml(value)}</td>
+      </tr>`)
+    .join('')
+
+  const links = (details.photoLinks ?? [])
+    .map((link) => {
+      const href = safeHref(link.url)
+      return href ? `<li><a href="${href}" style="color:#4b6741;">${escapeHtml(link.label)}</a></li>` : ''
+    })
+    .join('')
+
+  const photos = links
+    ? `<div class="section-label">Photos (links expire in 30 days)</div><ul style="margin:4px 0 20px; padding-left:18px; font-size:14px;">${links}</ul>`
+    : Number(details.photoCount) > 0
+      ? `<div class="section-label">Photos</div><div class="value">${escapeHtml(String(details.photoCount))} stored privately with this request — quote the Request ID to retrieve them.</div>`
+      : ''
+
+  return `
+    <div class="section-label">${escapeHtml(details.heading || 'Request details')}</div>
+    <table style="border-collapse:collapse; margin:4px 0 20px;">${rows}</table>
+    ${photos}`
+}
+
+export const leadEmailHtml = (submission, details = null) => `
 <!DOCTYPE html>
 <html>
 <head>
@@ -177,6 +218,8 @@ export const leadEmailHtml = (submission) => `
 
     <div class="section-label">Interested In</div>
     <div class="value">${escapeHtml(submission.interestType)}</div>
+
+    ${leadEmailDetailsHtml(details)}
 
     <div class="section-label">Message</div>
     <div class="message-box">${escapeHtml(submission.message)}</div>
@@ -259,7 +302,7 @@ export const passwordResetEmailHtml = (resetUrl) => `
  * Routing is unchanged: OWNER_EMAIL plus whatever LeadRouting holds for this
  * interest type, de-duplicated through a Set. Only the delivery call differs.
  */
-export const sendContactNotification = async (submission) => {
+export const sendContactNotification = async (submission, details = null) => {
   try {
     const recipientSet = new Set()
     if (process.env.OWNER_EMAIL) recipientSet.add(process.env.OWNER_EMAIL)
@@ -282,7 +325,7 @@ export const sendContactNotification = async (submission) => {
       // Deliberately NOT escapeHtml(): a lead from "Tom & Jerry" must arrive
       // reading "Tom & Jerry", not "Tom &amp; Jerry".
       subject: `New Lead: ${safeHeaderText(submission.interestType)} — ${safeHeaderText(submission.name)}`,
-      html: leadEmailHtml(submission),
+      html: leadEmailHtml(submission, details),
     })
   } catch (err) {
     console.error('[email] Failed to prepare contact notification:', err.message)

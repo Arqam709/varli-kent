@@ -45,6 +45,8 @@ mock.module('../models/ContactSubmission.js', { defaultExport: {} })
 // (services/designRoomPhotos/lifecycle.js, services/designGenerations/lifecycle.js).
 mock.module('../models/DesignRoomPhoto.js', { defaultExport: { updateMany: async () => ({ modifiedCount: 0 }), find: async () => [] } })
 mock.module('../models/DesignGeneration.js', { defaultExport: { updateMany: async () => ({ modifiedCount: 0 }), find: async () => [] } })
+// Same for the service-request cleanup (services/serviceRequests/lifecycle.js).
+mock.module('../models/ServiceRequest.js', { defaultExport: { find: () => ({ select: async () => [] }), deleteMany: async () => ({ deletedCount: 0 }) } })
 let server, base
 before(async () => {
   const app = express(); app.use(express.json())

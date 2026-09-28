@@ -9,6 +9,7 @@ import { validateRoleChange, canReceiveAdminPermissions } from '../services/role
 import { adminAgentOption, ADMIN_AGENT_OPTION_FIELDS } from '../services/agentAssignment.js'
 import { deleteAllRoomPhotosForUser } from '../services/designRoomPhotos/lifecycle.js'
 import { deleteAllGenerationsForUser } from '../services/designGenerations/lifecycle.js'
+import { deleteAllServiceRequestsForUser } from '../services/serviceRequests/lifecycle.js'
 
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
@@ -361,6 +362,9 @@ router.delete('/:id', protect, requireRole('owner'), async (req, res, next) => {
     // references them.
     await deleteAllGenerationsForUser(target._id)
     await deleteAllRoomPhotosForUser(target._id)
+    // The customer's own service-request records and their private images.
+    // The leads they created (ContactSubmissions) stay, like any website lead.
+    await deleteAllServiceRequestsForUser(target._id)
 
     await User.findByIdAndDelete(req.params.id)
     res.json({ success: true, message: 'User permanently deleted' })

@@ -31,6 +31,7 @@ import propertyAlertRoutes from './routes/propertyAlerts.js'
 import designBoardRoutes from './routes/designBoards.js'
 import designRoomPhotoRoutes from './routes/designRoomPhotos.js'
 import designGenerationRoutes from './routes/designGenerations.js'
+import serviceRequestRoutes from './routes/serviceRequests.js'
 import { startDesignGenerationSweeper } from './services/designGenerations/lifecycle.js'
 import { startGenerationWorker } from './services/designGenerations/worker.js'
 import { startRoomPhotoSweeper } from './services/designRoomPhotos/lifecycle.js'
@@ -92,6 +93,8 @@ app.use('/api/design-room-photos', designRoomPhotoRoutes)
 // Requested room visualizations. Owner-scoped; creation is gated by the
 // designGenerationsEnabled site setting until a provider exists (Phase 2).
 app.use('/api/design-generations', designGenerationRoutes)
+// Structured Interior Design / Renovation requests from the mobile app.
+app.use('/api/service-requests', serviceRequestRoutes)
 app.use('/api/push', pushRoutes)
 app.use('/api/agent', agentRoutes)
 app.use('/api/activity', activityRoutes)

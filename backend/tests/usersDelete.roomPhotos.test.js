@@ -48,6 +48,15 @@ mock.module('../services/designGenerations/lifecycle.js', {
   },
 })
 
+mock.module('../services/serviceRequests/lifecycle.js', {
+  namedExports: {
+    deleteAllServiceRequestsForUser: async (userId) => {
+      events.push(['deleteServiceRequests', String(userId)])
+      return { deleted: 0, assetsRemoved: true }
+    },
+  },
+})
+
 const { default: userRoutes } = await import('../routes/users.js')
 
 let server
@@ -81,6 +90,8 @@ test('visualizations and room photos are removed before the account is deleted',
   assert.deepEqual(events, [
     ['deleteGenerations', TARGET_ID],
     ['deletePhotos', TARGET_ID],
+    // The customer's service requests and their private images go too.
+    ['deleteServiceRequests', TARGET_ID],
     ['deleteUser', TARGET_ID],
   ])
 })
