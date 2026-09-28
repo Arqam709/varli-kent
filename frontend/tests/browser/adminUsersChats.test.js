@@ -40,7 +40,7 @@ async function setup(t,kind='users',language='en',role='owner',permissions=[]){
   const page=await browser.newPage({viewport:{width:1440,height:850}});page.setDefaultTimeout(10000); t.after(()=>page.close()); page.on('pageerror',error=>console.error('Fixture page error:',error.message))
   const actor=record('actor','Fixture Operator',role,permissions)
   const state={calls:[],failList:false,failSave:false,sanitize:false,users:[record('admin','Target Admin','admin',['view_chats']),record('agent','Target Agent','agent'),record('buyer','Buyer Alice'),record('bob','Buyer Bob')],conversations:Array.from({length:20},(_,i)=>({_id:'conversation-'+i,user:'buyer',status:'active',messageCount:40,createdAt:'2026-01-01',lastActivityAt:'2026-09-15',lastMessage:{text:'Fixture conversation '+i}}))}
-  await page.addInitScript(({actor,language})=>{localStorage.setItem('varlikent_token','fixture-token');localStorage.setItem('varlikent_user',JSON.stringify(actor));localStorage.setItem('vk_lang',language)},{actor,language})
+  await page.addInitScript(({actor,language})=>{localStorage.setItem('varlikent_token','fixture-token');localStorage.setItem('varlikent_user',JSON.stringify(actor));localStorage.setItem('vk_lang',language);localStorage.setItem('vk_lang_explicit','1')},{actor,language})
   await page.route('**/*',async route=>{
     const r=route.request(),url=new URL(r.url()),path=url.pathname.split('/api')[1],method=r.method()
     if(url.pathname.includes('/api/')){

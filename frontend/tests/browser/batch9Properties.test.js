@@ -51,7 +51,10 @@ async function setup(t, { admin = false, query = '', language = 'en', theme = 'd
   const actor = { _id: 'owner', name: 'Fixture Owner', email: 'fixture@example.test', role: 'owner', isActive: true, themePreference: theme }
   const state = { calls: [], properties: [property('one'), property('two', { listingType: 'Rent' })], agents: [{ _id: 'agent-1', name: 'Agent One', email: 'one@example.test' }], agentFail: false, agentDelay: 0, locationDelays: {}, uploadDelay: 0, uploadFailAt: 0, listFail: false, listDelay: {}, listResults: {}, saveDelay: 0 }
   await page.addInitScript(({ actor, language, theme }) => {
-    localStorage.setItem('vk_lang', language); localStorage.setItem('vk_theme', theme)
+    // Explicit marker: these fixtures mean "the user chose this language", which
+    // LanguageContext now requires for 'en' — a bare vk_lang='en' is treated as the
+    // pre-Turkish build's auto-saved default and migrated. See LanguageContext.
+    localStorage.setItem('vk_lang', language); localStorage.setItem('vk_lang_explicit', '1'); localStorage.setItem('vk_theme', theme)
     localStorage.setItem('varlikent_token', 'fixture'); localStorage.setItem('varlikent_user', JSON.stringify(actor))
   }, { actor, language, theme })
   await page.route('**/*', async route => {

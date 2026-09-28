@@ -83,7 +83,11 @@ async function setup(t, { mode = 'chat', id = '', language = 'en', theme = 'defa
     ],
   }
   await page.addInitScript(({ actor, language, theme, loggedIn }) => {
+    // Explicit marker: these fixtures mean "the user chose this language", which
+    // LanguageContext now requires for 'en' — a bare vk_lang='en' is treated as the
+    // pre-Turkish build's auto-saved default and migrated. See LanguageContext.
     localStorage.setItem('vk_lang', language)
+    localStorage.setItem('vk_lang_explicit', '1')
     localStorage.setItem('vk_theme', theme)
     if (loggedIn) { localStorage.setItem('varlikent_token', 'fixture-token'); localStorage.setItem('varlikent_user', JSON.stringify(actor)) }
   }, { actor, language, theme, loggedIn })

@@ -89,7 +89,11 @@ async function setup(t, { settings = false, role = 'agent', width = 1280, height
   const user = role ? { _id: 'fixture-user', role, name: 'Batch Five', email: 'fixture@example.test', themePreference: 'default', createdAt: '2025-01-02T12:00:00Z' } : null
   const state = { calls: [], holdProfile: null }
   await page.addInitScript(({ user, language, settings, blockedStorage }) => {
+    // Explicit marker: these fixtures mean "the user chose this language", which
+    // LanguageContext now requires for 'en' — a bare vk_lang='en' is treated as the
+    // pre-Turkish build's auto-saved default and migrated. See LanguageContext.
     localStorage.setItem('vk_lang', language)
+    localStorage.setItem('vk_lang_explicit', '1')
     if (user) {
       localStorage.setItem('varlikent_token', 'isolated-fixture-token')
       localStorage.setItem('varlikent_user', JSON.stringify(user))
