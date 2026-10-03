@@ -11,6 +11,7 @@ import {
   verifyGoogleIdToken,
 } from '../services/googleAuth.js'
 import { sendPasswordResetEmail } from '../utils/email.js'
+import { isProtectedOwner, withProtectedFlag } from '../config/protectedOwners.js'
 import jwksClient from 'jwks-rsa'
 
 const router = express.Router()
@@ -18,8 +19,12 @@ const router = express.Router()
 const signToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' })
 
+// Every session response (login, register, Google, Microsoft) goes through
+// here, so the signed-in user always carries `isProtected` — the boolean the
+// settings page reads to lock the email field. The configured ids themselves
+// are never included.
 const safeUser = (user) => {
-  const userObj = user.toObject()
+  const userObj = withProtectedFlag(user)
   delete userObj.password
   delete userObj.resetPasswordToken
   delete userObj.resetPasswordExpires
@@ -134,8 +139,17 @@ router.post(
 )
 
 // GET /api/auth/me
+//
+// Session restore reads this, so it must report `isProtected` the same way
+// the login responses do; otherwise the flag would vanish on the first page
+// reload. Every other field is exactly what it was.
 router.get('/me', protect, (req, res) => {
-  res.json({ success: true, user: req.user })
+  const user = withProtectedFlag(req.user)
+  // `protect` already loads the account without its password. Removing it
+  // again here means this response stays safe by its own construction, rather
+  // than by relying on how the copy above happened to be made.
+  delete user.password
+  res.json({ success: true, user })
 })
 
 // POST /api/auth/logout
@@ -346,6 +360,21 @@ router.post('/microsoft', async (req, res) => {
     }
 
     let user = await User.findOne({ email })
+
+    // This flow finds the account by the email claim in the Microsoft token
+    // and nothing else: no stored Microsoft identity is compared, and the
+    // claim is not one Microsoft guarantees was verified. That is too weak a
+    // proof to sign anyone in as a protected owner, so those two accounts are
+    // refused here outright. They keep password sign-in and Google sign-in
+    // (which requires a Google-verified address). Every other account behaves
+    // exactly as before.
+    if (user && isProtectedOwner(user)) {
+      console.log('Microsoft auth rejected [protected_owner]: email-match sign-in is not available for this account')
+      return res.status(403).json({
+        success: false,
+        message: 'Microsoft sign-in is not available for this account',
+      })
+    }
 
     if (!user) {
       user = await User.create({

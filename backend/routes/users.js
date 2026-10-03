@@ -6,6 +6,8 @@ import User from '../models/User.js'
 import { protect } from '../middleware/auth.js'
 import { requireRole } from '../middleware/checkPermission.js'
 import { validateRoleChange, canReceiveAdminPermissions } from '../services/roleManagement.js'
+import { isProtectedOwner, withProtectedFlag } from '../config/protectedOwners.js'
+import { requestOwnerRemoval, confirmOwnerRemoval } from '../services/ownerRemoval.js'
 import { adminAgentOption, ADMIN_AGENT_OPTION_FIELDS } from '../services/agentAssignment.js'
 import { deleteAllRoomPhotosForUser } from '../services/designRoomPhotos/lifecycle.js'
 import { deleteAllGenerationsForUser } from '../services/designGenerations/lifecycle.js'
@@ -62,7 +64,9 @@ const canAssignPropertyAgents = (req, res, next) => {
 router.get('/', protect, canManageUsers, async (req, res, next) => {
   try {
     const users = await User.find().select('-password -resetPasswordToken -resetPasswordExpires')
-    res.json({ success: true, count: users.length, users })
+    // `isProtected` is the only form in which protection reaches a client: a
+    // boolean per account, never the configured id list.
+    res.json({ success: true, count: users.length, users: users.map(withProtectedFlag) })
   } catch (err) {
     next(err)
   }
@@ -113,13 +117,28 @@ router.put('/me/profile', protect, async (req, res, next) => {
     const updates = {}
     if (name?.trim()) updates.name = name.trim()
     if (email?.trim()) {
+      // A protected owner's address is where owner-level verification is sent,
+      // so it cannot be changed through this self-service route — a hijacked
+      // session must not be able to redirect it. Re-sending the CURRENT
+      // address (the settings form always posts both fields) is not a change
+      // and falls through, which is what keeps name edits working.
+      if (
+        isProtectedOwner(req.user) &&
+        email.toLowerCase().trim() !== String(req.user.email || '').toLowerCase().trim()
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: 'The email address of a protected owner account cannot be changed here',
+        })
+      }
+
       const existing = await User.findOne({ email: email.toLowerCase(), _id: { $ne: req.user._id } })
       if (existing) return res.status(400).json({ success: false, message: 'Email already in use' })
       updates.email = email.toLowerCase().trim()
     }
 
     const user = await User.findByIdAndUpdate(req.user._id, updates, { new: true }).select('-password -resetPasswordToken -resetPasswordExpires')
-    res.json({ success: true, user })
+    res.json({ success: true, user: withProtectedFlag(user) })
   } catch (err) {
     next(err)
   }
@@ -272,7 +291,7 @@ router.put('/:id/role', protect, canManageUsers, async (req, res, next) => {
     delete userObj.password //bcz now we delete the password field from the user object before sending it in the response
     delete userObj.resetPasswordToken
     delete userObj.resetPasswordExpires
-    res.json({ success: true, user: userObj })
+    res.json({ success: true, user: withProtectedFlag(userObj) })
   } catch (err) {
     next(err)
   }
@@ -285,6 +304,11 @@ router.put('/:id/permissions', protect, canManageUsers, async (req, res, next) =
     const target = await User.findById(req.params.id)
     if (!target) {
       return res.status(404).json({ success: false, message: 'User not found' })
+    }
+    // By id, independent of role — see config/protectedOwners.js. The owner
+    // rule below already covers these accounts; this does not rely on it.
+    if (isProtectedOwner(target)) {
+      return res.status(403).json({ success: false, message: 'This owner account is protected and cannot be modified' })
     }
     if (target.role === 'owner') {
       return res.status(403).json({ success: false, message: 'Cannot modify owner permissions' })
@@ -315,7 +339,7 @@ router.put('/:id/permissions', protect, canManageUsers, async (req, res, next) =
       { new: true, runValidators: true }
     ).select('-password -resetPasswordToken -resetPasswordExpires')
 
-    res.json({ success: true, user })
+    res.json({ success: true, user: withProtectedFlag(user) })
   } catch (err) {
     next(err)
   }
@@ -332,6 +356,19 @@ router.put('/:id/password', protect, canChangePasswords, async (req, res, next) 
     const target = await User.findById(req.params.id)
     
     if (!target) return res.status(404).json({ success: false, message: 'User not found' })
+
+    // A protected owner's password is never set administratively — not by
+    // another owner, and not by the other protected owner. Setting it is the
+    // first step of taking the account over: whoever chose the new password
+    // can sign in as that owner. The two legitimate routes both prove
+    // something this one does not: PUT /me/password proves the current
+    // password, and the emailed reset link proves control of the inbox.
+    if (isProtectedOwner(target)) {
+      return res.status(403).json({
+        success: false,
+        message: 'The password of a protected owner account cannot be changed by another account',
+      })
+    }
 
     // Only owner can change another owner's password
     if (target.role === 'owner' && req.user.role !== 'owner') {
@@ -352,6 +389,8 @@ router.delete('/:id', protect, requireRole('owner'), async (req, res, next) => {
   try {
     const target = await User.findById(req.params.id)
     if (!target) return res.status(404).json({ success: false, message: 'User not found' })
+    // By id, ahead of and independent of the owner rule on the next line.
+    if (isProtectedOwner(target)) return res.status(403).json({ success: false, message: 'This owner account is protected and can never be deleted' })
     if (target.role === 'owner') return res.status(403).json({ success: false, message: 'Cannot delete an owner account' })
     if (target._id.toString() === req.user._id.toString()) return res.status(403).json({ success: false, message: 'Cannot delete your own account' })
 
@@ -368,6 +407,54 @@ router.delete('/:id', protect, requireRole('owner'), async (req, res, next) => {
 
     await User.findByIdAndDelete(req.params.id)
     res.json({ success: true, message: 'User permanently deleted' })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ── Owner removal ───────────────────────────────────────────────────────
+// The only way an owner stops being one. DELETE /:id and PUT /:id/role above
+// both still refuse every owner; these two routes do not relax them. The
+// rules, the code handling and the demotion itself are in
+// services/ownerRemoval.js — the handlers below only pass the authenticated
+// caller in and the result out.
+
+const activityContext = (req) => ({
+  method: req.method,
+  path: String(req.originalUrl || '').split('?')[0],
+})
+
+// POST /api/users/:id/request-owner-removal
+//
+// Any owner may ask. A 6-digit code is emailed to the protected owners — and
+// to nobody else, so the caller does not receive it unless they are one. The
+// response never contains the code, its hash, or who it was sent to.
+router.post('/:id/request-owner-removal', protect, requireRole('owner'), async (req, res, next) => {
+  try {
+    const result = await requestOwnerRemoval({
+      actor: req.user,
+      targetId: req.params.id,
+      context: activityContext(req),
+    })
+    res.status(result.status).json(result.body)
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/users/:id/confirm-owner-removal   { code: "123456" }
+//
+// Protected owners only — the code alone is not enough. On success the target
+// is demoted to a regular user with no permissions; the account is kept.
+router.post('/:id/confirm-owner-removal', protect, requireRole('owner'), async (req, res, next) => {
+  try {
+    const result = await confirmOwnerRemoval({
+      actor: req.user,
+      targetId: req.params.id,
+      code: req.body?.code,
+      context: activityContext(req),
+    })
+    res.status(result.status).json(result.body)
   } catch (err) {
     next(err)
   }

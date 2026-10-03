@@ -348,3 +348,102 @@ export const sendPasswordResetEmail = async (toEmail, resetUrl) =>
     subject: 'Reset your Varlikent password',
     html: passwordResetEmailHtml(resetUrl),
   })
+
+// ── Owner removal ────────────────────────────────────────────────────────
+// Two emails, both sent only to the protected owners, one recipient per call
+// (services/ownerRemoval.js loops), so a rejected address cannot stop the
+// other from being delivered.
+//
+// Every interpolated value is escaped, names and addresses included: they are
+// account fields a user typed. Account ids are deliberately left out.
+
+const ownerEmailShell = (heading, bodyHtml) => `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+  body { margin:0; padding:0; background:#f4f4f4; font-family: Georgia, serif; }
+  .wrap { max-width:600px; margin:32px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 16px rgba(0,0,0,0.08); }
+  .header { background:#1E1E1C; padding:28px 36px; }
+  .logo { font-size:18px; letter-spacing:0.2em; color:#fff; font-weight:bold; }
+  .logo span { color:#4b6741; }
+  .body { padding:36px; }
+  h2 { font-size:20px; color:#1E1E1C; margin:0 0 12px; }
+  p { font-size:14px; color:#555; line-height:1.7; margin:0 0 16px; }
+  .code { font-family: 'Courier New', monospace; font-size:34px; letter-spacing:0.35em; font-weight:bold; color:#1E1E1C; background:#f9f9f7; border:1px solid #eee; border-radius:10px; padding:18px 0; text-align:center; margin:8px 0 24px; }
+  .divider { border-top:1px solid #eee; margin:24px 0; }
+  .notice { font-size:12px; color:#999; }
+  .footer { background:#f9f9f7; padding:16px 36px; font-size:11px; color:#aaa; border-top:1px solid #eee; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="logo">VARLI<span>KENT</span></div>
+  </div>
+  <div class="body">
+    <h2>${escapeHtml(heading)}</h2>
+    ${bodyHtml}
+  </div>
+  <div class="footer">
+    Varlikent · Istanbul Luxury Real Estate
+  </div>
+</div>
+</body>
+</html>
+`
+
+const person = (user) =>
+  `<strong>${escapeHtml(user?.name || 'Unknown')}</strong>${user?.email ? ` (${escapeHtml(user.email)})` : ''}`
+
+/**
+ * The verification-code email. Turkish first (the site's default language),
+ * English below. Exported for tests only.
+ */
+export const ownerRemovalCodeEmailHtml = ({ code, target, requestedBy, expiresInMinutes }) =>
+  ownerEmailShell('Sahip kaldırma doğrulama kodu', `
+    <p>${person(requestedBy)}, ${person(target)} hesabının sahip yetkisinin kaldırılmasını talep etti.</p>
+    <div class="code" data-owner-removal-code>${escapeHtml(code)}</div>
+    <p>Bu kod <strong>${escapeHtml(expiresInMinutes)} dakika</strong> geçerlidir ve yalnızca bir kez kullanılabilir. Kod girilene kadar hiçbir şey değişmez. Onaylanırsa hesap silinmez; yalnızca normal kullanıcıya düşürülür.</p>
+    <p>Bu talebi beklemiyorsanız kodu kimseyle paylaşmayın ve diğer korumalı sahiple iletişime geçin.</p>
+    <div class="divider"></div>
+    <p><strong>Owner removal verification code.</strong> ${person(requestedBy)} has requested that ${person(target)} be removed as an owner.</p>
+    <p>The code above is valid for <strong>${escapeHtml(expiresInMinutes)} minutes</strong> and can be used once. Nothing changes until it is entered by a protected owner. If confirmed, the account is not deleted — it becomes a regular user.</p>
+    <p class="notice">If you did not expect this, do not share the code and contact the other protected owner. This code is only ever sent to the protected owner accounts.</p>
+  `)
+
+/** The "it has been done" notification. Exported for tests only. */
+export const ownerRemovalCompletedEmailHtml = ({ target, confirmedBy, requestedBy }) =>
+  ownerEmailShell('Sahip yetkisi kaldırıldı', `
+    <p>${person(target)} artık sahip değil; hesap normal kullanıcıya düşürüldü ve tüm yetkileri kaldırıldı. Hesap silinmedi.</p>
+    <p>Onaylayan: ${person(confirmedBy)}${requestedBy ? `<br/>Talep eden: ${person(requestedBy)}` : ''}</p>
+    <div class="divider"></div>
+    <p><strong>Owner removed.</strong> ${person(target)} is no longer an owner. The account was demoted to a regular user with no permissions; it was not deleted.</p>
+    <p>Confirmed by: ${person(confirmedBy)}${requestedBy ? `<br/>Requested by: ${person(requestedBy)}` : ''}</p>
+    <p class="notice">This notice goes to the protected owner accounts whenever an owner is removed. The full record is in Admin Activity.</p>
+  `)
+
+/**
+ * Emails the owner-removal code to ONE protected owner.
+ *
+ * The code is in the HTML body only — not in the subject, which is shown on
+ * lock screens and in notification previews, and never in a log:
+ * sendEmailViaResend() logs neither the body nor the recipient.
+ *
+ * @returns {Promise<boolean>} true only when Resend accepted the message.
+ */
+export const sendOwnerRemovalCode = async ({ to, code, target, requestedBy, expiresInMinutes = 10 }) =>
+  sendEmailViaResend({
+    to,
+    subject: `Varlikent: owner removal verification code — ${safeHeaderText(target?.name)}`,
+    html: ownerRemovalCodeEmailHtml({ code, target, requestedBy, expiresInMinutes }),
+  })
+
+/** Tells ONE protected owner that an owner has been demoted. */
+export const sendOwnerRemovalCompleted = async ({ to, target, confirmedBy, requestedBy }) =>
+  sendEmailViaResend({
+    to,
+    subject: `Varlikent: owner removed — ${safeHeaderText(target?.name)}`,
+    html: ownerRemovalCompletedEmailHtml({ target, confirmedBy, requestedBy }),
+  })

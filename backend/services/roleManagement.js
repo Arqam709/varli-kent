@@ -16,6 +16,8 @@
 //   2. Nobody may raise another account to their own level. An admin with
 //      user_management creates agents and users, never more admins.
 
+import { isProtectedOwner } from '../config/protectedOwners.js'
+
 // Every role the system knows about. Mirrors the User schema enum.
 export const ROLES = ['owner', 'admin', 'agent', 'user']
 
@@ -60,6 +62,15 @@ const deny = (status, message) => ({ ok: false, status, message })
 export const validateRoleChange = ({ actor, target, requestedRole }) => {
   if (!actor) return deny(401, 'Not authenticated')
   if (!target) return deny(404, 'User not found')
+
+  // Protected owners first, and by id — see config/protectedOwners.js. The
+  // owner rule below already covers them today; this one does not depend on
+  // the target's role, so it keeps holding even if that rule is ever relaxed.
+  // It also covers isActive, because the route applies isActive only after
+  // this function has said ok.
+  if (isProtectedOwner(target)) {
+    return deny(403, 'This owner account is protected and cannot be modified')
+  }
 
   // Owners are untouchable through this endpoint, in either direction.
   if (target.role === 'owner') {

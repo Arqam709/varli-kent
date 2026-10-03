@@ -10,6 +10,13 @@ const activityLogSchema = new mongoose.Schema({
   resource: { type: String, required: true },
   action: { type: String, required: true },
   statusCode: { type: Number, required: true },
+  // Optional, and absent on everything middleware/activityLogger.js writes.
+  // Set by services that record an action explicitly and know who it was
+  // done TO — owner removal (services/ownerRemoval.js). `details` is a short
+  // human-readable note; it never holds a code, a hash or any other secret.
+  targetId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  targetName: { type: String },
+  details: { type: String },
 }, { timestamps: true })
 
 activityLogSchema.index({ createdAt: -1 })

@@ -417,7 +417,27 @@ const SettingsPage = () => {
               <Input id="settings-name" type="text" value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} placeholder={s.fullNamePlaceholder} required />
             </Field>
             <Field id="settings-email" label={s.emailAddress}>
-              <Input id="settings-email" type="email" value={profile.email} onChange={e => setProfile(p => ({ ...p, email: e.target.value }))} placeholder={s.emailPlaceholder} required />
+              {/*
+                A protected owner's email is locked — the server refuses the
+                change (PUT /users/me/profile), this just says so up front.
+                readOnly rather than disabled so the unchanged address is
+                still submitted alongside a name edit, exactly as before.
+              */}
+              <Input
+                id="settings-email"
+                type="email"
+                value={profile.email}
+                onChange={e => { if (!user?.isProtected) setProfile(p => ({ ...p, email: e.target.value })) }}
+                placeholder={s.emailPlaceholder}
+                readOnly={!!user?.isProtected}
+                aria-describedby={user?.isProtected ? 'settings-email-locked' : undefined}
+                required
+              />
+              {user?.isProtected && (
+                <p id="settings-email-locked" className="mt-1.5 text-xs" style={{ color: 'var(--t-muted)' }}>
+                  {s.protectedEmailNote || 'This is a protected owner account, so its email address cannot be changed here.'}
+                </p>
+              )}
             </Field>
             <div className="flex justify-end pt-1">
               <PrimaryBtn type="submit" loading={profileLoading} savingText={s.saving}>{s.saveChanges}</PrimaryBtn>

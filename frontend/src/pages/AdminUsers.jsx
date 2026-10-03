@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { toast } from 'react-toastify'
 import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
+import OwnerRemovalModal from '../components/OwnerRemovalModal'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 
@@ -116,6 +117,9 @@ const AdminUsers = () => {
   const [pwModal, setPwModal] = useState(null)
   const [newPw, setNewPw] = useState('')
   const [pwSaving, setPwSaving] = useState(false)
+  // The owner whose removal is being requested/approved, or null. The modal
+  // holds all of its own state and is unmounted when this clears.
+  const [removalTarget, setRemovalTarget] = useState(null)
 
   const canAccess = isOwner || hasPermission('user_management')
   const canChangePasswords = isOwner || hasPermission('manage_passwords')
@@ -290,6 +294,11 @@ const AdminUsers = () => {
     const isSelf = u._id === currentUser?._id
     const isAnotherOwner = u.role === 'owner' && !isSelf
     const canEditThis = !isAnotherOwner && !isSelf
+    // Any owner may REQUEST the removal of another owner who is not protected.
+    // `isProtected` is the server's per-user boolean — this page holds no list
+    // of protected ids or emails. The button only opens the verification
+    // flow; the role dropdown above is still never offered for an owner.
+    const canRequestOwnerRemoval = isOwner && isAnotherOwner && !u.isProtected
     return (
       <div className={`rounded-2xl border bg-white p-5 shadow-sm transition ${!u.isActive ? 'opacity-60' : ''}`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -308,6 +317,22 @@ const AdminUsers = () => {
 
           <div className="flex flex-wrap items-center gap-2">
             <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${roleBadgeCls(u.role)}`}>{u.role}</span>
+            {/*
+              Driven entirely by the server's per-user boolean. This page holds
+              no list of protected emails or ids, and the badge is display
+              only — every rule it describes is enforced by the API.
+            */}
+            {u.isProtected && (
+              <span
+                className="flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700"
+                title={p.protectedHint || 'This owner account cannot be removed, demoted or modified by another account'}
+              >
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z" />
+                </svg>
+                {p.protected || 'Protected'}
+              </span>
+            )}
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${u.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
               {u.isActive ? (p.active || 'Active') : (p.inactive || 'Inactive')}
             </span>
@@ -367,6 +392,16 @@ const AdminUsers = () => {
                   </>
                 )}
               </>
+            )}
+
+            {canRequestOwnerRemoval && (
+              <button
+                type="button"
+                onClick={() => setRemovalTarget(u)}
+                className="rounded-full border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition cursor-pointer"
+              >
+                {p.ownerRemoval?.button || 'Remove Owner'}
+              </button>
             )}
           </div>
         </div>
@@ -597,6 +632,22 @@ const AdminUsers = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/*
+        Owner removal. keyed by the target so switching to another account
+        starts from a clean state. The code step is offered only when the
+        SERVER says the signed-in user is a protected owner.
+      */}
+      {removalTarget && (
+        <OwnerRemovalModal
+          key={removalTarget._id}
+          target={removalTarget}
+          canConfirm={currentUser?.isProtected === true}
+          onClose={() => setRemovalTarget(null)}
+          onRemoved={() => { setRemovalTarget(null); load() }}
+          onStale={load}
+        />
       )}
 
       {confirm && <ConfirmModal message={confirm.message} danger={confirm.danger} cancelLabel={c.cancel} confirmLabel={p.confirm} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />}

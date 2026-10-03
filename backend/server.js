@@ -5,6 +5,7 @@ import dotenv from 'dotenv'
 import { Server } from 'socket.io'
 import connectDB from './config/db.js'
 import { ALLOWED_ORIGINS } from './config/origins.js'
+import { reportProtectedOwnerConfig } from './config/protectedOwners.js'
 import { registerRealtime } from './realtime/socket.js'
 import authRoutes from './routes/auth.js'
 import propertyRoutes from './routes/properties.js'
@@ -169,6 +170,8 @@ connectDB().then(async () => {
 
   server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`)
+    // Warns (never throws) when PROTECTED_OWNER_IDS is missing or malformed.
+    reportProtectedOwnerConfig()
     console.log(`[realtime] Socket.IO ready; allowed origins: ${ALLOWED_ORIGINS.join(', ')}`)
     // Room photo cleanup: deferred and non-blocking; see services/designRoomPhotos/lifecycle.js.
     startRoomPhotoSweeper()

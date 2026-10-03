@@ -6,6 +6,13 @@ const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/
 // endpoints, public-facing writes, and anything read-only).
 const SKIP_PREFIXES = ['/api/users/me/', '/api/users/favourites', '/api/auth/', '/api/chat', '/api/upload', '/api/property-conversations', '/api/notifications', '/api/property-alerts', '/api/design-boards', '/api/design-room-photos', '/api/design-generations', '/api/agent']
 
+// Owner removal records its own entries (services/ownerRemoval.js): it has to
+// log failures — a wrong code, a locked request — which this middleware never
+// does, and it names the target. Skipping the routes here keeps each event
+// from being recorded twice. Matched on the path's end because the target id
+// sits in the middle: /api/users/<id>/request-owner-removal.
+const SKIP_SUFFIXES = ['/request-owner-removal', '/confirm-owner-removal']
+
 const ACTION_BY_METHOD = { POST: 'created', PUT: 'updated', PATCH: 'updated', DELETE: 'deleted' }
 
 // Friendlier verbs for a handful of well-known non-CRUD endpoints.
@@ -13,8 +20,6 @@ const SPECIAL_ACTIONS = {
   'users/role': 'changed the role of',
   'users/permissions': 'updated permissions for',
   'users/password': 'changed the password for',
-  'users/request-owner-removal': 'requested removal of an owner',
-  'users/confirm-owner-removal': 'removed an owner',
   'contact/status': 'updated the status of a lead',
   'chats': 'deleted a chatbot conversation',
   'chats/user': "cleared a user's chatbot history",
@@ -50,6 +55,7 @@ export default function activityLogger(req, res, next) {
       if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return
       if (!requestPath.startsWith('/api/')) return
       if (SKIP_PREFIXES.some(p => requestPath.startsWith(p))) return
+      if (SKIP_SUFFIXES.some(s => requestPath.endsWith(s))) return
       if (res.statusCode >= 400) return
       const user = req.user
       if (!user || (user.role !== 'admin' && user.role !== 'owner')) return
