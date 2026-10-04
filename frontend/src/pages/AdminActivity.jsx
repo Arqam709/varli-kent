@@ -3,6 +3,7 @@ import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { localeFor } from '../lib/locale'
 
 const METHOD_COLOR = {
   POST: { dot: 'bg-green-500', text: 'text-green-700', bg: 'bg-green-50' },
@@ -13,12 +14,12 @@ const METHOD_COLOR = {
 
 const roleBadgeCls = (role) => role === 'owner' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
 
-const timeAgo = (iso, a) => {
+const timeAgo = (iso, a, locale) => {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
   if (diff < 60) return a.justNow || 'just now'
   if (diff < 3600) return `${Math.floor(diff / 60)}${a.minutesAgo || 'm ago'}`
   if (diff < 86400) return `${Math.floor(diff / 3600)}${a.hoursAgo || 'h ago'}`
-  return new Date(iso).toLocaleString()
+  return new Date(iso).toLocaleString(locale)
 }
 
 const resourceLabel = (resource, a) => {
@@ -36,7 +37,7 @@ const resourceLabel = (resource, a) => {
 
 const AdminActivity = () => {
   const { isOwner } = useAuth()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const a = t.adminPages?.activity || {}
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -128,7 +129,7 @@ const AdminActivity = () => {
                       <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold ${color.bg} ${color.text}`}>{log.method}</span>
                       <span className="font-mono">{log.path}</span>
                       <span>·</span>
-                      <span>{timeAgo(log.createdAt, a)}</span>
+                      <span>{timeAgo(log.createdAt, a, localeFor(language))}</span>
                     </p>
                   </div>
                   <span className={`h-2 w-2 rounded-full shrink-0 mt-2 ${color.dot}`} />

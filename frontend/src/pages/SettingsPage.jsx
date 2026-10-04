@@ -4,6 +4,7 @@ import { toast } from 'react-toastify'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { localeFor } from '../lib/locale'
 import { useChat } from '../contexts/ChatContext'
 import api from '../lib/api'
 
@@ -73,7 +74,7 @@ const SecondaryBtn = ({ children, ...props }) => (
  * why the copy says "AI chat" everywhere rather than just "messages".
  */
 const AiChatHistorySection = () => {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const navigate = useNavigate()
   const h = t.aiChatHistory || {}
   const {
@@ -155,7 +156,7 @@ const AiChatHistorySection = () => {
                     {c.lastMessage?.text || (h.title || 'AI chat')}
                   </p>
                   <p className="mt-0.5 text-xs" style={{ color: 'var(--t-muted)' }}>
-                    {new Date(c.lastActivityAt || c.createdAt).toLocaleString()}
+                    {new Date(c.lastActivityAt || c.createdAt).toLocaleString(localeFor(language))}
                     {typeof c.messageCount === 'number' ? ` · ${c.messageCount} ${h.messages || 'messages'}` : ''}
                   </p>
                 </div>
@@ -171,7 +172,7 @@ const AiChatHistorySection = () => {
                   type="button"
                   onClick={() => setConfirm({ mode: 'one', id: c._id })}
                   disabled={busy}
-                  aria-label={`${h.deleteOne || 'Delete'} — ${new Date(c.lastActivityAt || c.createdAt).toLocaleDateString()}`}
+                  aria-label={`${h.deleteOne || 'Delete'} — ${new Date(c.lastActivityAt || c.createdAt).toLocaleDateString(localeFor(language))}`}
                   className="shrink-0 rounded-full border border-red-300 px-4 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-40 cursor-pointer"
                 >
                   {h.deleteOne || 'Delete'}

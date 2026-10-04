@@ -5,6 +5,7 @@ import AdminLayout from '../components/AdminLayout'
 import OwnerRemovalModal from '../components/OwnerRemovalModal'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { localeFor } from '../lib/locale'
 
 const ALL_PERMISSIONS = [
   // Listings
@@ -99,7 +100,7 @@ const emptyCreate = { name: '', email: '', password: '', role: 'admin', permissi
 
 const AdminUsers = () => {
   const { isOwner, user: currentUser, hasPermission } = useAuth()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const p = t.adminPages?.users || {}
   const c = t.adminPages?.common || {}
   const [users, setUsers] = useState([])
@@ -311,7 +312,7 @@ const AdminUsers = () => {
                 {u.name} {isSelf && <span className="text-xs font-normal text-slate-400">({p.you || 'you'})</span>}
               </p>
               <p className="text-sm text-slate-500">{u.email}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{p.joined || 'Joined'} {new Date(u.createdAt).toLocaleDateString()}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{p.joined || 'Joined'} {new Date(u.createdAt).toLocaleDateString(localeFor(language))}</p>
             </div>
           </div>
 

@@ -4,10 +4,11 @@ import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { localeFor } from '../lib/locale'
 
 const AdminMessages = () => {
   const { hasPermission } = useAuth()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const p = t.adminPages?.messages || {}
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
@@ -100,7 +101,7 @@ const AdminMessages = () => {
                       {msg.source === 'ai_assistant' && (
                         <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700">🤖 AI Assistant</span>
                       )}
-                      <span className="text-xs text-slate-400">{new Date(msg.createdAt).toLocaleDateString()}</span>
+                      <span className="text-xs text-slate-400">{new Date(msg.createdAt).toLocaleDateString(localeFor(language))}</span>
                     </div>
                   </div>
                   <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${msg.status === 'New' ? 'bg-amber-100 text-amber-700' : msg.status === 'Replied' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-700'}`}>

@@ -17,7 +17,7 @@ const LoginPage = () => {
 
   const { login, loginWithToken } = useAuth()
   const { instance, accounts, inProgress } = useMsal()
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const a = t.auth
 
   const navigate = useNavigate()
@@ -59,11 +59,7 @@ if (!isMicrosoftLoginPending) return
       loginWithToken(user, token)
 
       toast.success(
-        language === 'tr'
-          ? 'Microsoft ile giriş yapıldı'
-          : language === 'ar'
-            ? 'تم تسجيل الدخول باستخدام Microsoft'
-            : 'Signed in with Microsoft'
+        a.signedInMicrosoft
       )
 
       navigate(from, { replace: true })
@@ -75,11 +71,7 @@ if (!isMicrosoftLoginPending) return
         error.response?.data?.message ||
         error.message ||
         (
-          language === 'tr'
-            ? 'Microsoft ile giriş başarısız'
-            : language === 'ar'
-              ? 'فشل تسجيل الدخول باستخدام Microsoft'
-              : 'Microsoft sign in failed'
+          a.microsoftSignInFailed
         )
       )
     } finally {
@@ -88,7 +80,7 @@ if (!isMicrosoftLoginPending) return
   }
 
   completeMicrosoftLogin()
-}, [accounts, inProgress, instance, loginWithToken, navigate, from, language])
+}, [accounts, inProgress, instance, loginWithToken, navigate, from, a])
 
   
 
@@ -97,11 +89,7 @@ if (!isMicrosoftLoginPending) return
 
     if (!email || !password) {
       toast.error(
-        language === 'tr'
-          ? 'Lütfen tüm alanları doldurun'
-          : language === 'ar'
-            ? 'يرجى ملء جميع الحقول'
-            : 'Please fill in all fields'
+        a.fillAllFields
       )
       return
     }
@@ -112,11 +100,7 @@ if (!isMicrosoftLoginPending) return
 
     if (result.success) {
       toast.success(
-        language === 'tr'
-          ? 'Tekrar hoş geldiniz!'
-          : language === 'ar'
-            ? 'مرحباً بعودتك!'
-            : 'Welcome back!'
+        a.welcomeBack
       )
 
       navigate(from, { replace: true })
@@ -141,11 +125,7 @@ if (!isMicrosoftLoginPending) return
       loginWithToken(user, token)
 
       toast.success(
-        language === 'tr'
-          ? 'Google ile giriş yapıldı'
-          : language === 'ar'
-            ? 'تم تسجيل الدخول باستخدام Google'
-            : 'Signed in with Google'
+        a.signedInGoogle
       )
 
       navigate(from, { replace: true })
@@ -157,11 +137,7 @@ if (!isMicrosoftLoginPending) return
         error.response?.data?.message ||
         error.message ||
         (
-          language === 'tr'
-            ? 'Google ile giriş başarısız'
-            : language === 'ar'
-              ? 'فشل تسجيل الدخول باستخدام Google'
-              : 'Google sign in failed'
+          a.googleSignInFailed
         )
       )
     } finally {
@@ -170,11 +146,7 @@ if (!isMicrosoftLoginPending) return
   },
   onError: () => {
     toast.error(
-      language === 'tr'
-        ? 'Google girişi başarısız'
-        : language === 'ar'
-          ? 'فشل تسجيل الدخول باستخدام Google'
-          : 'Google login failed'
+      a.googleLoginFailed
     )
   },
 })
@@ -199,11 +171,7 @@ const handleMicrosoftLogin = async () => {
       error.response?.data?.message ||
       error.message ||
       (
-        language === 'tr'
-          ? 'Microsoft ile giriş başarısız'
-          : language === 'ar'
-            ? 'فشل تسجيل الدخول باستخدام Microsoft'
-            : 'Microsoft sign in failed'
+        a.microsoftSignInFailed
       )
     )
 
@@ -213,11 +181,7 @@ const handleMicrosoftLogin = async () => {
 
   const oauthComingSoon = (provider) => {
     toast.info(
-      language === 'tr'
-        ? `${provider} girişi yakında gelecek. OAuth bilgilerini .env dosyasında ayarlayın.`
-        : language === 'ar'
-          ? `تسجيل الدخول عبر ${provider} قريباً. قم بإعداد بيانات OAuth في ملف .env.`
-          : `${provider} login coming soon. Configure OAuth credentials in .env`
+      a.oauthComingSoon.replace('{provider}', provider)
     )
   }
 
@@ -345,11 +309,7 @@ const handleMicrosoftLogin = async () => {
     <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
   </svg>
 
-  {language === 'tr'
-    ? 'Google ile devam et'
-    : language === 'ar'
-      ? 'المتابعة باستخدام Google'
-      : 'Continue with Google'}
+  {a.continueWithGoogle}
 </button>
             </div>
 

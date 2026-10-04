@@ -13,53 +13,33 @@ const RegisterPage = () => {
   const [loading, setLoading] = useState(false)
 
   const { register } = useAuth()
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const a = t.auth
 
   const navigate = useNavigate()
 
   const sideTitle =
-    language === 'tr'
-      ? 'VarliKent’e Katılın'
-      : language === 'ar'
-        ? 'انضم إلى فارلي كنت'
-        : 'Join Varlikent'
+    a.joinTitle
 
   const sideText =
-    language === 'tr'
-      ? 'Favorilerinizi kaydetmek, mülk bildirimleri almak ve danışmanlarımızla iletişime geçmek için hesap oluşturun.'
-      : language === 'ar'
-        ? 'أنشئ حساباً لحفظ المفضلة، والحصول على تنبيهات العقارات، والتواصل مع مستشارينا.'
-        : 'Create an account to save favourites, get property alerts and connect with our agents.'
+    a.joinText
 
   const passwordPlaceholder =
-    language === 'tr'
-      ? 'En az 6 karakter'
-      : language === 'ar'
-        ? '6 أحرف على الأقل'
-        : 'Min. 6 characters'
+    a.passwordMinPlaceholder
 
   const handleSubmit = async (e) => {
     e.preventDefault()
 
     if (password !== confirm) {
       toast.error(
-        language === 'tr'
-          ? 'Şifreler eşleşmiyor'
-          : language === 'ar'
-            ? 'كلمتا المرور غير متطابقتين'
-            : 'Passwords do not match'
+        a.passwordsDoNotMatch
       )
       return
     }
 
     if (password.length < 6) {
       toast.error(
-        language === 'tr'
-          ? 'Şifre en az 6 karakter olmalıdır'
-          : language === 'ar'
-            ? 'يجب أن تكون كلمة المرور 6 أحرف على الأقل'
-            : 'Password must be at least 6 characters'
+        a.passwordTooShort
       )
       return
     }
@@ -70,11 +50,7 @@ const RegisterPage = () => {
 
     if (result.success) {
       toast.success(
-        language === 'tr'
-          ? 'Hesap oluşturuldu! VarliKent’e hoş geldiniz.'
-          : language === 'ar'
-            ? 'تم إنشاء الحساب! مرحباً بك في فارلي كنت.'
-            : 'Account created! Welcome to Varlikent.'
+        a.accountCreated
       )
 
       navigate('/')

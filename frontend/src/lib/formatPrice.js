@@ -1,11 +1,4 @@
-const NUMBER_LOCALES = {
-  en: 'en-US',
-  tr: 'tr-TR',
-  ar: 'ar',
-  de: 'de-DE',
-  ru: 'ru-RU',
-  ur: 'ur-PK',
-}
+import { localeFor } from './locale.js'
 
 export const formatPrice = (price, listingType, priceLabel = '', language = 'en') => {
   const label = priceLabel?.trim()
@@ -15,7 +8,7 @@ export const formatPrice = (price, listingType, priceLabel = '', language = 'en'
   const numericPrice = Number(price)
   if (!Number.isFinite(numericPrice)) return 'Price on request'
 
-  const amount = numericPrice.toLocaleString(NUMBER_LOCALES[language] || NUMBER_LOCALES.en)
+  const amount = numericPrice.toLocaleString(localeFor(language))
   const rentSuffix = listingType === 'Rent' ? '/mo' : ''
 
   if (label) {

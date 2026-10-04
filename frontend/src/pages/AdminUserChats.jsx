@@ -4,6 +4,7 @@ import api from '../lib/api'
 import AdminLayout from '../components/AdminLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { localeFor } from '../lib/locale'
 import { formatPrice } from '../lib/formatPrice'
 
 const EVENT_LABELS = {
@@ -22,7 +23,7 @@ const getInitials = (name) =>
     .map((word) => word[0]?.toUpperCase())
     .join('') || 'U'
 
-const formatRelativeTime = (dateString) => {
+const formatRelativeTime = (dateString, locale) => {
   const date = new Date(dateString)
   const diffMin = Math.round((Date.now() - date.getTime()) / 60000)
   if (diffMin < 1) return 'now'
@@ -31,10 +32,10 @@ const formatRelativeTime = (dateString) => {
   if (diffHr < 24) return `${diffHr}h`
   const diffDay = Math.round(diffHr / 24)
   if (diffDay < 7) return `${diffDay}d`
-  return date.toLocaleDateString()
+  return date.toLocaleDateString(locale)
 }
 
-const formatDateSeparatorLabel = (dateString) => {
+const formatDateSeparatorLabel = (dateString, locale) => {
   const date = new Date(dateString)
   const today = new Date()
   const yesterday = new Date(today)
@@ -42,7 +43,7 @@ const formatDateSeparatorLabel = (dateString) => {
 
   if (date.toDateString() === today.toDateString()) return 'Today'
   if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'
-  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+  return date.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 const humanizePageKey = (pageKey) => {
@@ -64,14 +65,14 @@ const getLastPageContext = (messages) => {
 
 // Groups chronological messages into a flat render list with a date
 // separator inserted whenever the calendar day changes.
-const buildTranscriptItems = (messages) => {
+const buildTranscriptItems = (messages, locale) => {
   const items = []
   let lastDateKey = null
 
   messages.forEach((message) => {
     const dateKey = new Date(message.createdAt).toDateString()
     if (dateKey !== lastDateKey) {
-      items.push({ type: 'separator', key: `sep-${message._id}`, label: formatDateSeparatorLabel(message.createdAt) })
+      items.push({ type: 'separator', key: `sep-${message._id}`, label: formatDateSeparatorLabel(message.createdAt, locale) })
       lastDateKey = dateKey
     }
     items.push({ type: 'message', key: message._id, message })
@@ -211,6 +212,7 @@ const PropertyMiniCard = ({ property }) => (
 )
 
 const MessageBubble = ({ message, labels }) => {
+  const { language } = useLanguage()
   const isUser = message.role === 'user'
 
   return (
@@ -227,7 +229,7 @@ const MessageBubble = ({ message, labels }) => {
       </div>
       <div className={`mt-1 flex items-center gap-2 ${isUser ? '' : 'flex-row-reverse'}`}>
         <span className="text-[11px] text-slate-400">
-          {new Date(message.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+          {new Date(message.createdAt).toLocaleTimeString(localeFor(language), { hour: '2-digit', minute: '2-digit' })}
         </span>
         <EventBadge event={message.event} />
       </div>
@@ -249,6 +251,7 @@ const Spinner = () => (
 )
 
 const UserRow = ({ entry, isSelected, onClick, labels }) => {
+  const { language } = useLanguage()
   const name = getUserDisplayName(entry.user, labels)
 
   return (
@@ -264,7 +267,7 @@ const UserRow = ({ entry, isSelected, onClick, labels }) => {
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
           <p className="truncate text-sm font-semibold text-[#202a36]">{name}</p>
-          <span className="shrink-0 text-[11px] text-slate-400">{formatRelativeTime(entry.lastActivityAt)}</span>
+          <span className="shrink-0 text-[11px] text-slate-400">{formatRelativeTime(entry.lastActivityAt, localeFor(language))}</span>
         </div>
         {entry.user?.email && <p className="truncate text-xs text-slate-500">{entry.user.email}</p>}
         {entry.latestMessage?.text && (
@@ -279,7 +282,7 @@ const UserRow = ({ entry, isSelected, onClick, labels }) => {
   )
 }
 
-const ConversationRow = ({ conversation, isSelected, onClick, labels }) => (
+const ConversationRow = ({ conversation, isSelected, onClick, labels, locale }) => (
   <button
     type="button"
     onClick={onClick}
@@ -294,7 +297,7 @@ const ConversationRow = ({ conversation, isSelected, onClick, labels }) => (
       <p className="min-w-0 flex-1 truncate text-sm font-medium text-[#202a36]">
         {conversation.lastMessage?.text?.trim() || 'Property conversation'}
       </p>
-      <span className="shrink-0 text-[11px] text-slate-400">{formatRelativeTime(conversation.lastActivityAt)}</span>
+      <span className="shrink-0 text-[11px] text-slate-400">{formatRelativeTime(conversation.lastActivityAt, locale)}</span>
     </div>
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-[11px] text-slate-400">
@@ -330,7 +333,7 @@ const ConfirmModal = ({ message, onConfirm, onCancel, busy, labels }) => (
 )
 const AdminUserChats = () => {
   const { hasPermission } = useAuth()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const p = t.adminPages?.userChats || {}
   const [users, setUsers] = useState([])
   const [usersPagination, setUsersPagination] = useState(null)
@@ -579,7 +582,7 @@ The admin selects a different user. */
   const rowLabels = { ...statusLabels, ...bubbleLabels, lead: p.lead, messages: p.messages, conversation: p.conversation, conversations: p.conversations, deletedUser: p.deletedUser }
   const userTotalPages = usersPagination?.totalPages || 1
   const conversationTotalPages = conversationsPagination?.totalPages || 1
-  const transcriptItems = buildTranscriptItems(messages)
+  const transcriptItems = buildTranscriptItems(messages, localeFor(language))
   const lastPageContext = getLastPageContext(messages)
   /*
    * Moderation. Gated on `moderate_chats`, NOT on `view_chats` — reading a
@@ -812,6 +815,7 @@ The admin selects a different user. */
                     <div className="divide-y divide-slate-100">
                       {conversations.map((conversation) => (
                         <ConversationRow
+                          locale={localeFor(language)}
                           key={conversation._id}
                           conversation={conversation}
                           isSelected={conversation._id === selectedConversationId}
@@ -914,10 +918,10 @@ The admin selects a different user. */
                       </div>
                       <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-400">
                         <span>
-                          {p.created || 'Created'}: {selectedConversation?.createdAt && new Date(selectedConversation.createdAt).toLocaleDateString()}
+                          {p.created || 'Created'}: {selectedConversation?.createdAt && new Date(selectedConversation.createdAt).toLocaleDateString(localeFor(language))}
                         </span>
                         <span>
-                          {p.lastActivity || 'Last activity'}: {selectedConversation?.lastActivityAt && new Date(selectedConversation.lastActivityAt).toLocaleDateString()}
+                          {p.lastActivity || 'Last activity'}: {selectedConversation?.lastActivityAt && new Date(selectedConversation.lastActivityAt).toLocaleDateString(localeFor(language))}
                         </span>
                         {lastPageContext && (
                           <span>
