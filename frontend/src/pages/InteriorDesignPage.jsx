@@ -129,10 +129,11 @@ const SECTION_BG = {
 const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
 
 export default function InteriorDesignPage() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   useSeo({
     title: t.seo.interior,
-    description: "Varlikent's interior design studio creates bespoke, luxury interiors for homes and commercial spaces across Istanbul.",
+    description: t.seoDescriptions.interior,
+    language,
     path: '/interior-design',
   })
   const p = t.interiorPage

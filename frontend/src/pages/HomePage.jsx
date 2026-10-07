@@ -518,10 +518,11 @@ export default function HomePage() {
    * so copying it here would make the home page indistinguishable from every
    * page that sets none.
    */
-  const { t }    = useLanguage()
+  const { t, language } = useLanguage()
   useSeo({
     title: t.seo.home,
-    description: "VarliKent is Istanbul's full-service property company — architecture, construction, renovation, interior design and real estate.",
+    description: t.seoDescriptions.home,
+    language,
     path: '/',
   })
   const navigate = useNavigate()

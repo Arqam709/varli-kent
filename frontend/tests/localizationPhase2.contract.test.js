@@ -32,9 +32,10 @@ const REMOVED = {
     "'Saved'", "'Save'", "'Price'", "'Sending...'", "'Send Message'", 'Your name', 'Email address',
     'Your message...', "'Property Type'", "'Listing Type'", "'District'", "'Status'",
     'Message sent! We will contact you soon.', 'Failed to send message.',
-    // The page TITLE's ", Istanbul" — the meta description sentence is a
-    // separate, deliberately untouched SEO string (see the Phase 2 report).
     'A premium property in Istanbul managed by the Varlikent team.', '${property.district}, Istanbul` :',
+    // The generated meta description is a translated template now.
+    'View property details on Varlikent.', "'For Rent' : 'For Sale'", ' bed, ${property.baths} bath',
+    "label: 'Bedrooms'", "label: 'Bathrooms'", "label: 'Area'",
     '{property.district}, Istanbul\n',
     "Hi, I'm interested in", 'subject=Inquiry:', "'Property Details'", '— video ${i + 1}',
   ],
@@ -44,7 +45,7 @@ const REMOVED = {
     'aria-label="About VarliKent"', 'aria-label="How We Work"', 'aria-label="Why VarliKent"',
     'aria-label="Buy or Rent"', 'aria-label="Selected Projects"', 'aria-label="Statistics"',
     'aria-label="Client Testimonials"', 'aria-label="Partner Companies"', 'aria-label="Call to Action"',
-    "title: 'Luxury Real Estate in Istanbul'",
+    "title: 'Luxury Real Estate in Istanbul'", 'full-service property company —',
   ],
   'components/Navbar.jsx': [
     'aria-label="Main navigation"', 'aria-label="VarliKent home"', 'aria-label="More languages"',
@@ -55,6 +56,7 @@ const REMOVED = {
     'View on Maps', 'Office Hours', 'Monday – Friday', '>Saturday<', '>Sunday<', '>Closed<',
     'Your message is saved securely', 'Message sent! Our team will reach out soon.', 'Failed to send message.',
     "|| 'Full Name'", "|| 'Message'", 'placeholder="you@example.com"', "title: 'Contact Us",
+    'Get in touch with the Varlikent team',
   ],
   'pages/ResetPassword.jsx': [
     'Invalid Link', 'missing or malformed', 'Request New Link', 'Choose a New Password',
@@ -63,7 +65,13 @@ const REMOVED = {
     "'Password must be at least 6 characters'", "'Passwords do not match'", "'Reset failed.",
     'err.response?.data?.message',
   ],
-  'pages/LoginPage.jsx': ['Istanbul Luxury Real Estate', 'Find and save your favourite properties'],
+  'pages/LoginPage.jsx': [
+    'Istanbul Luxury Real Estate', 'Find and save your favourite properties',
+    'placeholder="you@example.com"', 'response?.data?.message', 'toast.error(result.message)', 'error.message ||',
+  ],
+  'pages/RegisterPage.jsx': ['placeholder="you@example.com"', 'response?.data?.message', 'toast.error(result.message)'],
+  'pages/SettingsPage.jsx': ['alt="Avatar"'],
+  'lib/formatPrice.js': ["'Price on request'", "'/mo'"],
   'components/three/ConstructionClipViewer.jsx': [
     'View Construction Model', 'Click to load', 'Drag to rotate', "label: 'Foundation'",
     'Excavation, footings', "label: 'Final'", 'Complete building ready',
@@ -71,15 +79,25 @@ const REMOVED = {
   'pages/InteriorDesignPage.jsx': [
     "label: 'Contemporary'", "label: 'Warm Modern'", "label: 'Coastal'", "label: 'Classic'",
     'Marble · Glass · Steel', 'Oak · Linen · Terracotta', "title: 'Interior Design Studio",
+    'interior design studio creates bespoke',
   ],
-  'pages/TeamPage.jsx': ['Architecture · Construction · Real Estate', "title: 'Our Team"],
+  'pages/TeamPage.jsx': ['Architecture · Construction · Real Estate', "title: 'Our Team", 'Meet the Varlikent team'],
   'contexts/FavouritesContext.jsx': ['Please log in to save favourites.'],
-  'pages/AboutPage.jsx': ["title: 'About Varlikent"],
-  'pages/ArchitecturePage.jsx': ["title: 'Architecture Studio"],
-  'pages/ConstructionPage.jsx': ["title: 'Construction Services"],
-  'pages/RenovationPage.jsx': ["title: 'Renovation Services"],
-  'pages/PrivacyPolicyPage.jsx': ["title: 'Privacy Policy"],
-  'pages/PropertiesPage.jsx': ["title: 'Properties for Sale"],
+  'pages/AboutPage.jsx': ["title: 'About Varlikent", 'Learn about Varlikent'],
+  'pages/ArchitecturePage.jsx': [
+    "title: 'Architecture Studio", 'architecture studio designs bespoke',
+    "label: 'Projects'", "label: 'Years'", "label: 'Awards'", "label: 'Satisfaction'",
+  ],
+  'pages/ForgotPassword.jsx': ['response?.data?.message ||'],
+  'pages/ConstructionPage.jsx': [
+    "title: 'Construction Services", 'Varlikent manages high-end construction',
+    'DEFAULT_SERVICES', 'DEFAULT_PROCESS', 'DEFAULT_SEISMIC', 'DEFAULT_PHASES',
+    'General Contracting', 'Site Survey', 'Reinforced Concrete Frames', 'Foundation & Groundwork',
+    'Bosphorus Residences', 'Q3 2026', "|| 'Our Work'", "|| 'Construction Showcase'",
+  ],
+  'pages/RenovationPage.jsx': ["title: 'Renovation Services", 'Varlikent renovates luxury homes', 'aria-label="Before and after reveal slider"'],
+  'pages/PrivacyPolicyPage.jsx': ["title: 'Privacy Policy", 'How Varlikent collects', '>Legal<'],
+  'pages/PropertiesPage.jsx': ["title: 'Properties for Sale", 'Browse luxury apartments'],
 }
 
 for (const [file, strings] of Object.entries(REMOVED)) {

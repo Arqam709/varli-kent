@@ -131,9 +131,13 @@ for (const file of ['LoginPage.jsx', 'RegisterPage.jsx']) {
 
 test('LoginPage uses the new auth keys', async () => {
   const source = await read('pages', 'LoginPage.jsx')
-  for (const key of ['signedInMicrosoft', 'microsoftSignInFailed', 'fillAllFields', 'welcomeBack', 'signedInGoogle', 'googleSignInFailed', 'googleLoginFailed', 'continueWithGoogle', 'oauthComingSoon']) {
+  for (const key of ['signedInMicrosoft', 'fillAllFields', 'welcomeBack', 'signedInGoogle', 'googleLoginFailed', 'continueWithGoogle', 'oauthComingSoon']) {
     assert.match(source, new RegExp(`\\ba\\.${key}\\b`), `a.${key}`)
   }
+  // The two general OAuth failure messages are picked by lib/authErrors.js from
+  // the response status (see localizationPublicGaps.contract.test.js).
+  const authErrors = await read('lib', 'authErrors.js')
+  for (const key of ['microsoftSignInFailed', 'googleSignInFailed']) assert.ok(authErrors.includes(`'${key}'`), key)
   // The Microsoft redirect effect re-runs on a language change, as before.
   assert.match(source, /\[accounts, inProgress, instance, loginWithToken, navigate, from, a\]\)/)
 })

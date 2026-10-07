@@ -119,7 +119,8 @@ const translations = {
       "agentPanel": "Agent Dashboard",
       "accountRemovalTitle": "Account deletion requests",
       "accountRemovalDesc": "To request account deletion, contact our support team. This page does not delete your account.",
-      "contactSupport": "Contact support"
+      "contactSupport": "Contact support",
+      avatarAlt: "Profile photo",
     },
     common: {
       cancel: "Cancel",
@@ -232,6 +233,13 @@ const translations = {
     passwordTooShort: "Password must be at least 6 characters",
     accountCreated: "Account created! Welcome to Varlikent.",
     brandSubtitle: "Find and save your favourite properties. Get exclusive access to premium listings.",
+    invalidCredentials: "Incorrect email or password.",
+    checkDetails: "Please check the details you entered and try again.",
+    accountUnavailable: "Sign-in is not available for this account. Please contact us if you need help.",
+    networkError: "Could not reach the server. Please check your connection and try again.",
+    signInFailed: "Sign in failed. Please try again.",
+    emailInUse: "This email address is already registered.",
+    registrationFailed: "Could not create your account. Please try again.",
   },
   forgotPasswordPage: {
   heroTitle: 'Istanbul Luxury Real Estate',
@@ -391,6 +399,12 @@ const translations = {
       ctaHeading: 'Have a vision?',
       ctaBody: 'Contact us to discuss your project.',
       ctaBtn: 'Get in Touch',
+      stats: {
+        projects: "Projects",
+        years: "Years",
+        awards: "Awards",
+        satisfaction: "Satisfaction",
+      },
     },
     renovationPage: {
       label: 'Varlikent / Renovation',
@@ -428,6 +442,7 @@ const translations = {
       ctaHeading: 'Transform Your Space',
       ctaBody: "Let's discuss your renovation project and bring your vision to life.",
       ctaBtn: 'Get Started',
+      revealSlider: "Before and after reveal slider",
     },
     interiorPage: {
       label: 'Varlikent / Interior Design',
@@ -531,6 +546,39 @@ const translations = {
             desc: "Complete building ready for fit-out",
           },
         },
+      },
+      services: [
+        { num: "01", title: "General Contracting", desc: "Turn-key construction for residential, commercial and mixed-use developments." },
+        { num: "02", title: "Structural Works", desc: "Reinforced concrete and steel frame solutions built to seismic zone standards." },
+        { num: "03", title: "MEP Engineering", desc: "Mechanical, electrical and plumbing systems fully integrated into the build." },
+        { num: "04", title: "Envelope & Façade", desc: "Glass curtain walls, cladding systems and high-performance insulation." },
+      ],
+      processSteps: [
+        { step: "01", label: "Site Survey" },
+        { step: "02", label: "Foundation" },
+        { step: "03", label: "Structural Frame" },
+        { step: "04", label: "Fit-Out" },
+        { step: "05", label: "Handover" },
+      ],
+      seismicItems: [
+        { title: "Reinforced Concrete Frames", desc: "Ductile reinforced concrete systems designed to absorb and dissipate seismic energy without structural failure." },
+        { title: "Steel Structural Reinforcement", desc: "Structural steel bracing and moment-resisting frames integrated where required for additional lateral stability." },
+        { title: "Seismic Zone Compliance", desc: "All designs follow current Turkish Building Earthquake Code (TBDY) standards for Istanbul's seismic zone classification." },
+        { title: "Foundation Safety Analysis", desc: "Soil studies and foundation engineering calibrated to local ground conditions before any excavation begins." },
+        { title: "Independent Engineering Supervision", desc: "Licensed structural engineers inspect and sign off on every load-bearing milestone during construction." },
+        { title: "Material Quality Verification", desc: "Concrete strength testing, rebar certification, and batch quality checks at every pour." },
+      ],
+      phases: [
+        "Foundation & Groundwork",
+        "Structural Frame",
+        "Envelope & Façade",
+        "MEP Systems",
+        "Interior Fit-Out",
+        "Landscaping & Handover",
+      ],
+      sampleProject: {
+        name: "Bosphorus Residences — Phase II",
+        completion: "Q3 2026",
       },
     },
     teamPage: {
@@ -688,6 +736,9 @@ const translations = {
       whatsappMessage: "Hi, I’m interested in {title}",
       emailSubject: "Inquiry: {title}",
       videoLabel: "{title} — video {number}",
+      bedrooms: "Bedrooms",
+      bathrooms: "Bathrooms",
+      area: "Area",
     },
     privacyBanner: {
       message: 'We use cookies and local storage to improve your experience on this site. By continuing to browse, you agree to our use of these technologies.',
@@ -748,6 +799,7 @@ const translations = {
           body: 'If you have questions about this Privacy Policy or how we handle your information, please contact us at info@varlikent.com or through the Contact page on this site.',
         },
       ],
+      label: "Legal",
     },
     contactPage: {
       label: 'Get in Touch',
@@ -1637,6 +1689,7 @@ const translations = {
       construction: "Construction Services — Varlikent Istanbul",
       renovation: "Renovation Services — Varlikent Istanbul",
       interior: "Interior Design Studio — Varlikent Istanbul",
+      siteTitle: "VarliKent — Architecture, Construction & Real Estate Istanbul",
     },
     enums: {
       propertyType: {
@@ -1668,6 +1721,25 @@ const translations = {
         Replied: "Replied",
         Archived: "Archived",
       },
+    },
+    seoDescriptions: {
+      site: "Varlikent is Istanbul's premier luxury real estate agency. Browse exclusive properties for sale and rent across Beşiktaş, Sarıyer, Bebek, Nişantaşı and more.",
+      home: "VarliKent is Istanbul's full-service property company — architecture, construction, renovation, interior design and real estate.",
+      properties: "Browse luxury apartments, villas, penthouses and more across Istanbul's most prestigious neighbourhoods. Filter by price, location, and property type.",
+      propertyDetails: "View property details on Varlikent.",
+      propertySummary: "{listing}: {title} in {district}, Istanbul. {beds} bed, {baths} bath, {sqm}m².",
+      about: "Learn about Varlikent, Istanbul's premier luxury real estate agency. Our mission, our team, and our commitment to exceptional service.",
+      team: "Meet the Varlikent team — the architects, agents and advisors behind Istanbul's premier luxury real estate agency.",
+      contact: "Get in touch with the Varlikent team. Enquire about buying, selling, renting or investing in Istanbul luxury real estate.",
+      privacy: "How Varlikent collects, uses, and protects your information.",
+      architecture: "Varlikent's architecture studio designs bespoke residential and commercial projects across Istanbul, from concept to completion.",
+      construction: "Varlikent manages high-end construction projects across Istanbul, delivering luxury residential and commercial builds with precision.",
+      renovation: "Varlikent renovates luxury homes and commercial spaces across Istanbul, blending craftsmanship with modern design.",
+      interior: "Varlikent's interior design studio creates bespoke, luxury interiors for homes and commercial spaces across Istanbul.",
+    },
+    price: {
+      onRequest: "Price on request",
+      perMonth: "{price}/mo",
     },
   },
 
@@ -1791,7 +1863,8 @@ const translations = {
       "agentPanel": "Danışman Paneli",
       "accountRemovalTitle": "Hesap silme talepleri",
       "accountRemovalDesc": "Hesabınızın silinmesini talep etmek için destek ekibimizle iletişime geçin. Bu sayfa hesabınızı silmez.",
-      "contactSupport": "Destek ekibine ulaşın"
+      "contactSupport": "Destek ekibine ulaşın",
+      avatarAlt: "Profil fotoğrafı",
     },
     common: {
       cancel: "İptal",
@@ -1894,6 +1967,13 @@ const translations = {
   passwordTooShort: "Şifre en az 6 karakter olmalıdır",
   accountCreated: "Hesap oluşturuldu! VarliKent’e hoş geldiniz.",
   brandSubtitle: "Favori mülklerinizi bulun ve kaydedin. Seçkin ilanlara özel erişim kazanın.",
+  invalidCredentials: "E-posta veya şifre hatalı.",
+  checkDetails: "Lütfen girdiğiniz bilgileri kontrol edip tekrar deneyin.",
+  accountUnavailable: "Bu hesap için giriş yapılamıyor. Yardıma ihtiyacınız varsa lütfen bizimle iletişime geçin.",
+  networkError: "Sunucuya ulaşılamadı. Lütfen bağlantınızı kontrol edip tekrar deneyin.",
+  signInFailed: "Giriş başarısız. Lütfen tekrar deneyin.",
+  emailInUse: "Bu e-posta adresi zaten kayıtlı.",
+  registrationFailed: "Hesabınız oluşturulamadı. Lütfen tekrar deneyin.",
 },
 forgotPasswordPage: {
   heroTitle: 'İstanbul Lüks Gayrimenkul',
@@ -2063,6 +2143,12 @@ resetPasswordPage: {
       ctaHeading: 'Bir vizyonunuz mu var?',
       ctaBody: 'Projenizi görüşmek için bizimle iletişime geçin.',
       ctaBtn: 'İletişime Geç',
+      stats: {
+        projects: "Proje",
+        years: "Yıl",
+        awards: "Ödül",
+        satisfaction: "Memnuniyet",
+      },
     },
     renovationPage: {
       label: 'Varlikent / Renovasyon',
@@ -2100,6 +2186,7 @@ resetPasswordPage: {
       ctaHeading: 'Mekanınızı Dönüştürün',
       ctaBody: 'Renovasyon projenizi konuşalım ve vizyonunuzu hayata geçirelim.',
       ctaBtn: 'Başlayın',
+      revealSlider: "Önce ve sonra karşılaştırma kaydırıcısı",
     },
     interiorPage: {
       label: 'Varlikent / İç Tasarım',
@@ -2224,6 +2311,18 @@ resetPasswordPage: {
             desc: "İç ince işlere hazır, tamamlanmış bina",
           },
         },
+      },
+      phases: [
+        "Temel ve Zemin İşleri",
+        "Taşıyıcı Sistem",
+        "Cephe ve Dış Kabuk",
+        "MEP Sistemleri",
+        "İç Mekan İnce İşleri",
+        "Peyzaj ve Teslim",
+      ],
+      sampleProject: {
+        name: "Bosphorus Residences — 2. Etap",
+        completion: "2026 3. Çeyrek",
       },
     },
     teamPage: {
@@ -2380,6 +2479,9 @@ resetPasswordPage: {
       whatsappMessage: "Merhaba, {title} ile ilgileniyorum.",
       emailSubject: "Bilgi talebi: {title}",
       videoLabel: "{title} — {number}. video",
+      bedrooms: "Yatak Odası",
+      bathrooms: "Banyo",
+      area: "Alan",
     },
     privacyBanner: {
       message: 'Bu sitedeki deneyiminizi iyileştirmek için çerezler ve yerel depolama kullanıyoruz. Taramaya devam ederek bu teknolojileri kullanmamızı kabul edersiniz.',
@@ -2440,6 +2542,7 @@ resetPasswordPage: {
           body: 'Bu Gizlilik Politikası veya bilgilerinizi nasıl işlediğimiz hakkında sorularınız varsa, lütfen info@varlikent.com adresinden veya bu sitedeki İletişim sayfası üzerinden bizimle iletişime geçin.',
         },
       ],
+      label: "Yasal",
     },
     contactPage: {
       label: 'İletişime Geçin',
@@ -3328,6 +3431,7 @@ resetPasswordPage: {
       construction: "İnşaat Hizmetleri — Varlikent İstanbul",
       renovation: "Renovasyon Hizmetleri — Varlikent İstanbul",
       interior: "İç Tasarım Stüdyosu — Varlikent İstanbul",
+      siteTitle: "VarliKent — İstanbul’da Mimarlık, İnşaat ve Gayrimenkul",
     },
     enums: {
       propertyType: {
@@ -3359,6 +3463,25 @@ resetPasswordPage: {
         Replied: "Yanıtlandı",
         Archived: "Arşivlendi",
       },
+    },
+    seoDescriptions: {
+      site: "Varlikent, İstanbul’un önde gelen lüks gayrimenkul şirketidir. Beşiktaş, Sarıyer, Bebek, Nişantaşı ve daha birçok semtte satılık ve kiralık seçkin mülkleri keşfedin.",
+      home: "VarliKent, İstanbul’un tam hizmet sunan gayrimenkul şirketidir — mimarlık, inşaat, renovasyon, iç tasarım ve gayrimenkul.",
+      properties: "İstanbul’un en prestijli semtlerinde lüks daireleri, villaları, çatı katlarını ve daha fazlasını keşfedin. Fiyata, konuma ve mülk tipine göre filtreleyin.",
+      propertyDetails: "Mülk detaylarını Varlikent’te görüntüleyin.",
+      propertySummary: "{listing}: {title} — {district}, İstanbul. {beds} yatak odası, {baths} banyo, {sqm} m².",
+      about: "İstanbul’un önde gelen lüks gayrimenkul şirketi Varlikent’i tanıyın: misyonumuz, ekibimiz ve olağanüstü hizmet anlayışımız.",
+      team: "Varlikent ekibiyle tanışın — İstanbul’un önde gelen lüks gayrimenkul şirketinin arkasındaki mimarlar, danışmanlar ve uzmanlar.",
+      contact: "Varlikent ekibiyle iletişime geçin. İstanbul’da lüks gayrimenkul alımı, satımı, kiralaması veya yatırımı hakkında bilgi alın.",
+      privacy: "Varlikent’in bilgilerinizi nasıl topladığını, kullandığını ve koruduğunu öğrenin.",
+      architecture: "Varlikent mimarlık stüdyosu, İstanbul genelinde konseptten teslime kadar özel konut ve ticari projeler tasarlar.",
+      construction: "Varlikent, İstanbul genelinde üst düzey inşaat projelerini yönetir; lüks konut ve ticari yapıları titizlikle teslim eder.",
+      renovation: "Varlikent, İstanbul genelinde lüks konutları ve ticari mekanları zanaatkârlığı modern tasarımla buluşturarak yeniler.",
+      interior: "Varlikent iç tasarım stüdyosu, İstanbul genelinde konutlar ve ticari mekanlar için kişiye özel, lüks iç mekanlar tasarlar.",
+    },
+    price: {
+      onRequest: "Fiyat sorunuz",
+      perMonth: "{price}/ay",
     },
   },
 
@@ -3482,7 +3605,8 @@ resetPasswordPage: {
       "agentPanel": "لوحة الوكيل",
       "accountRemovalTitle": "طلبات حذف الحساب",
       "accountRemovalDesc": "لطلب حذف حسابك، تواصل مع فريق الدعم. هذه الصفحة لا تحذف حسابك.",
-      "contactSupport": "التواصل مع الدعم"
+      "contactSupport": "التواصل مع الدعم",
+      avatarAlt: "صورة الملف الشخصي",
     },
     common: {
       cancel: "إلغاء",
@@ -3585,6 +3709,13 @@ resetPasswordPage: {
   passwordTooShort: "يجب أن تكون كلمة المرور 6 أحرف على الأقل",
   accountCreated: "تم إنشاء الحساب! مرحباً بك في فارلي كنت.",
   brandSubtitle: "اعثر على عقاراتك المفضلة واحفظها. واحصل على وصول حصري إلى أرقى العقارات.",
+  invalidCredentials: "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+  checkDetails: "يرجى التحقق من البيانات التي أدخلتها والمحاولة مرة أخرى.",
+  accountUnavailable: "تسجيل الدخول غير متاح لهذا الحساب. يرجى التواصل معنا إذا احتجت إلى مساعدة.",
+  networkError: "تعذّر الوصول إلى الخادم. يرجى التحقق من اتصالك والمحاولة مرة أخرى.",
+  signInFailed: "فشل تسجيل الدخول. يرجى المحاولة مرة أخرى.",
+  emailInUse: "هذا البريد الإلكتروني مسجّل بالفعل.",
+  registrationFailed: "تعذّر إنشاء حسابك. يرجى المحاولة مرة أخرى.",
 },
     about: {
       label: 'من نحن',
@@ -3755,6 +3886,12 @@ resetPasswordPage: {
       ctaHeading: 'لديك رؤية؟',
       ctaBody: 'تواصل معنا لمناقشة مشروعك.',
       ctaBtn: 'تواصل معنا',
+      stats: {
+        projects: "مشروع",
+        years: "سنة",
+        awards: "جائزة",
+        satisfaction: "رضا العملاء",
+      },
     },
     renovationPage: {
       label: 'فارلي كنت / التجديد',
@@ -3792,6 +3929,7 @@ resetPasswordPage: {
       ctaHeading: 'حوّل مساحتك',
       ctaBody: 'دعنا نناقش مشروع تجديدك ونحوّل رؤيتك إلى واقع.',
       ctaBtn: 'ابدأ الآن',
+      revealSlider: "شريط مقارنة قبل وبعد",
     },
     interiorPage: {
       label: 'فارلي كنت / التصميم الداخلي',
@@ -3916,6 +4054,18 @@ resetPasswordPage: {
             desc: "مبنى مكتمل جاهز للتشطيبات الداخلية",
           },
         },
+      },
+      phases: [
+        "الأساسات وأعمال الأرض",
+        "الهيكل الإنشائي",
+        "الواجهات الخارجية",
+        "أنظمة MEP",
+        "التشطيبات الداخلية",
+        "تنسيق الموقع والتسليم",
+      ],
+      sampleProject: {
+        name: "بوسفور ريزيدنس — المرحلة الثانية",
+        completion: "الربع الثالث 2026",
       },
     },
     teamPage: {
@@ -4072,6 +4222,9 @@ resetPasswordPage: {
       whatsappMessage: "مرحباً، أنا مهتم بـ {title}",
       emailSubject: "استفسار: {title}",
       videoLabel: "{title} — فيديو {number}",
+      bedrooms: "غرف النوم",
+      bathrooms: "الحمامات",
+      area: "المساحة",
     },
     privacyBanner: {
       message: 'نستخدم ملفات تعريف الارتباط والتخزين المحلي لتحسين تجربتك على هذا الموقع. من خلال الاستمرار في التصفح، فإنك توافق على استخدامنا لهذه التقنيات.',
@@ -4132,6 +4285,7 @@ resetPasswordPage: {
           body: 'إذا كانت لديك أسئلة حول سياسة الخصوصية هذه أو كيفية تعاملنا مع معلوماتك، يرجى التواصل معنا عبر info@varlikent.com أو من خلال صفحة الاتصال على هذا الموقع.',
         },
       ],
+      label: "قانوني",
     },
     contactPage: {
       label: 'تواصل معنا',
@@ -5020,6 +5174,7 @@ resetPasswordPage: {
       construction: "خدمات البناء — فارلي كنت إسطنبول",
       renovation: "خدمات التجديد — فارلي كنت إسطنبول",
       interior: "استوديو التصميم الداخلي — فارلي كنت إسطنبول",
+      siteTitle: "فارلي كنت — العمارة والبناء والعقارات في إسطنبول",
     },
     enums: {
       propertyType: {
@@ -5051,6 +5206,25 @@ resetPasswordPage: {
         Replied: "تم الرد",
         Archived: "مؤرشف",
       },
+    },
+    seoDescriptions: {
+      site: "فارلي كنت هي الوكالة الرائدة للعقارات الفاخرة في إسطنبول. تصفّح عقارات حصرية للبيع والإيجار في بشيكتاش وساريير وببك ونيشانتاشي وغيرها.",
+      home: "فارلي كنت شركة عقارية متكاملة الخدمات في إسطنبول — العمارة والبناء والتجديد والتصميم الداخلي والعقارات.",
+      properties: "تصفّح الشقق والفلل والبنتهاوس الفاخرة وغيرها في أرقى أحياء إسطنبول. صفِّ النتائج حسب السعر والموقع ونوع العقار.",
+      propertyDetails: "اطّلع على تفاصيل العقار على فارلي كنت.",
+      propertySummary: "{listing}: {title} في {district}، إسطنبول. {beds} غرف نوم، {baths} حمّام، {sqm} م².",
+      about: "تعرّف على فارلي كنت، الوكالة الرائدة للعقارات الفاخرة في إسطنبول: رسالتنا وفريقنا والتزامنا بخدمة استثنائية.",
+      team: "تعرّف على فريق فارلي كنت — المعماريون والوكلاء والمستشارون الذين يقفون وراء الوكالة الرائدة للعقارات الفاخرة في إسطنبول.",
+      contact: "تواصل مع فريق فارلي كنت. استفسر عن شراء العقارات الفاخرة في إسطنبول أو بيعها أو تأجيرها أو الاستثمار فيها.",
+      privacy: "تعرّف على كيفية جمع فارلي كنت لمعلوماتك واستخدامها وحمايتها.",
+      architecture: "يصمّم استوديو العمارة في فارلي كنت مشاريع سكنية وتجارية مخصّصة في أنحاء إسطنبول، من الفكرة إلى الإنجاز.",
+      construction: "تدير فارلي كنت مشاريع بناء راقية في أنحاء إسطنبول، وتنفّذ المباني السكنية والتجارية الفاخرة بدقة.",
+      renovation: "تجدّد فارلي كنت المنازل الفاخرة والمساحات التجارية في أنحاء إسطنبول، جامعةً بين الحرفية والتصميم العصري.",
+      interior: "يبتكر استوديو التصميم الداخلي في فارلي كنت تصاميم داخلية فاخرة ومخصّصة للمنازل والمساحات التجارية في أنحاء إسطنبول.",
+    },
+    price: {
+      onRequest: "السعر عند الطلب",
+      perMonth: "{price} شهرياً",
     },
   },
   de: {
@@ -5191,6 +5365,13 @@ resetPasswordPage: {
     passwordTooShort: "Das Passwort muss mindestens 6 Zeichen lang sein",
     accountCreated: "Konto erstellt! Willkommen bei Varlikent.",
     brandSubtitle: "Finden und speichern Sie Ihre Lieblingsimmobilien. Erhalten Sie exklusiven Zugang zu Premium-Angeboten.",
+    invalidCredentials: "E-Mail-Adresse oder Passwort ist falsch.",
+    checkDetails: "Bitte überprüfen Sie Ihre Angaben und versuchen Sie es erneut.",
+    accountUnavailable: "Die Anmeldung ist für dieses Konto nicht verfügbar. Bitte kontaktieren Sie uns, wenn Sie Hilfe benötigen.",
+    networkError: "Der Server ist nicht erreichbar. Bitte prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+    signInFailed: "Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    emailInUse: "Diese E-Mail-Adresse ist bereits registriert.",
+    registrationFailed: "Ihr Konto konnte nicht erstellt werden. Bitte versuchen Sie es erneut.",
   },
   forgotPasswordPage: {
   heroTitle: 'Luxusimmobilien in Istanbul',
@@ -5309,6 +5490,7 @@ resetPasswordPage: {
       toastPasswordFailed: 'Passwort konnte nicht geändert werden',
       toastSignedOut: 'Abgemeldet',
       toastDeleteSupport: 'Die Kontolöschung erfordert Support — kontaktieren Sie info@varlikent.com',
+      avatarAlt: "Profilfoto",
     },
     browse: {
       label: 'Nach Typ durchsuchen',
@@ -5430,6 +5612,12 @@ resetPasswordPage: {
       ctaHeading: 'Haben Sie eine Vision?',
       ctaBody: 'Kontaktieren Sie uns, um Ihr Projekt zu besprechen.',
       ctaBtn: 'Kontakt aufnehmen',
+      stats: {
+        projects: "Projekte",
+        years: "Jahre",
+        awards: "Auszeichnungen",
+        satisfaction: "Zufriedenheit",
+      },
     },
     renovationPage: {
       label: 'Varlikent / Renovierung',
@@ -5467,6 +5655,7 @@ resetPasswordPage: {
       ctaHeading: 'Verwandeln Sie Ihren Raum',
       ctaBody: 'Lassen Sie uns über Ihr Renovierungsprojekt sprechen und Ihre Vision verwirklichen.',
       ctaBtn: 'Jetzt starten',
+      revealSlider: "Vorher-Nachher-Schieberegler",
     },
     interiorPage: {
       label: 'Varlikent / Innenarchitektur',
@@ -5570,6 +5759,39 @@ resetPasswordPage: {
             desc: "Fertiges Gebäude, bereit für den Innenausbau",
           },
         },
+      },
+      services: [
+        { num: "01", title: "Generalunternehmung", desc: "Schlüsselfertiges Bauen für Wohn-, Gewerbe- und gemischt genutzte Projekte." },
+        { num: "02", title: "Tragwerksarbeiten", desc: "Stahlbeton- und Stahlrahmenlösungen, ausgeführt nach den Standards für Erdbebenzonen." },
+        { num: "03", title: "Gebäudetechnik (TGA)", desc: "Mechanische, elektrische und sanitäre Anlagen, vollständig in das Bauwerk integriert." },
+        { num: "04", title: "Gebäudehülle & Fassade", desc: "Glasvorhangfassaden, Verkleidungssysteme und Hochleistungsdämmung." },
+      ],
+      processSteps: [
+        { step: "01", label: "Standortanalyse" },
+        { step: "02", label: "Fundament" },
+        { step: "03", label: "Tragwerk" },
+        { step: "04", label: "Innenausbau" },
+        { step: "05", label: "Übergabe" },
+      ],
+      seismicItems: [
+        { title: "Stahlbetonrahmen", desc: "Duktile Stahlbetonsysteme, die seismische Energie aufnehmen und abbauen, ohne dass das Tragwerk versagt." },
+        { title: "Stahlbauliche Verstärkung", desc: "Stahlverbände und biegesteife Rahmen, die bei Bedarf für zusätzliche seitliche Stabilität integriert werden." },
+        { title: "Einhaltung der Erdbebenzonen-Vorgaben", desc: "Alle Entwürfe folgen der aktuellen türkischen Erdbebenbauverordnung (TBDY) für die Erdbebenzoneneinstufung Istanbuls." },
+        { title: "Sicherheitsanalyse der Gründung", desc: "Bodengutachten und Gründungsplanung, abgestimmt auf die örtlichen Baugrundverhältnisse, bevor der Aushub beginnt." },
+        { title: "Unabhängige Bauüberwachung", desc: "Zugelassene Tragwerksplaner prüfen und bestätigen jeden tragenden Bauabschnitt während der Bauphase." },
+        { title: "Prüfung der Materialqualität", desc: "Betonfestigkeitsprüfungen, Zertifizierung des Bewehrungsstahls und Chargenkontrollen bei jedem Betoniervorgang." },
+      ],
+      phases: [
+        "Fundament & Erdarbeiten",
+        "Tragwerk",
+        "Gebäudehülle & Fassade",
+        "Gebäudetechnik (TGA)",
+        "Innenausbau",
+        "Außenanlagen & Übergabe",
+      ],
+      sampleProject: {
+        name: "Bosphorus Residences — Bauabschnitt II",
+        completion: "3. Quartal 2026",
       },
     },
     teamPage: {
@@ -5723,6 +5945,9 @@ resetPasswordPage: {
       whatsappMessage: "Hallo, ich interessiere mich für {title}",
       emailSubject: "Anfrage: {title}",
       videoLabel: "{title} — Video {number}",
+      bedrooms: "Schlafzimmer",
+      bathrooms: "Badezimmer",
+      area: "Fläche",
     },
     propertyCard: {
       forRent: 'Zur Miete', forSale: 'Zum Verkauf', featured: 'Empfohlen',
@@ -5792,6 +6017,7 @@ resetPasswordPage: {
           body: 'Wenn Sie Fragen zu dieser Datenschutzerklärung oder zum Umgang mit Ihren Informationen haben, kontaktieren Sie uns bitte unter info@varlikent.com oder über die Kontaktseite dieser Website.',
         },
       ],
+      label: "Rechtliches",
     },
     contactPage: {
       label: 'Kontaktieren Sie uns',
@@ -6522,6 +6748,7 @@ resetPasswordPage: {
       construction: "Bauleistungen — Varlikent Istanbul",
       renovation: "Renovierungsleistungen — Varlikent Istanbul",
       interior: "Innenarchitektur-Studio — Varlikent Istanbul",
+      siteTitle: "VarliKent — Architektur, Bau & Immobilien in Istanbul",
     },
     enums: {
       propertyType: {
@@ -6553,6 +6780,25 @@ resetPasswordPage: {
         Replied: "Beantwortet",
         Archived: "Archiviert",
       },
+    },
+    seoDescriptions: {
+      site: "Varlikent ist Istanbuls führende Agentur für Luxusimmobilien. Entdecken Sie exklusive Immobilien zum Kauf und zur Miete in Beşiktaş, Sarıyer, Bebek, Nişantaşı und weiteren Vierteln.",
+      home: "VarliKent ist Istanbuls Immobilienunternehmen mit Komplettservice — Architektur, Bau, Renovierung, Innenarchitektur und Immobilien.",
+      properties: "Entdecken Sie Luxuswohnungen, Villen, Penthäuser und mehr in Istanbuls begehrtesten Vierteln. Filtern Sie nach Preis, Lage und Immobilientyp.",
+      propertyDetails: "Immobiliendetails auf Varlikent ansehen.",
+      propertySummary: "{listing}: {title} in {district}, Istanbul. {beds} Schlafzimmer, {baths} Bäder, {sqm} m².",
+      about: "Lernen Sie Varlikent kennen, Istanbuls führende Agentur für Luxusimmobilien: unsere Mission, unser Team und unser Anspruch an außergewöhnlichen Service.",
+      team: "Lernen Sie das Varlikent-Team kennen — die Architekten, Makler und Berater hinter Istanbuls führender Agentur für Luxusimmobilien.",
+      contact: "Nehmen Sie Kontakt mit dem Varlikent-Team auf. Fragen Sie zu Kauf, Verkauf, Miete oder Investitionen in Luxusimmobilien in Istanbul an.",
+      privacy: "Erfahren Sie, wie Varlikent Ihre Daten erhebt, verwendet und schützt.",
+      architecture: "Das Architekturstudio von Varlikent entwirft maßgeschneiderte Wohn- und Gewerbeprojekte in ganz Istanbul, vom Konzept bis zur Fertigstellung.",
+      construction: "Varlikent leitet hochwertige Bauprojekte in ganz Istanbul und realisiert luxuriöse Wohn- und Gewerbebauten mit Präzision.",
+      renovation: "Varlikent renoviert Luxuswohnungen und Gewerbeflächen in ganz Istanbul und verbindet Handwerkskunst mit modernem Design.",
+      interior: "Das Innenarchitektur-Studio von Varlikent gestaltet maßgeschneiderte, luxuriöse Innenräume für Wohn- und Gewerbeflächen in ganz Istanbul.",
+    },
+    price: {
+      onRequest: "Preis auf Anfrage",
+      perMonth: "{price}/Monat",
     },
   },
   ru: {
@@ -6693,6 +6939,13 @@ resetPasswordPage: {
     passwordTooShort: "Пароль должен содержать не менее 6 символов",
     accountCreated: "Аккаунт создан! Добро пожаловать в Varlikent.",
     brandSubtitle: "Находите и сохраняйте понравившиеся объекты. Получите эксклюзивный доступ к премиальным предложениям.",
+    invalidCredentials: "Неверный адрес электронной почты или пароль.",
+    checkDetails: "Проверьте введённые данные и попробуйте ещё раз.",
+    accountUnavailable: "Вход для этой учётной записи недоступен. Если вам нужна помощь, свяжитесь с нами.",
+    networkError: "Не удалось связаться с сервером. Проверьте подключение и попробуйте ещё раз.",
+    signInFailed: "Не удалось войти. Попробуйте ещё раз.",
+    emailInUse: "Этот адрес электронной почты уже зарегистрирован.",
+    registrationFailed: "Не удалось создать учётную запись. Попробуйте ещё раз.",
   },
   forgotPasswordPage: {
   heroTitle: 'Элитная недвижимость Стамбула',
@@ -6811,6 +7064,7 @@ resetPasswordPage: {
       toastPasswordFailed: 'Не удалось изменить пароль',
       toastSignedOut: 'Вы вышли из системы',
       toastDeleteSupport: 'Для удаления аккаунта требуется поддержка — свяжитесь с info@varlikent.com',
+      avatarAlt: "Фото профиля",
     },
     browse: {
       label: 'Поиск по типу',
@@ -6932,6 +7186,12 @@ resetPasswordPage: {
       ctaHeading: 'Есть идея?',
       ctaBody: 'Свяжитесь с нами, чтобы обсудить ваш проект.',
       ctaBtn: 'Связаться с нами',
+      stats: {
+        projects: "Проектов",
+        years: "Лет",
+        awards: "Наград",
+        satisfaction: "Удовлетворённость",
+      },
     },
     renovationPage: {
       label: 'Varlikent / Реновация',
@@ -6969,6 +7229,7 @@ resetPasswordPage: {
       ctaHeading: 'Преобразите своё пространство',
       ctaBody: 'Давайте обсудим ваш проект реновации и воплотим вашу идею в жизнь.',
       ctaBtn: 'Начать',
+      revealSlider: "Ползунок сравнения «до» и «после»",
     },
     interiorPage: {
       label: 'Varlikent / Дизайн интерьера',
@@ -7072,6 +7333,39 @@ resetPasswordPage: {
             desc: "Готовое здание, подготовленное к отделке",
           },
         },
+      },
+      services: [
+        { num: "01", title: "Генеральный подряд", desc: "Строительство «под ключ» жилых, коммерческих и многофункциональных объектов." },
+        { num: "02", title: "Конструктивные работы", desc: "Железобетонные и стальные каркасные решения, выполненные по нормам для сейсмических зон." },
+        { num: "03", title: "Инженерные системы (MEP)", desc: "Механические, электрические и сантехнические системы, полностью интегрированные в здание." },
+        { num: "04", title: "Оболочка здания и фасад", desc: "Стеклянные навесные фасады, системы облицовки и высокоэффективная теплоизоляция." },
+      ],
+      processSteps: [
+        { step: "01", label: "Обследование участка" },
+        { step: "02", label: "Фундамент" },
+        { step: "03", label: "Несущий каркас" },
+        { step: "04", label: "Отделка" },
+        { step: "05", label: "Сдача объекта" },
+      ],
+      seismicItems: [
+        { title: "Железобетонные каркасы", desc: "Пластичные железобетонные системы, рассчитанные на поглощение и рассеивание сейсмической энергии без разрушения конструкции." },
+        { title: "Усиление стальными конструкциями", desc: "Стальные связи и рамы с жёсткими узлами, которые при необходимости обеспечивают дополнительную поперечную устойчивость." },
+        { title: "Соответствие сейсмической зоне", desc: "Все проекты соответствуют действующим турецким нормам сейсмостойкого строительства (TBDY) для сейсмической зоны Стамбула." },
+        { title: "Анализ надёжности фундамента", desc: "Изучение грунтов и проектирование фундамента с учётом местных условий — до начала земляных работ." },
+        { title: "Независимый инженерный надзор", desc: "Лицензированные инженеры-конструкторы проверяют и принимают каждый этап возведения несущих конструкций." },
+        { title: "Контроль качества материалов", desc: "Испытания прочности бетона, сертификация арматуры и контроль качества каждой партии при каждой заливке." },
+      ],
+      phases: [
+        "Фундамент и земляные работы",
+        "Несущий каркас",
+        "Оболочка здания и фасад",
+        "Инженерные системы",
+        "Внутренняя отделка",
+        "Благоустройство и сдача объекта",
+      ],
+      sampleProject: {
+        name: "Bosphorus Residences — II очередь",
+        completion: "III квартал 2026 г.",
       },
     },
     teamPage: {
@@ -7225,6 +7519,9 @@ resetPasswordPage: {
       whatsappMessage: "Здравствуйте, меня интересует {title}",
       emailSubject: "Запрос: {title}",
       videoLabel: "{title} — видео {number}",
+      bedrooms: "Спальни",
+      bathrooms: "Ванные",
+      area: "Площадь",
     },
     propertyCard: {
       forRent: 'В аренду', forSale: 'На продажу', featured: 'Рекомендуем',
@@ -7294,6 +7591,7 @@ resetPasswordPage: {
           body: 'Если у вас есть вопросы об этой Политике конфиденциальности или о том, как мы обрабатываем вашу информацию, пожалуйста, свяжитесь с нами по адресу info@varlikent.com или через страницу контактов на этом сайте.',
         },
       ],
+      label: "Правовая информация",
     },
     contactPage: {
       label: 'Связаться с нами',
@@ -8024,6 +8322,7 @@ resetPasswordPage: {
       construction: "Строительные услуги — Varlikent Стамбул",
       renovation: "Услуги реновации — Varlikent Стамбул",
       interior: "Студия дизайна интерьера — Varlikent Стамбул",
+      siteTitle: "VarliKent — архитектура, строительство и недвижимость в Стамбуле",
     },
     enums: {
       propertyType: {
@@ -8055,6 +8354,25 @@ resetPasswordPage: {
         Replied: "Отвечено",
         Archived: "В архиве",
       },
+    },
+    seoDescriptions: {
+      site: "Varlikent — ведущее агентство элитной недвижимости Стамбула. Эксклюзивные объекты для покупки и аренды в районах Бешикташ, Сарыер, Бебек, Нишанташи и других.",
+      home: "VarliKent — компания полного цикла в сфере недвижимости в Стамбуле: архитектура, строительство, реновация, дизайн интерьера и недвижимость.",
+      properties: "Элитные квартиры, виллы, пентхаусы и другие объекты в самых престижных районах Стамбула. Фильтруйте по цене, расположению и типу недвижимости.",
+      propertyDetails: "Сведения об объекте недвижимости на Varlikent.",
+      propertySummary: "{listing}: {title} — {district}, Стамбул. Спален: {beds}, ванных: {baths}, {sqm} м².",
+      about: "Узнайте больше о Varlikent, ведущем агентстве элитной недвижимости Стамбула: наша миссия, наша команда и наш подход к исключительному сервису.",
+      team: "Познакомьтесь с командой Varlikent — архитекторами, агентами и консультантами ведущего агентства элитной недвижимости Стамбула.",
+      contact: "Свяжитесь с командой Varlikent. Узнайте о покупке, продаже, аренде элитной недвижимости в Стамбуле или инвестициях в неё.",
+      privacy: "Узнайте, как Varlikent собирает, использует и защищает ваши данные.",
+      architecture: "Архитектурная студия Varlikent проектирует индивидуальные жилые и коммерческие объекты по всему Стамбулу — от концепции до завершения.",
+      construction: "Varlikent ведёт строительные проекты высокого класса по всему Стамбулу и с высокой точностью возводит элитные жилые и коммерческие здания.",
+      renovation: "Varlikent обновляет элитные дома и коммерческие помещения по всему Стамбулу, сочетая мастерство и современный дизайн.",
+      interior: "Студия дизайна интерьера Varlikent создаёт индивидуальные роскошные интерьеры для домов и коммерческих помещений по всему Стамбулу.",
+    },
+    price: {
+      onRequest: "Цена по запросу",
+      perMonth: "{price}/мес.",
     },
   },
   ur: {
@@ -8195,6 +8513,13 @@ resetPasswordPage: {
     passwordTooShort: "پاس ورڈ کم از کم 6 حروف کا ہونا چاہیے",
     accountCreated: "اکاؤنٹ بن گیا! Varlikent میں خوش آمدید۔",
     brandSubtitle: "اپنی پسندیدہ پراپرٹیز تلاش کریں اور محفوظ کریں۔ پریمیم لسٹنگز تک خصوصی رسائی حاصل کریں۔",
+    invalidCredentials: "ای میل یا پاس ورڈ درست نہیں ہے۔",
+    checkDetails: "براہ کرم درج کردہ معلومات چیک کریں اور دوبارہ کوشش کریں۔",
+    accountUnavailable: "اس اکاؤنٹ کے لیے سائن ان دستیاب نہیں ہے۔ مدد درکار ہو تو براہ کرم ہم سے رابطہ کریں۔",
+    networkError: "سرور سے رابطہ نہیں ہو سکا۔ براہ کرم اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
+    signInFailed: "سائن ان ناکام ہو گیا۔ براہ کرم دوبارہ کوشش کریں۔",
+    emailInUse: "یہ ای میل پتہ پہلے سے رجسٹرڈ ہے۔",
+    registrationFailed: "آپ کا اکاؤنٹ نہیں بن سکا۔ براہ کرم دوبارہ کوشش کریں۔",
   },
   forgotPasswordPage: {
   heroTitle: 'استنبول کی لگژری جائیداد',
@@ -8313,6 +8638,7 @@ resetPasswordPage: {
       toastPasswordFailed: 'پاس ورڈ تبدیل کرنے میں ناکامی',
       toastSignedOut: 'سائن آؤٹ ہو گئے',
       toastDeleteSupport: 'اکاؤنٹ حذف کرنے کے لیے سپورٹ درکار ہے — info@varlikent.com پر رابطہ کریں',
+      avatarAlt: "پروفائل تصویر",
     },
     browse: {
       label: 'قسم کے مطابق تلاش کریں',
@@ -8434,6 +8760,12 @@ resetPasswordPage: {
       ctaHeading: 'آپ کا کوئی وژن ہے؟',
       ctaBody: 'اپنے منصوبے پر بات کرنے کے لیے ہم سے رابطہ کریں۔',
       ctaBtn: 'رابطہ کریں',
+      stats: {
+        projects: "منصوبے",
+        years: "سال",
+        awards: "اعزازات",
+        satisfaction: "اطمینان",
+      },
     },
     renovationPage: {
       label: 'ورلی کینٹ / تزئین و آرائش',
@@ -8471,6 +8803,7 @@ resetPasswordPage: {
       ctaHeading: 'اپنی جگہ کو بدل دیں',
       ctaBody: 'آئیے آپ کے تزئین و آرائش کے منصوبے پر بات کریں اور آپ کے وژن کو حقیقت بنائیں۔',
       ctaBtn: 'شروع کریں',
+      revealSlider: "پہلے اور بعد کا موازنہ سلائیڈر",
     },
     interiorPage: {
       label: 'ورلی کینٹ / داخلی ڈیزائن',
@@ -8574,6 +8907,39 @@ resetPasswordPage: {
             desc: "اندرونی تکمیل کے لیے تیار مکمل عمارت",
           },
         },
+      },
+      services: [
+        { num: "01", title: "جنرل کنٹریکٹنگ", desc: "رہائشی، تجارتی اور مخلوط استعمال کے منصوبوں کے لیے مکمل تیار (ٹرن کی) تعمیر۔" },
+        { num: "02", title: "ساختی کام", desc: "زلزلہ زون کے معیارات کے مطابق تیار کردہ مسلح کنکریٹ اور اسٹیل فریم کے حل۔" },
+        { num: "03", title: "ایم ای پی انجینئرنگ", desc: "مکینیکل، الیکٹریکل اور پلمبنگ کے نظام جو عمارت میں مکمل طور پر مربوط ہوتے ہیں۔" },
+        { num: "04", title: "بیرونی غلاف اور فیساڈ", desc: "شیشے کی کرٹن والز، کلیڈنگ سسٹمز اور اعلیٰ کارکردگی کی انسولیشن۔" },
+      ],
+      processSteps: [
+        { step: "01", label: "سائٹ سروے" },
+        { step: "02", label: "بنیاد" },
+        { step: "03", label: "ساختی ڈھانچہ" },
+        { step: "04", label: "اندرونی تکمیل" },
+        { step: "05", label: "حوالگی" },
+      ],
+      seismicItems: [
+        { title: "مسلح کنکریٹ کے فریم", desc: "لچکدار مسلح کنکریٹ کے نظام جو ساختی ناکامی کے بغیر زلزلے کی توانائی کو جذب اور منتشر کرنے کے لیے بنائے گئے ہیں۔" },
+        { title: "اسٹیل کی ساختی مضبوطی", desc: "جہاں ضرورت ہو، اضافی پہلوئی استحکام کے لیے اسٹیل بریسنگ اور مومنٹ ریزسٹنگ فریم شامل کیے جاتے ہیں۔" },
+        { title: "زلزلہ زون کے ضوابط کی پابندی", desc: "تمام ڈیزائن استنبول کی زلزلہ زون درجہ بندی کے لیے ترکیہ کے موجودہ عمارتی زلزلہ ضابطے (TBDY) کے معیارات کے مطابق ہیں۔" },
+        { title: "بنیاد کی حفاظت کا تجزیہ", desc: "کھدائی شروع ہونے سے پہلے مقامی زمینی حالات کے مطابق مٹی کا مطالعہ اور بنیاد کی انجینئرنگ۔" },
+        { title: "آزاد انجینئرنگ نگرانی", desc: "لائسنس یافتہ اسٹرکچرل انجینئر تعمیر کے دوران ہر بوجھ اٹھانے والے مرحلے کا معائنہ کرتے اور منظوری دیتے ہیں۔" },
+        { title: "مواد کے معیار کی تصدیق", desc: "ہر ڈھلائی پر کنکریٹ کی مضبوطی کی جانچ، سریے کی تصدیق اور ہر کھیپ کے معیار کی جانچ۔" },
+      ],
+      phases: [
+        "بنیاد اور زمینی کام",
+        "ساختی ڈھانچہ",
+        "بیرونی غلاف اور فیساڈ",
+        "ایم ای پی سسٹمز",
+        "اندرونی تکمیل",
+        "لینڈ اسکیپنگ اور حوالگی",
+      ],
+      sampleProject: {
+        name: "باسفورس ریزیڈنسز — مرحلہ دوم",
+        completion: "تیسری سہ ماہی 2026",
       },
     },
     teamPage: {
@@ -8727,6 +9093,9 @@ resetPasswordPage: {
       whatsappMessage: "ہیلو، مجھے {title} میں دلچسپی ہے",
       emailSubject: "استفسار: {title}",
       videoLabel: "{title} — ویڈیو {number}",
+      bedrooms: "بیڈ رومز",
+      bathrooms: "باتھ رومز",
+      area: "رقبہ",
     },
     propertyCard: {
       forRent: 'کرائے کے لیے', forSale: 'فروخت کے لیے', featured: 'نمایاں',
@@ -8796,6 +9165,7 @@ resetPasswordPage: {
           body: 'اگر آپ کے پاس اس پرائیویسی پالیسی یا ہم آپ کی معلومات کو کیسے سنبھالتے ہیں کے بارے میں سوالات ہیں، تو براہ کرم info@varlikent.com پر یا اس سائٹ کے کنٹیکٹ صفحے کے ذریعے ہم سے رابطہ کریں۔',
         },
       ],
+      label: "قانونی",
     },
     contactPage: {
       label: 'رابطہ کریں',
@@ -9526,6 +9896,7 @@ resetPasswordPage: {
       construction: "تعمیراتی خدمات — Varlikent استنبول",
       renovation: "تزئین و آرائش کی خدمات — Varlikent استنبول",
       interior: "داخلی ڈیزائن اسٹوڈیو — Varlikent استنبول",
+      siteTitle: "VarliKent — استنبول میں آرکیٹیکچر، تعمیرات اور جائیداد",
     },
     enums: {
       propertyType: {
@@ -9557,6 +9928,25 @@ resetPasswordPage: {
         Replied: "جواب دیا گیا",
         Archived: "محفوظ شدہ",
       },
+    },
+    seoDescriptions: {
+      site: "Varlikent استنبول کی نمایاں پرتعیش رئیل اسٹیٹ ایجنسی ہے۔ بیشکتاش، ساریئر، ببک، نیشانتاشی اور دیگر علاقوں میں فروخت اور کرائے کے لیے منتخب جائیدادیں دیکھیں۔",
+      home: "VarliKent استنبول کی مکمل خدمات فراہم کرنے والی پراپرٹی کمپنی ہے — آرکیٹیکچر، تعمیرات، تزئین و آرائش، داخلی ڈیزائن اور رئیل اسٹیٹ۔",
+      properties: "استنبول کے معزز ترین علاقوں میں پرتعیش اپارٹمنٹس، ولاز، پینٹ ہاؤسز اور مزید دیکھیں۔ قیمت، مقام اور پراپرٹی کی قسم کے مطابق فلٹر کریں۔",
+      propertyDetails: "Varlikent پر پراپرٹی کی تفصیلات دیکھیں۔",
+      propertySummary: "{listing}: {title}، {district}، استنبول۔ {beds} بیڈروم، {baths} باتھ روم، {sqm} مربع میٹر۔",
+      about: "Varlikent کے بارے میں جانیں، جو استنبول کی نمایاں پرتعیش رئیل اسٹیٹ ایجنسی ہے: ہمارا مشن، ہماری ٹیم اور غیر معمولی خدمت کا ہمارا عزم۔",
+      team: "Varlikent ٹیم سے ملیں — وہ آرکیٹیکٹس، ایجنٹس اور مشیر جو استنبول کی نمایاں پرتعیش رئیل اسٹیٹ ایجنسی کے پیچھے ہیں۔",
+      contact: "Varlikent ٹیم سے رابطہ کریں۔ استنبول میں پرتعیش جائیداد کی خرید، فروخت، کرائے یا سرمایہ کاری کے بارے میں معلومات حاصل کریں۔",
+      privacy: "جانیں کہ Varlikent آپ کی معلومات کیسے جمع، استعمال اور محفوظ کرتا ہے۔",
+      architecture: "Varlikent کا آرکیٹیکچر اسٹوڈیو استنبول بھر میں تصور سے تکمیل تک منفرد رہائشی اور تجارتی منصوبے ڈیزائن کرتا ہے۔",
+      construction: "Varlikent استنبول بھر میں اعلیٰ معیار کے تعمیراتی منصوبوں کا انتظام کرتا ہے اور پرتعیش رہائشی و تجارتی عمارتیں مہارت کے ساتھ مکمل کرتا ہے۔",
+      renovation: "Varlikent استنبول بھر میں پرتعیش گھروں اور تجارتی جگہوں کی تزئین و آرائش کرتا ہے، جس میں کاریگری اور جدید ڈیزائن یکجا ہوتے ہیں۔",
+      interior: "Varlikent کا داخلی ڈیزائن اسٹوڈیو استنبول بھر میں گھروں اور تجارتی جگہوں کے لیے منفرد اور پرتعیش اندرونی ڈیزائن تخلیق کرتا ہے۔",
+    },
+    price: {
+      onRequest: "قیمت کے لیے رابطہ کریں",
+      perMonth: "{price} ماہانہ",
     },
   },
 }

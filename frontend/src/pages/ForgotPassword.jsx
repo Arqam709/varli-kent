@@ -36,7 +36,8 @@ const ForgotPassword = () => {
       setSent(true)
       setCooldown(RESEND_COOLDOWN)
     } catch (err) {
-      setError(err.response?.data?.message || p.genericError)
+      console.log('Forgot password error:', err.response?.data || err.message)
+      setError(p.genericError)
     } finally {
       setLoading(false)
     }

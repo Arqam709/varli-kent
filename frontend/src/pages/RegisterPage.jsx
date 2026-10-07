@@ -4,6 +4,7 @@ import { toast } from 'react-toastify'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { assets } from '../assets/assets'
+import { authErrorKey } from '../lib/authErrors'
 
 const RegisterPage = () => {
   const [name, setName] = useState('')
@@ -55,7 +56,8 @@ const RegisterPage = () => {
 
       navigate('/')
     } else {
-      toast.error(result.message)
+      console.log('Registration error:', result.message)
+      toast.error(a[authErrorKey('register', result.error)])
     }
 
     setLoading(false)
@@ -141,7 +143,7 @@ const RegisterPage = () => {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#4b6741]"
-                placeholder="you@example.com"
+                placeholder={t.contactPage.emailPlaceholder}
                 required
               />
             </div>

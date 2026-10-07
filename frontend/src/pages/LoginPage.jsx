@@ -9,6 +9,7 @@ import api from '../lib/api'
 import { useMsal } from '@azure/msal-react'
 import { microsoftLoginRequest } from '../lib/msal'
 import { InteractionStatus } from '@azure/msal-browser'
+import { authErrorKey } from '../lib/authErrors'
 
 const LoginPage = () => {
   const [email, setEmail] = useState('')
@@ -67,13 +68,7 @@ if (!isMicrosoftLoginPending) return
       console.log('Microsoft redirect completion error:', error)
       console.log('Backend response:', error.response?.data)
 
-      toast.error(
-        error.response?.data?.message ||
-        error.message ||
-        (
-          a.microsoftSignInFailed
-        )
-      )
+      toast.error(a[authErrorKey('microsoft', error)])
     } finally {
       setLoading(false)
     }
@@ -105,7 +100,8 @@ if (!isMicrosoftLoginPending) return
 
       navigate(from, { replace: true })
     } else {
-      toast.error(result.message)
+      console.log('Login error:', result.message)
+      toast.error(a[authErrorKey('login', result.error)])
     }
 
     setLoading(false)
@@ -133,13 +129,7 @@ if (!isMicrosoftLoginPending) return
       console.log('Google login error:', error)
       console.log('Backend response:', error.response?.data)
 
-      toast.error(
-        error.response?.data?.message ||
-        error.message ||
-        (
-          a.googleSignInFailed
-        )
-      )
+      toast.error(a[authErrorKey('google', error)])
     } finally {
       setLoading(false)
     }
@@ -167,13 +157,7 @@ const handleMicrosoftLogin = async () => {
 
     console.log('Microsoft redirect start error:', error)
 
-    toast.error(
-      error.response?.data?.message ||
-      error.message ||
-      (
-        a.microsoftSignInFailed
-      )
-    )
+    toast.error(a[authErrorKey('microsoft', error)])
 
     setLoading(false)
   }
@@ -249,7 +233,7 @@ const handleMicrosoftLogin = async () => {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#4b6741]"
-                placeholder="you@example.com"
+                placeholder={t.contactPage.emailPlaceholder}
                 required
               />
             </div>

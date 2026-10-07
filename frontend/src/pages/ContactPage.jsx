@@ -38,7 +38,8 @@ const ContactPage = () => {
   const interests = useContactInterests()
   useSeo({
     title: t.seo.contact,
-    description: 'Get in touch with the Varlikent team. Enquire about buying, selling, renting or investing in Istanbul luxury real estate.',
+    description: t.seoDescriptions.contact,
+    language,
     path: '/contact',
   })
   const { settings } = useSiteSettings()

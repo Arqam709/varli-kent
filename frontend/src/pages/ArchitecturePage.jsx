@@ -51,10 +51,11 @@ const SECTION_BG = {
 const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
 
 export default function ArchitecturePage() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   useSeo({
     title: t.seo.architecture,
-    description: "Varlikent's architecture studio designs bespoke residential and commercial projects across Istanbul, from concept to completion.",
+    description: t.seoDescriptions.architecture,
+    language,
     path: '/architecture',
   })
   const p = t.architecturePage
@@ -144,10 +145,10 @@ export default function ArchitecturePage() {
       <section style={{ backgroundColor: bg('stats'), position: 'relative' }} className="py-16">
         <div className="max-w-5xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-10 text-center">
           {[
-            { number: '120+', label: 'Projects' },
-            { number: '15+', label: 'Years' },
-            { number: '40', label: 'Awards' },
-            { number: '98%', label: 'Satisfaction' },
+            { number: '120+', label: p.stats.projects },
+            { number: '15+', label: p.stats.years },
+            { number: '40', label: p.stats.awards },
+            { number: '98%', label: p.stats.satisfaction },
           ].map(stat => (
             <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} viewport={{ once: true }}>
               <div style={{ fontFamily: 'Cinzel, serif', color: fg('stats'), fontSize: 'clamp(1.6rem, 4vw, 2.5rem)', fontWeight: 700 }}>{stat.number}</div>

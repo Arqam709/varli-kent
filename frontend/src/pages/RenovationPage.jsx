@@ -134,7 +134,7 @@ const RenovationStudio = ({ p, materials, wallFinishes, floorFinishes }) => {
           </div>
           <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${reveal}%`, width: 2, backgroundColor: C.gold }} />
           <input type="range" min={0} max={100} value={reveal} onChange={(e) => setReveal(Number(e.target.value))}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize" aria-label="Before and after reveal slider" />
+            className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize" aria-label={p.revealSlider} />
           <div className="absolute pointer-events-none flex items-center justify-center rounded-full h-9 w-9"
             style={{ left: `${reveal}%`, top: '50%', transform: 'translate(-50%, -50%)', backgroundColor: C.gold, border: `2px solid ${C.charcoal}` }}>
             <svg className="h-4 w-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -222,10 +222,11 @@ const SECTION_BG = {
 const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
 
 export default function RenovationPage() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   useSeo({
     title: t.seo.renovation,
-    description: 'Varlikent renovates luxury homes and commercial spaces across Istanbul, blending craftsmanship with modern design.',
+    description: t.seoDescriptions.renovation,
+    language,
     path: '/renovation',
   })
   const p = t.renovationPage

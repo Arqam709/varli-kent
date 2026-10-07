@@ -1,9 +1,25 @@
 import { useEffect } from 'react'
+import translations from '../locales/translations.js'
 
+// Last resort only: the same wording index.html ships with, used when a caller
+// passes no language (or one the catalogue does not have).
 const DEFAULT_TITLE = 'VarliKent — Architecture, Construction & Real Estate Istanbul'
 const DEFAULT_DESC = "Varlikent is Istanbul's premier luxury real estate agency. Browse exclusive properties for sale and rent across Beşiktaş, Sarıyer, Bebek, Nişantaşı and more."
 const DEFAULT_IMAGE = 'https://www.varlikent.com/og-image.jpg'
 export const SITE_URL = 'https://www.varlikent.com'
+
+/*
+ * The site-wide title and description in a language — what a page gets for
+ * whichever of the two it does not supply, and what the tab title returns to
+ * when a page with its own metadata is left.
+ *
+ * Read from the catalogue by language code rather than through useLanguage(),
+ * so this module stays importable by the Node tests that exercise setJsonLd.
+ */
+export const siteMeta = (language) => ({
+  title: translations[language]?.seo?.siteTitle || DEFAULT_TITLE,
+  description: translations[language]?.seoDescriptions?.site || DEFAULT_DESC,
+})
 
 const setMeta = (name, content, attr = 'name') => {
   let el = document.querySelector(`meta[${attr}="${name}"]`)
@@ -67,10 +83,11 @@ export const setJsonLd = (data, targetDocument = document) => {
   el.textContent = serializeJsonLd(data)
 }
 
-const useSeo = ({ title, description, image, path, type = 'website', jsonLd } = {}) => {
+const useSeo = ({ title, description, image, path, type = 'website', jsonLd, language } = {}) => {
   useEffect(() => {
-    const t = title ? `${title} | VarliKent` : DEFAULT_TITLE
-    const d = description || DEFAULT_DESC
+    const site = siteMeta(language)
+    const t = title ? `${title} | VarliKent` : site.title
+    const d = description || site.description
     const img = image || DEFAULT_IMAGE
 
     document.title = t
@@ -94,13 +111,13 @@ const useSeo = ({ title, description, image, path, type = 'website', jsonLd } = 
     setJsonLd(jsonLd)
 
     return () => {
-      document.title = DEFAULT_TITLE
+      document.title = site.title
       // Removed on unmount as well as on a null jsonLd, so leaving a property
       // page never leaves that property's structured data behind on the next
       // page the visitor opens.
       setJsonLd(null)
     }
-  }, [title, description, image, path, type, jsonLd])
+  }, [title, description, image, path, type, jsonLd, language])
 }
 
 export default useSeo

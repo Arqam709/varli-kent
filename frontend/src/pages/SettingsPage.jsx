@@ -344,7 +344,7 @@ const SettingsPage = () => {
         <div className="rounded-2xl px-6 py-5 flex items-center gap-4" style={{ background: 'var(--vk-section-dark)', boxShadow: 'var(--vk-shadow)' }}>
           <div className="relative shrink-0">
             {user?.avatar ? (
-              <img src={user.avatar} alt="Avatar" className="h-16 w-16 rounded-full object-cover ring-2" style={{ ringColor: 'var(--t-accent)' }} />
+              <img src={user.avatar} alt={s.avatarAlt} className="h-16 w-16 rounded-full object-cover ring-2" style={{ ringColor: 'var(--t-accent)' }} />
             ) : (
               //show users name first letter
               <div className="h-16 w-16 rounded-full flex items-center justify-center text-xl font-bold text-white" style={{ background: 'var(--t-accent)' }}>

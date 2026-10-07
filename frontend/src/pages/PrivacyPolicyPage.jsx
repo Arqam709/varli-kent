@@ -10,12 +10,13 @@ const Section = ({ title, children }) => (
 )
 
 const PrivacyPolicyPage = () => {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const p = t.privacyPolicy
 
   useSeo({
     title: t.seo.privacy,
-    description: 'How Varlikent collects, uses, and protects your information.',
+    description: t.seoDescriptions.privacy,
+    language,
     path: '/privacy',
   })
 
@@ -23,7 +24,7 @@ const PrivacyPolicyPage = () => {
     <div className="min-h-screen" style={{ backgroundColor: C.softWhite }}>
       <div className="pt-28 pb-14" style={{ backgroundColor: C.charcoal }}>
         <div className="mx-auto max-w-3xl px-6 text-center">
-          <p className="text-xs uppercase tracking-[0.4em] mb-3" style={{ color: C.gold }}>Legal</p>
+          <p className="text-xs uppercase tracking-[0.4em] mb-3" style={{ color: C.gold }}>{p.label}</p>
           <h1 style={{ fontFamily: 'Cinzel, serif', color: C.textLight, fontSize: 'clamp(2rem, 5vw, 3rem)' }}>{p.title}</h1>
           <p className="mt-4 text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>{p.lastUpdated}</p>
         </div>

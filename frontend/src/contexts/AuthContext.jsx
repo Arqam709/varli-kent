@@ -60,7 +60,9 @@ export const AuthProvider = ({ children }) => {
       return { success: true, message: 'Login successful' }
     } catch (err) {
       const message = err.response?.data?.message || 'Login failed'
-      return { success: false, message }
+      // `error` lets the page pick a translated message from the status; the
+      // backend's English `message` is kept for debugging only.
+      return { success: false, message, error: err }
     }
   }
 
@@ -88,7 +90,7 @@ export const AuthProvider = ({ children }) => {
       return { success: true, message: 'Registration successful' }
     } catch (err) {
       const message = err.response?.data?.message || 'Registration failed'
-      return { success: false, message }
+      return { success: false, message, error: err }
     }
   }
 

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 import { formatPrice } from '../lib/formatPrice'
+import { useLanguage } from '../contexts/LanguageContext'
 
 import markerIconUrl from 'leaflet/dist/images/marker-icon.png'
 import markerIconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png'
@@ -76,6 +77,7 @@ function FitToMarkers({ points }) {
  * is.
  */
 export default function PropertyMapView({ properties = [], labels = {} }) {
+  const { language } = useLanguage()
   const eligible = useMemo(
     () => properties.filter(isPubliclyMappable),
     [properties]
@@ -147,7 +149,7 @@ export default function PropertyMapView({ properties = [], labels = {} }) {
                     <p className="font-semibold text-[#202a36]">{p.title}</p>
                     <p className="mt-0.5 text-xs text-slate-500">{p.district}</p>
                     <p className="mt-1 text-xs font-semibold text-[#d97706]">
-                      {formatPrice(p.price, p.listingType, p.priceLabel)}
+                      {formatPrice(p.price, p.listingType, p.priceLabel, language)}
                     </p>
                     {/* A Link, not a button: focusable, middle-clickable, and
                         openable in a new tab the way any other listing link is. */}

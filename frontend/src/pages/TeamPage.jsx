@@ -171,7 +171,8 @@ export default function TeamPage() {
   const { t, language } = useLanguage()
   useSeo({
     title: t.seo.team,
-    description: "Meet the Varlikent team — the architects, agents and advisors behind Istanbul's premier luxury real estate agency.",
+    description: t.seoDescriptions.team,
+    language,
     path: '/team',
   })
 

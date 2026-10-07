@@ -147,7 +147,8 @@ const PropertiesPage = () => {
   const { t, language } = useLanguage()
   useSeo({
     title: t.seo.properties,
-    description: 'Browse luxury apartments, villas, penthouses and more across Istanbul\'s most prestigious neighbourhoods. Filter by price, location, and property type.',
+    description: t.seoDescriptions.properties,
+    language,
     path: '/properties',
   })
   const [searchParams, setSearchParams] = useSearchParams()

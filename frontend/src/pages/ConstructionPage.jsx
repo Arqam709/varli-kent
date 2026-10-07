@@ -14,38 +14,9 @@ import useSeo from '../lib/useSeo'
 const fadeUp = { hidden: { opacity: 0, y: 30 }, visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut' } } }
 const stagger = { visible: { transition: { staggerChildren: 0.12 } } }
 
-const DEFAULT_SERVICES = [
-  { num: '01', title: 'General Contracting', desc: 'Turn-key construction for residential, commercial and mixed-use developments.' },
-  { num: '02', title: 'Structural Works', desc: 'Reinforced concrete and steel frame solutions built to seismic zone standards.' },
-  { num: '03', title: 'MEP Engineering', desc: 'Mechanical, electrical and plumbing systems fully integrated into the build.' },
-  { num: '04', title: 'Envelope & Façade', desc: 'Glass curtain walls, cladding systems and high-performance insulation.' },
-]
-
-const DEFAULT_PROCESS = [
-  { step: '01', label: 'Site Survey' },
-  { step: '02', label: 'Foundation' },
-  { step: '03', label: 'Structural Frame' },
-  { step: '04', label: 'Fit-Out' },
-  { step: '05', label: 'Handover' },
-]
-
-const DEFAULT_SEISMIC = [
-  { title: 'Reinforced Concrete Frames', desc: 'Ductile reinforced concrete systems designed to absorb and dissipate seismic energy without structural failure.' },
-  { title: 'Steel Structural Reinforcement', desc: 'Structural steel bracing and moment-resisting frames integrated where required for additional lateral stability.' },
-  { title: 'Seismic Zone Compliance', desc: "All designs follow current Turkish Building Earthquake Code (TBDY) standards for Istanbul's seismic zone classification." },
-  { title: 'Foundation Safety Analysis', desc: 'Soil studies and foundation engineering calibrated to local ground conditions before any excavation begins.' },
-  { title: 'Independent Engineering Supervision', desc: 'Licensed structural engineers inspect and sign off on every load-bearing milestone during construction.' },
-  { title: 'Material Quality Verification', desc: 'Concrete strength testing, rebar certification, and batch quality checks at every pour.' },
-]
-
-const DEFAULT_PHASES = [
-  { label: 'Foundation & Groundwork', pct: 100 },
-  { label: 'Structural Frame', pct: 100 },
-  { label: 'Envelope & Façade', pct: 78 },
-  { label: 'MEP Systems', pct: 55 },
-  { label: 'Interior Fit-Out', pct: 30 },
-  { label: 'Landscaping & Handover', pct: 0 },
-]
+// Progress of the sample project shown until a featured project exists. The
+// phase names beside these figures are constructionPage.phases, in this order.
+const SAMPLE_PHASE_PROGRESS = [100, 100, 78, 55, 30, 0]
 
 const GoldDivider = () => (
   <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, var(--vk-gold) 25%, var(--vk-gold) 75%, transparent)', opacity: 0.5 }} />
@@ -77,10 +48,11 @@ const SECTION_BG = {
 const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
 
 export default function ConstructionPage() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   useSeo({
     title: t.seo.construction,
-    description: 'Varlikent manages high-end construction projects across Istanbul, delivering luxury residential and commercial builds with precision.',
+    description: t.seoDescriptions.construction,
+    language,
     path: '/construction',
   })
   const p = t.constructionPage
@@ -101,15 +73,13 @@ export default function ConstructionPage() {
       .finally(() => setLoadingImages(false))
   }, [])
 
-  const services = p.services || DEFAULT_SERVICES
-  const processSteps = p.processSteps || DEFAULT_PROCESS
-  const seismicItems = p.seismicItems || DEFAULT_SEISMIC
+  const { services, processSteps, seismicItems } = p
 
   const activePhases = project?.phases?.length
     ? [...project.phases].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    : DEFAULT_PHASES
-  const projectName = project?.name || 'Bosphorus Residences — Phase II'
-  const projectCompletion = project?.completion || 'Q3 2026'
+    : p.phases.map((label, i) => ({ label, pct: SAMPLE_PHASE_PROGRESS[i] ?? 0 }))
+  const projectName = project?.name || p.sampleProject.name
+  const projectCompletion = project?.completion || p.sampleProject.completion
   const showroomEnabled = settings?.showroomEnabled?.construction !== false
 
   return (
@@ -312,11 +282,11 @@ export default function ConstructionPage() {
           <div className="max-w-6xl mx-auto relative z-10">
             <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
               style={{ color: C.gold, letterSpacing: '0.4em', fontSize: '0.7rem', textTransform: 'uppercase' }} className="mb-3 text-center">
-              {cms('showroomLabel', p.showroomLabel || 'Our Work')}
+              {cms('showroomLabel', p.showroomLabel)}
             </motion.p>
             <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}
               style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', color: fg('showroom'), marginBottom: '2.5rem', textAlign: 'center' }}>
-              {cms('showroomHeading', p.showroomHeading || 'Construction Showcase')}
+              {cms('showroomHeading', p.showroomHeading)}
             </motion.h2>
             <ShowroomCarousel images={images} loading={loadingImages} bgColor={bg('showroom')} dark={bandFor('showroom') === 'dark'} />
           </div>

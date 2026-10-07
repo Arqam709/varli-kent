@@ -47,7 +47,8 @@ const AboutPage = () => {
   const { t, language } = useLanguage()
   useSeo({
     title: t.seo.about,
-    description: 'Learn about Varlikent, Istanbul\'s premier luxury real estate agency. Our mission, our team, and our commitment to exceptional service.',
+    description: t.seoDescriptions.about,
+    language,
     path: '/about',
   })
   const [data, setData] = useState(DEFAULT)

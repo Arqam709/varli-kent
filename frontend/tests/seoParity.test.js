@@ -302,6 +302,7 @@ test('14C: each page has distinct title and description text', async () => {
   // language, not just English.
   const seoKeys = []
   const descriptions = []
+  const descriptionKeys = []
 
   for (const source of Object.values(sources)) {
     const call = source.match(/useSeo\(\{[\s\S]*?\n\s*\}\)/)
@@ -314,7 +315,9 @@ test('14C: each page has distinct title and description text', async () => {
     const description = call[0].match(/description: (['"`])((?:\\.|(?!\1).)*)\1/)
     if (title) titles.push(title[2])
     if (seoKey) seoKeys.push(seoKey[1])
+    const descriptionKey = call[0].match(/description: t\.seoDescriptions\.(\w+),/)
     if (description) descriptions.push(description[2])
+    if (descriptionKey) descriptionKeys.push(descriptionKey[1])
   }
 
   assert.ok(titles.length + seoKeys.length >= 10, `expected metadata on at least 10 pages, found ${titles.length + seoKeys.length}`)
@@ -329,6 +332,16 @@ test('14C: each page has distinct title and description text', async () => {
     assert.equal(new Set(all).size, all.length, `two pages share a title in ${lang}`)
   }
   assert.equal(new Set(descriptions).size, descriptions.length, "two pages share a description")
+  assert.ok(descriptions.length + descriptionKeys.length >= 10, `expected a description on at least 10 pages, found ${descriptions.length + descriptionKeys.length}`)
+
+  for (const lang of ['en', 'tr', 'ar', 'de', 'ru', 'ur']) {
+    const resolved = descriptionKeys.map((key) => translations[lang].seoDescriptions?.[key])
+    for (const [i, value] of resolved.entries()) {
+      assert.ok(typeof value === 'string' && value.trim(), `${lang}.seoDescriptions.${descriptionKeys[i]} is missing`)
+    }
+    assert.equal(new Set(resolved).size, resolved.length, `two pages share a description in ${lang}`)
+  }
+  for (const key of descriptionKeys) descriptions.push(translations.en.seoDescriptions[key])
 
   for (const description of descriptions) {
     assert.ok(description.length >= 50, `a description is too short to be useful: "${description}"`)

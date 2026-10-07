@@ -159,16 +159,21 @@ const PropertyDetailsPage = () => {
       : t.seo.propertyDetails,
     /*
      * The listing's own description when it has one, in the visitor's language,
-     * falling back to the generated summary. The real copy is both more useful
-     * in a search result and now actually translated, which the generated
-     * sentence never was — it was assembled from English literals regardless of
-     * the page language. Trimmed to a length a search engine will show rather
-     * than truncate mid-word.
+     * falling back to a generated summary in that same language. The real copy
+     * is the more useful of the two in a search result. Trimmed to a length a
+     * search engine will show rather than truncate mid-word.
      */
     description: seoProperty
       ? metaDescription(description) ||
-        `${property.listingType === 'Rent' ? 'For Rent' : 'For Sale'}: ${property.title} in ${property.district}, Istanbul. ${property.beds} bed, ${property.baths} bath, ${property.sqm}m².`
-      : 'View property details on Varlikent.',
+        t.seoDescriptions.propertySummary
+          .replace('{listing}', () => listingTypeLabel(property.listingType, language))
+          .replace('{title}', () => property.title)
+          .replace('{district}', () => property.district)
+          .replace('{beds}', () => property.beds)
+          .replace('{baths}', () => property.baths)
+          .replace('{sqm}', () => property.sqm)
+      : t.seoDescriptions.propertyDetails,
+    language,
     image: seoProperty?.mainImage || seoProperty?.images?.[0],
     path: `/properties/${id}`,
     type: 'article',
@@ -373,9 +378,9 @@ const PropertyDetailsPage = () => {
             {/* Stats */}
             <div className="mt-8 grid grid-cols-3 gap-4">
               {[
-                { icon: '🛏', label: 'Bedrooms', val: property.beds },
-                { icon: '🚿', label: 'Bathrooms', val: property.baths },
-                { icon: '📐', label: 'Area', val: `${property.sqm} m²` },
+                { icon: '🛏', label: pd.bedrooms, val: property.beds },
+                { icon: '🚿', label: pd.bathrooms, val: property.baths },
+                { icon: '📐', label: pd.area, val: `${property.sqm} m²` },
               ].map(item => (
                 <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
                   <p style={{ fontFamily: 'Cinzel, serif' }} className="text-2xl font-bold text-[#202a36]">{item.val}</p>
