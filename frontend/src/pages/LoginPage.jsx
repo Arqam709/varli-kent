@@ -200,11 +200,11 @@ const handleMicrosoftLogin = async () => {
           </span>
 
           <h2 style={{ fontFamily: 'Cinzel, serif' }} className="mt-8 text-4xl font-semibold">
-            Istanbul Luxury Real Estate
+            {t.forgotPasswordPage.heroTitle}
           </h2>
 
           <p className="mt-4 text-slate-400 max-w-sm">
-            Find and save your favourite properties. Get exclusive access to premium listings.
+            {a.brandSubtitle}
           </p>
         </div>
       </div>

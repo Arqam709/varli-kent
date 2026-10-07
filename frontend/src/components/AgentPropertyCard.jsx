@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
 import { formatPrice } from '../lib/formatPrice'
+import { useLanguage } from '../contexts/LanguageContext'
+import { propertyTypeLabel, propertyStatusLabel } from '../lib/enumLabels'
 
 
 
@@ -20,6 +22,7 @@ const PhotoFallback = () => (
 )
 
 const AgentPropertyCard = ({ property }) => {
+  const { language } = useLanguage()
   const image = property.mainImage || property.images?.[0] || ''
 
   return (
@@ -35,13 +38,13 @@ const AgentPropertyCard = ({ property }) => {
           <h3 className="min-w-0 flex-1 truncate font-semibold text-[#202a36]">{property.title}</h3>
           {property.status && (
             <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLES[property.status] || 'bg-slate-100 text-slate-600'}`}>
-              {property.status}
+              {propertyStatusLabel(property.status, language)}
             </span>
           )}
         </div>
 
         <p className="mt-0.5 text-sm text-slate-500">
-          {property.district} · {property.propertyType}
+          {property.district} · {propertyTypeLabel(property.propertyType, language)}
         </p>
 
         <p className="mt-1 text-xs font-semibold uppercase tracking-widest text-slate-400">

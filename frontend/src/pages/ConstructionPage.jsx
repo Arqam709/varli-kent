@@ -77,12 +77,12 @@ const SECTION_BG = {
 const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
 
 export default function ConstructionPage() {
+  const { t } = useLanguage()
   useSeo({
-    title: 'Construction Services — Varlikent Istanbul',
+    title: t.seo.construction,
     description: 'Varlikent manages high-end construction projects across Istanbul, delivering luxury residential and commercial builds with precision.',
     path: '/construction',
   })
-  const { t } = useLanguage()
   const p = t.constructionPage
   const { get: cms, isSectionVisible, bandFor } = usePageContent('construction', SECTION_ORDER, DEFAULT_BANDS)
   const bg = (key) => sectionBackground(key, bandFor(key), DEFAULT_BANDS, SECTION_BG, CANONICAL_BG)

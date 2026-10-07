@@ -4,6 +4,7 @@ import { C } from '../contexts/ThemeContext'
 import { useChat } from '../contexts/ChatContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { propertyTypeLabel } from '../lib/enumLabels'
 
 const HistoryIcon = () => (
   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -766,7 +767,7 @@ export default function AIChatbot() {
                                 dir="auto"
                               >
                                 {property.district}, {c.propertyCard?.istanbul || 'Istanbul'} ·{' '}
-                                {property.propertyType} ·{' '}
+                                {propertyTypeLabel(property.propertyType, language)} ·{' '}
                                 {property.listingType === 'Rent'
                                   ? c.propertyCard?.forRent || 'For Rent'
                                   : c.propertyCard?.forSale || 'For Sale'}

@@ -2,13 +2,16 @@ import { Suspense, useRef, useState, useEffect } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Environment, useGLTF, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
+import { useLanguage } from '../../contexts/LanguageContext'
 
+// Where each stage starts on the slider. The stage names and descriptions
+// are text, so they come from translations: constructionPage.viewer.phases[id].
 const PHASES = [
-  { pct: 0,   label: 'Foundation', desc: 'Excavation, footings and concrete slab' },
-  { pct: 25,  label: 'Structure',  desc: 'Columns, beams and floor plates rise' },
-  { pct: 50,  label: 'Walls',      desc: 'Masonry, facade panels and openings' },
-  { pct: 75,  label: 'Roof',       desc: 'Roof structure, membrane and cladding' },
-  { pct: 100, label: 'Final',      desc: 'Complete building ready for fit-out' },
+  { pct: 0,   id: 'foundation' },
+  { pct: 25,  id: 'structure' },
+  { pct: 50,  id: 'walls' },
+  { pct: 75,  id: 'roof' },
+  { pct: 100, id: 'final' },
 ]
 
 const TARGET_SIZE = 6
@@ -104,7 +107,7 @@ function Scene({ progress, orbitTarget, onReady }) {
   )
 }
 
-const ClickPrompt = ({ onClick }) => (
+const ClickPrompt = ({ onClick, title, hint }) => (
   <button
     onClick={onClick}
     className="absolute inset-0 flex flex-col items-center justify-center gap-5 cursor-pointer z-10"
@@ -119,22 +122,25 @@ const ClickPrompt = ({ onClick }) => (
     </div>
     <div className="text-center">
       <p style={{ fontFamily: 'Cinzel, serif', color: '#F6F3ED' }} className="text-sm tracking-[0.2em] uppercase">
-        View Construction Model
+        {title}
       </p>
-      <p className="mt-1 text-xs" style={{ color: 'rgba(246,243,237,0.35)' }}>Click to load</p>
+      <p className="mt-1 text-xs" style={{ color: 'rgba(246,243,237,0.35)' }}>{hint}</p>
     </div>
   </button>
 )
 
 export default function ConstructionClipViewer({ height }) {
+  const { t } = useLanguage()
+  const viewer = t.constructionPage?.viewer || {}
+  const phases = PHASES.map(phase => ({ ...phase, ...(viewer.phases?.[phase.id] || {}) }))
   const [active, setActive] = useState(false)
   const [sliderValue, setSliderValue] = useState(0)
   const [orbitTarget, setOrbitTarget] = useState(1.2)
   const progress = sliderValue / 100
 
-  const activePhaseIndex = PHASES.reduce((best, phase, i) =>
+  const activePhaseIndex = phases.reduce((best, phase, i) =>
     sliderValue >= phase.pct ? i : best, 0)
-  const activePhase = PHASES[activePhaseIndex]
+  const activePhase = phases[activePhaseIndex]
 
   const containerStyle = height
     ? { height, backgroundColor: '#1E1E1C' }
@@ -144,7 +150,7 @@ export default function ConstructionClipViewer({ height }) {
     <div className="w-full rounded-2xl overflow-hidden relative select-none"
       style={containerStyle}>
 
-      {!active && <ClickPrompt onClick={() => setActive(true)} />}
+      {!active && <ClickPrompt title={viewer.viewModel} hint={viewer.clickToLoad} onClick={() => setActive(true)} />}
 
       {active && (
         <>
@@ -159,13 +165,13 @@ export default function ConstructionClipViewer({ height }) {
 
           {/* Hint — hidden on small screens */}
           <div className="absolute top-3 right-3 z-20 pointer-events-none hidden sm:block">
-            <p className="text-xs" style={{ color: 'rgba(246,243,237,0.2)' }}>Drag to rotate · Scroll to zoom</p>
+            <p className="text-xs" style={{ color: 'rgba(246,243,237,0.2)' }}>{viewer.controlsHint}</p>
           </div>
 
           {/* Phase pills */}
           <div className="absolute top-3 left-0 right-0 flex justify-center gap-1.5 px-3 pointer-events-none z-20 flex-wrap">
-            {PHASES.map((phase, i) => (
-              <div key={phase.label}
+            {phases.map((phase, i) => (
+              <div key={phase.id}
                 className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold transition-all duration-300"
                 style={{
                   backgroundColor: i === activePhaseIndex ? '#C9A35A' : 'rgba(246,243,237,0.07)',
@@ -202,7 +208,7 @@ export default function ConstructionClipViewer({ height }) {
               style={{ backgroundColor: 'rgba(246,243,237,0.1)' }}>
               <div className="absolute left-0 top-0 h-full rounded-full"
                 style={{ width: `${sliderValue}%`, background: 'linear-gradient(to right, #5E7F52, #C9A35A)' }} />
-              {PHASES.map(phase => (
+              {phases.map(phase => (
                 <button key={phase.pct}
                   onClick={() => setSliderValue(phase.pct)}
                   className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 cursor-pointer transition-all"
@@ -220,7 +226,7 @@ export default function ConstructionClipViewer({ height }) {
                 style={{ top: '-16px', height: '44px', zIndex: 3 }} />
             </div>
             <div className="flex justify-between mt-2">
-              {PHASES.map((phase, i) => (
+              {phases.map((phase, i) => (
                 <button key={phase.pct}
                   onClick={() => setSliderValue(phase.pct)}
                   className="text-[10px] sm:text-xs cursor-pointer transition-colors"

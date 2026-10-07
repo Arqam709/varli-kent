@@ -166,6 +166,29 @@ test('chat send flow, property cards and Show More context', async (t) => {
   assert.deepEqual(errors, [])
 })
 
+test('chat property cards show the localized property type, and send canonical data back', async (t) => {
+  const { page, state, errors } = await setup(t, { language: 'tr' })
+  const c = translations.tr.chatbot
+  const enums = translations.tr.enums
+  await toggle(page).click({ timeout: 90000 })
+  await panel(page).locator('input').fill('Kadıköy’de 2+1')
+  await panel(page).getByRole('button', { name: c.actions.send, exact: true }).click()
+
+  await expect(panel(page).getByText('Fixture Flat', { exact: true })).toBeVisible()
+  // CARD() is an 'Apartment' for 'Sale' in Kadikoy.
+  await expect(panel(page).getByText(`Kadikoy, ${c.propertyCard.istanbul} · ${enums.propertyType.Apartment} · ${c.propertyCard.forSale}`)).toBeVisible()
+  assert.ok(!(await panel(page).innerText()).includes('Apartment'), 'no raw "Apartment" in the Turkish card')
+
+  // A follow-up still carries the canonical, untranslated data.
+  await panel(page).locator('input').fill('daha fazla')
+  await panel(page).getByRole('button', { name: c.actions.send, exact: true }).click()
+  await expect(panel(page).getByText('Second Flat', { exact: true })).toBeVisible()
+  const posts = state.calls.filter((call) => call.path === '/chat')
+  assert.equal(posts.at(-1).data.language, 'tr')
+  assert.ok(!JSON.stringify(posts.at(-1).data).includes(enums.propertyType.Apartment), 'the Turkish label is never sent')
+  assert.deepEqual(errors, [])
+})
+
 test('chat error state keeps the conversation usable', async (t) => {
   const { page, state } = await setup(t)
   const c = translations.en.chatbot

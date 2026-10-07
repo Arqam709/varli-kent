@@ -106,10 +106,13 @@ for (const lang of LANGS) {
   })
 }
 
-test('resetPasswordPage English matches the page\'s current text, and Turkish is translated', async () => {
+// Phase 1 only added these keys; Phase 2 wired the page to them, so the page
+// now reads each key instead of carrying the English text itself.
+test('resetPasswordPage is what the page reads, and Turkish is translated', async () => {
   const page = await read('pages', 'ResetPassword.jsx')
   for (const key of ['invalidLinkTitle', 'heading', 'title', 'newPassword', 'resetButton']) {
-    assert.ok(page.includes(translations.en.resetPasswordPage[key]), `en.${key} is the text the page shows today`)
+    assert.match(page, new RegExp(`\\br\\.${key}\\b`), `the page reads resetPasswordPage.${key}`)
+    assert.ok(!page.includes(translations.en.resetPasswordPage[key]), `en.${key} is no longer hard-coded`)
     assert.notEqual(translations.tr.resetPasswordPage[key], translations.en.resetPasswordPage[key])
   }
 })

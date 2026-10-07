@@ -5,6 +5,7 @@ import AdminLayout from '../components/AdminLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { localeFor } from '../lib/locale'
+import { contactStatusLabel } from '../lib/enumLabels'
 
 const AdminMessages = () => {
   const { hasPermission } = useAuth()
@@ -36,7 +37,7 @@ const AdminMessages = () => {
     try {
       await api.patch(`/contact/${id}/status`, { status })
       setMessages(prev => prev.map(m => m._id === id ? { ...m, status } : m))
-      toast.success((p.markedAs || 'Marked as {status}').replace('{status}', status))
+      toast.success((p.markedAs || 'Marked as {status}').replace('{status}', contactStatusLabel(status, language)))
     } catch {
       toast.error(p.updateStatusFailed || 'Failed to update status')
     }
@@ -105,7 +106,7 @@ const AdminMessages = () => {
                     </div>
                   </div>
                   <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${msg.status === 'New' ? 'bg-amber-100 text-amber-700' : msg.status === 'Replied' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-700'}`}>
-                    {msg.status}
+                    {contactStatusLabel(msg.status, language)}
                   </span>
                 </div>
                 <p className="mt-3 text-sm text-slate-600 leading-relaxed">{msg.message}</p>

@@ -168,12 +168,12 @@ function MemberModal({ member, onClose, t, language }) {
   )
 }
 export default function TeamPage() {
+  const { t, language } = useLanguage()
   useSeo({
-    title: 'Our Team — Varlikent Istanbul',
+    title: t.seo.team,
     description: "Meet the Varlikent team — the architects, agents and advisors behind Istanbul's premier luxury real estate agency.",
     path: '/team',
   })
-  const { t, language } = useLanguage()
 
   // Team has no toggleable sections — its members are records owned by
   // /admin/team, not CMS content. Only the static page copy is overridable.
@@ -386,7 +386,7 @@ export default function TeamPage() {
           Varlikent
         </p>
         <p className="mt-3 text-sm" style={{ fontFamily: 'Cinzel, serif', color: 'rgba(246,243,237,0.35)' }}>
-          Architecture · Construction · Real Estate
+          {['architecture', 'construction', 'realestate'].map(key => t.services?.items?.[key]?.label).filter(Boolean).join(' · ')}
         </p>
       </section>
 

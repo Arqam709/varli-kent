@@ -8,6 +8,7 @@ import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { env } from 'node:process'
+import translations from '../../src/locales/translations.js'
 
 let server, browser, base
 const screenshots = join(tmpdir(), 'varlikent-batch4-visuals')
@@ -216,15 +217,19 @@ test('navbar and selection accents follow every existing theme without global sc
 
 test('six languages remain selectable on desktop and mobile, including Arabic/Urdu RTL', async t => {
   const page = await setup(t, { role: null })
+  // Screen-reader names follow the active language (Localization Phase 2), so
+  // each control is looked up in whichever language the page is showing NOW.
+  let current = 'en'
+  const a11y = () => translations[current].accessibility
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 700 })
-    if (width === 390) await page.getByRole('button', { name: 'Open navigation menu' }).click()
+    if (width === 390) await page.getByRole('button', { name: a11y().openMenu }).click()
     for (const code of ['en', 'tr', 'ar', 'de', 'ru', 'ur']) {
       if (width === 1440) {
         if (['de', 'ru', 'ur'].includes(code)) {
-          await page.getByRole('button', { name: 'More languages', exact: true }).click()
+          await page.getByRole('button', { name: a11y().moreLanguages, exact: true }).click()
           await page.getByRole('button', { name: code.toUpperCase(), exact: true }).click()
-        } else await page.getByRole('button', { name: 'Switch to ' + code.toUpperCase(), exact: true }).click()
+        } else await page.getByRole('button', { name: a11y().switchLanguage.replace('{language}', code.toUpperCase()), exact: true }).click()
       } else {
         const dialog = page.getByRole('dialog')
         if (['de', 'ru', 'ur'].includes(code)) await dialog.locator('button[aria-expanded]').click()
@@ -234,6 +239,7 @@ test('six languages remain selectable on desktop and mobile, including Arabic/Ur
       }
       await expect(page.locator('html')).toHaveAttribute('lang', code)
       await expect(page.locator('html')).toHaveAttribute('dir', ['ar', 'ur'].includes(code) ? 'rtl' : 'ltr')
+      current = code
     }
     if (width === 390) {
       await checkScrollbar(page.getByRole('dialog').locator('div.overflow-y-auto'))

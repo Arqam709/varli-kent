@@ -51,12 +51,12 @@ const SECTION_BG = {
 const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
 
 export default function ArchitecturePage() {
+  const { t } = useLanguage()
   useSeo({
-    title: 'Architecture Studio — Varlikent Istanbul',
+    title: t.seo.architecture,
     description: "Varlikent's architecture studio designs bespoke residential and commercial projects across Istanbul, from concept to completion.",
     path: '/architecture',
   })
-  const { t } = useLanguage()
   const p = t.architecturePage
   const { get: cms, isSectionVisible, bandFor } = usePageContent('architecture', SECTION_ORDER, DEFAULT_BANDS)
   const bg = (key) => sectionBackground(key, bandFor(key), DEFAULT_BANDS, SECTION_BG, CANONICAL_BG)

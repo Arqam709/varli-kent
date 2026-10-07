@@ -4,6 +4,7 @@ import test from 'node:test'
 
 import { buildPropertyJsonLd } from '../src/lib/propertyJsonLd.js'
 import { JSONLD_ID, serializeJsonLd, setJsonLd } from '../src/lib/useSeo.js'
+import translations from '../src/locales/translations.js'
 
 const fullProperty = {
   _id: 'property-123',
@@ -296,6 +297,10 @@ test('14C: pages use the CURRENT helper and never a second canonical host', asyn
 test('14C: each page has distinct title and description text', async () => {
   const sources = await pageSources()
   const titles = []
+  // Localization Phase 2: page titles are translations (`title: t.seo.home`),
+  // so they are read from the catalogue — and must be distinct in EVERY
+  // language, not just English.
+  const seoKeys = []
   const descriptions = []
 
   for (const source of Object.values(sources)) {
@@ -305,13 +310,24 @@ test('14C: each page has distinct title and description text', async () => {
     // \\. first, so an escaped apostrophe inside a single-quoted description
     // does not read as the closing quote.
     const title = call[0].match(/title: (['"`])((?:\\.|(?!\1).)*)\1/)
+    const seoKey = call[0].match(/title: t\.seo\.(\w+),/)
     const description = call[0].match(/description: (['"`])((?:\\.|(?!\1).)*)\1/)
     if (title) titles.push(title[2])
+    if (seoKey) seoKeys.push(seoKey[1])
     if (description) descriptions.push(description[2])
   }
 
-  assert.ok(titles.length >= 10, `expected metadata on at least 10 pages, found ${titles.length}`)
+  assert.ok(titles.length + seoKeys.length >= 10, `expected metadata on at least 10 pages, found ${titles.length + seoKeys.length}`)
   assert.equal(new Set(titles).size, titles.length, "two pages share a title")
+
+  for (const lang of ['en', 'tr', 'ar', 'de', 'ru', 'ur']) {
+    const resolved = seoKeys.map((key) => translations[lang].seo?.[key])
+    for (const [i, value] of resolved.entries()) {
+      assert.ok(typeof value === 'string' && value.trim(), `${lang}.seo.${seoKeys[i]} is missing`)
+    }
+    const all = [...titles, ...resolved]
+    assert.equal(new Set(all).size, all.length, `two pages share a title in ${lang}`)
+  }
   assert.equal(new Set(descriptions).size, descriptions.length, "two pages share a description")
 
   for (const description of descriptions) {

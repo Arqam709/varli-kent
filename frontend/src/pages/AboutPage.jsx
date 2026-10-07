@@ -44,9 +44,9 @@ const DarkGlow = () => (
 )
 
 const AboutPage = () => {
-  const { language } = useLanguage()
+  const { t, language } = useLanguage()
   useSeo({
-    title: 'About Varlikent — Istanbul Luxury Real Estate',
+    title: t.seo.about,
     description: 'Learn about Varlikent, Istanbul\'s premier luxury real estate agency. Our mission, our team, and our commitment to exceptional service.',
     path: '/about',
   })

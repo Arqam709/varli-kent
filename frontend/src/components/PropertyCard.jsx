@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useFavourites } from '../contexts/FavouritesContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { propertyTypeLabel } from '../lib/enumLabels'
 import { formatPrice } from '../lib/formatPrice'
 import { C } from '../contexts/ThemeContext'
 
@@ -116,7 +117,7 @@ const PropertyCard = ({ property, showFavourite = true }) => {
           <span>{property.district}, {copy.istanbul || 'Istanbul'}</span>
         </div>
 
-        <div className="mt-1 text-xs text-slate-400 tracking-[0.15em] uppercase">{property.propertyType}</div>
+        <div className="mt-1 text-xs text-slate-400 tracking-[0.15em] uppercase">{propertyTypeLabel(property.propertyType, language)}</div>
 
         {/* Stats */}
         <div className="mt-5 flex items-center gap-5 pt-5 border-t border-slate-100 text-xs text-slate-500">

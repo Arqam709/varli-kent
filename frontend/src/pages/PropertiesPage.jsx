@@ -4,6 +4,7 @@ import api from '../lib/api'
 import PropertyCard from '../components/PropertyCard'
 import PropertyMapView from '../components/PropertyMapView'
 import { useLanguage } from '../contexts/LanguageContext'
+import { PROPERTY_TYPES, propertyTypeLabel } from '../lib/enumLabels'
 import useSeo from '../lib/useSeo'
 import { C } from '../contexts/ThemeContext'
 
@@ -19,7 +20,6 @@ const ROOM_OPTIONS = [
   '10+1','10+2','Out of 10',
 ]
 
-const PROPERTY_TYPES = ['Apartment','Villa','Penthouse','Duplex','Studio','Office','Commercial','Land','Shop','Warehouse','Hotel','Farm']
 
 /*
  * Compatibility union, not a preference.
@@ -144,9 +144,9 @@ const Label = ({ children }) => (
 )
 
 const PropertiesPage = () => {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   useSeo({
-    title: 'Properties for Sale & Rent in Istanbul',
+    title: t.seo.properties,
     description: 'Browse luxury apartments, villas, penthouses and more across Istanbul\'s most prestigious neighbourhoods. Filter by price, location, and property type.',
     path: '/properties',
   })
@@ -513,7 +513,7 @@ const PropertiesPage = () => {
         <label htmlFor={`${instanceId}-propertyType`} className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">{t.propertiesPage?.propertyType || 'Property Type'}</label>
         <select id={`${instanceId}-propertyType`} value={propertyType} onChange={e => setPropertyType(e.target.value)} className={inp}>
           <option value="">{t.propertiesPage?.allTypes || 'All Types'}</option>
-          {PROPERTY_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+          {PROPERTY_TYPES.map(type => <option key={type} value={type}>{propertyTypeLabel(type, language)}</option>)}
         </select>
       </div>
 

@@ -45,7 +45,8 @@ test('the admin form edits the source-language text, which is what the save retr
 
 test('the About page resolves every CMS field with the selected language', async () => {
   const page = await readFile(join(here, '..', 'src', 'pages', 'AboutPage.jsx'), 'utf8')
-  assert.ok(page.includes('const { language } = useLanguage()'))
+  // `t` is destructured alongside since Localization Phase 2 (the page title).
+  assert.match(page, /const \{[^}]*\blanguage\b[^}]*\} = useLanguage\(\)/)
   assert.ok(page.includes('localizedText(value, language, fallback)'))
 })
 

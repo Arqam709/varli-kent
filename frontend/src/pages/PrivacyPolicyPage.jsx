@@ -14,7 +14,7 @@ const PrivacyPolicyPage = () => {
   const p = t.privacyPolicy
 
   useSeo({
-    title: 'Privacy Policy — Varlikent',
+    title: t.seo.privacy,
     description: 'How Varlikent collects, uses, and protects your information.',
     path: '/privacy',
   })

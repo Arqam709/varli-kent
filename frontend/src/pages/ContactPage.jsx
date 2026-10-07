@@ -37,7 +37,7 @@ const ContactPage = () => {
   const { get: cms } = usePageContent('contact')
   const interests = useContactInterests()
   useSeo({
-    title: 'Contact Us — Varlikent Istanbul',
+    title: t.seo.contact,
     description: 'Get in touch with the Varlikent team. Enquire about buying, selling, renting or investing in Istanbul luxury real estate.',
     path: '/contact',
   })
@@ -69,9 +69,9 @@ const ContactPage = () => {
     try {
       await api.post('/contact', form)
       setSubmitted(true)
-      toast.success('Message sent! Our team will reach out soon.')
+      toast.success(c.messageSent)
     } catch {
-      toast.error('Failed to send message. Please try again.')
+      toast.error(c.messageFailed)
     } finally {
       setLoading(false)
     }
@@ -132,7 +132,7 @@ const ContactPage = () => {
                   <p className="text-white text-sm leading-relaxed">{address}</p>
                   <a href={mapsUrl} target="_blank" rel="noreferrer"
                     className="mt-3 inline-flex items-center gap-1.5 text-xs text-[#4b6741] hover:text-[#C9A35A] transition-colors cursor-pointer">
-                    View on Maps
+                    {c.viewOnMaps}
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                   </a>
                 </div>
@@ -185,19 +185,19 @@ const ContactPage = () => {
 
             {/* Hours */}
             <div className="rounded-2xl p-6" style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <p className="text-xs uppercase tracking-widest text-slate-500 mb-3">Office Hours</p>
+              <p className="text-xs uppercase tracking-widest text-slate-500 mb-3">{c.officeHours}</p>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Monday – Friday</span>
+                  <span className="text-slate-400">{c.weekdays}</span>
                   <span className="text-white">09:00 – 18:00</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Saturday</span>
+                  <span className="text-slate-400">{c.saturday}</span>
                   <span className="text-white">10:00 – 15:00</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Sunday</span>
-                  <span className="text-slate-500">Closed</span>
+                  <span className="text-slate-400">{c.sunday}</span>
+                  <span className="text-slate-500">{c.closed}</span>
                 </div>
               </div>
             </div>
@@ -223,7 +223,7 @@ const ContactPage = () => {
             ) : (
               <form onSubmit={handleSubmit} className="rounded-2xl p-8 space-y-5" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <div>
-                  <label className="block mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400" htmlFor="name">{c.nameLabel || 'Full Name'}</label>
+                  <label className="block mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400" htmlFor="name">{c.nameLabel}</label>
                   <input id="name" name="name" type="text" value={form.name} onChange={handleChange}
                     placeholder={c.namePlaceholder || 'Your full name'} className={inputCls} required />
                 </div>
@@ -231,7 +231,7 @@ const ContactPage = () => {
                   <div>
                     <label className="block mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400" htmlFor="email">{c.emailLabel || 'Email'}</label>
                     <input id="email" name="email" type="email" value={form.email} onChange={handleChange}
-                      placeholder="you@example.com" className={inputCls} required />
+                      placeholder={c.emailPlaceholder} className={inputCls} required />
                   </div>
                   <div>
                     <label className="block mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400" htmlFor="phone">{c.phoneLabel || 'Phone'}</label>
@@ -248,7 +248,7 @@ const ContactPage = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400" htmlFor="message">{c.messageLabel || 'Message'}</label>
+                  <label className="block mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400" htmlFor="message">{c.messageLabel}</label>
                   <textarea id="message" name="message" rows={6} value={form.message} onChange={handleChange}
                     placeholder={c.messagePlaceholder || 'Tell us how we can help...'} className={inputCls} required />
                 </div>
@@ -260,7 +260,7 @@ const ContactPage = () => {
                 >
                   {loading ? (c.sending || 'Sending...') : cms('sendBtn', c.sendBtn || 'Send Message')}
                 </button>
-                <p className="text-center text-xs text-slate-600">Your message is saved securely and our team will respond within 24 hours.</p>
+                <p className="text-center text-xs text-slate-600">{c.responseNotice}</p>
               </form>
             )}
           </motion.div>

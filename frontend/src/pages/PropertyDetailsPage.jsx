@@ -7,6 +7,7 @@ import PropertyCard from '../components/PropertyCard'
 import { formatPrice } from '../lib/formatPrice'
 import { useLanguage } from '../contexts/LanguageContext'
 import { localizedText } from '../lib/localizedText'
+import { propertyTypeLabel, listingTypeLabel, propertyStatusLabel } from '../lib/enumLabels'
 import { SinglePropertyMap, isPubliclyMappable, isApproximateLocation } from '../components/PropertyMapView'
 import useSeo from '../lib/useSeo'
 import { buildPropertyJsonLd } from '../lib/propertyJsonLd'
@@ -153,7 +154,9 @@ const PropertyDetailsPage = () => {
   const propertyJsonLd = useMemo(() => buildPropertyJsonLd(seoProperty, id), [seoProperty, id])
 
   useSeo({
-    title: property ? `${property.title} — ${property.district}, Istanbul` : 'Property Details',
+    title: property
+      ? t.seo.propertyTitle.replace('{district}', () => property.district).replace('{title}', () => property.title)
+      : t.seo.propertyDetails,
     /*
      * The listing's own description when it has one, in the visitor's language,
      * falling back to the generated summary. The real copy is both more useful
@@ -217,10 +220,10 @@ const PropertyDetailsPage = () => {
         interestType: property?.listingType === 'Rent' ? 'Renting' : 'Buying',
         message: `Re: ${property?.title} — ${contactForm.message}`,
       })
-      toast.success('Message sent! We will contact you soon.')
+      toast.success(pd.messageSent)
       setContactForm({ name: '', email: '', message: '' })
     } catch {
-      toast.error('Failed to send message. Please try again.')
+      toast.error(pd.messageFailed)
     } finally {
       setSending(false)
     }
@@ -235,8 +238,8 @@ const PropertyDetailsPage = () => {
   if (!property) return (
     <div className="min-h-screen flex items-center justify-center pt-20 px-6">
       <div className="text-center">
-        <h1 style={{ fontFamily: 'Cinzel, serif' }} className="text-3xl font-semibold text-[#202a36]">Property not found</h1>
-        <Link to="/properties" className="mt-6 inline-block rounded-full bg-[#202a36] px-6 py-3 text-white text-sm font-semibold">Back to Listings</Link>
+        <h1 style={{ fontFamily: 'Cinzel, serif' }} className="text-3xl font-semibold text-[#202a36]">{pd.notFound}</h1>
+        <Link to="/properties" className="mt-6 inline-block rounded-full bg-[#202a36] px-6 py-3 text-white text-sm font-semibold">{pd.backToListings}</Link>
       </div>
     </div>
   )
@@ -314,21 +317,21 @@ const PropertyDetailsPage = () => {
       <div className="pt-24 pb-8" style={{ backgroundColor: C.charcoal }}>
         <div className="container mx-auto px-6">
           <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400 mb-4">
-            <Link to="/" className="hover:text-[var(--vk-text-on-dark)] transition">Home</Link>
+            <Link to="/" className="hover:text-[var(--vk-text-on-dark)] transition">{t.nav.home}</Link>
             <span>/</span>
-            <Link to="/properties" className="hover:text-[var(--vk-text-on-dark)] transition">Properties</Link>
+            <Link to="/properties" className="hover:text-[var(--vk-text-on-dark)] transition">{t.nav.properties}</Link>
             <span>/</span>
             <span className="text-[var(--vk-text-on-dark)] truncate max-w-xs">{property.title}</span>
           </div>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold mb-3 ${property.listingType === 'Rent' ? 'bg-[#4b6741] text-white' : 'bg-[#d97706] text-white'}`}>
-                {property.listingType === 'Rent' ? 'For Rent' : 'For Sale'}
+                {property.listingType === 'Rent' ? t.propertyCard.forRent : t.propertyCard.forSale}
               </span>
               <h1 style={{ fontFamily: 'Cinzel, serif' }} className="text-3xl font-bold text-[var(--vk-text-on-dark)] md:text-4xl">{property.title}</h1>
               <div className="mt-3 flex items-center gap-2 text-slate-400">
                 <svg className="h-4 w-4 text-[#4b6741]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                {property.address}, {property.district}, Istanbul
+                {property.address}, {property.district}, {t.propertyCard.istanbul}
               </div>
             </div>
             <button
@@ -336,7 +339,7 @@ const PropertyDetailsPage = () => {
               className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition cursor-pointer ${fav ? 'bg-red-500 text-white' : 'bg-white/10 text-[var(--vk-text-on-dark)] hover:bg-white/20'}`}
             >
               <svg className="h-5 w-5" fill={fav ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
-              {fav ? 'Saved' : 'Save'}
+              {fav ? pd.saved : pd.save}
             </button>
           </div>
         </div>
@@ -358,7 +361,7 @@ const PropertyDetailsPage = () => {
                 {images.map((img, i) => (
                   <button key={i} onClick={() => setActiveImg(i)} className={`shrink-0 overflow-hidden rounded-xl cursor-pointer ${activeImg === i ? 'ring-2 ring-[#4b6741]' : 'opacity-70 hover:opacity-100'}`}>
                     {isVideoUrl(img) ? (
-                      <video src={img} aria-label={`${property.title} — video ${i + 1}`} className="h-20 w-28 bg-black object-cover" muted playsInline preload="metadata" />
+                      <video src={img} aria-label={pd.videoLabel.replace('{number}', i + 1).replace('{title}', () => property.title)} className="h-20 w-28 bg-black object-cover" muted playsInline preload="metadata" />
                     ) : (
                       <img src={img} alt={`${property.title} — photo ${i + 1}`} className="h-20 w-28 object-cover" loading="lazy" />
                     )}
@@ -383,15 +386,15 @@ const PropertyDetailsPage = () => {
 
             {/* Description */}
             <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-              <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-2xl font-semibold text-[#202a36]">About This Property</h2>
-              <p className="mt-4 leading-7 text-slate-600">{description || 'A premium property in Istanbul managed by the Varlikent team.'}</p>
+              <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-2xl font-semibold text-[#202a36]">{pd.aboutTitle}</h2>
+              <p className="mt-4 leading-7 text-slate-600">{description || pd.defaultDescription}</p>
 
               <div className="mt-8 grid grid-cols-2 gap-4 text-sm">
                 {[
-                  ['Property Type', property.propertyType],
-                  ['Listing Type', property.listingType === 'Rent' ? 'For Rent' : 'For Sale'],
-                  ['District', property.district],
-                  ['Status', property.status],
+                  [pd.propertyTypeLabel, propertyTypeLabel(property.propertyType, language)],
+                  [pd.listingTypeLabel, listingTypeLabel(property.listingType, language)],
+                  [pd.districtLabel, property.district],
+                  [pd.statusLabel, propertyStatusLabel(property.status, language)],
                 ].map(([l, v]) => (
                   <div key={l} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
                     <span className="text-slate-500">{l}</span>
@@ -550,7 +553,7 @@ const PropertyDetailsPage = () => {
           <div className="space-y-6">
             {/* Price & Contact */}
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sticky top-24">
-              <p className="text-sm uppercase tracking-wide text-slate-500">{isClosed ? (pd.askingPrice || 'Asking Price') : 'Price'}</p>
+              <p className="text-sm uppercase tracking-wide text-slate-500">{isClosed ? pd.askingPrice : pd.price}</p>
               <p style={{ fontFamily: 'Cinzel, serif' }} className="mt-1 text-3xl font-bold text-[#d97706]">
                 {formatPrice(property.price, property.listingType, property.priceLabel, language)}
               </p>
@@ -601,16 +604,16 @@ const PropertyDetailsPage = () => {
                       </div>
                     )}
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Listed by</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{pd.listedBy}</p>
                       <p className="truncate font-semibold text-[#202a36]">{property.agent.name}</p>
-                      <p className="truncate text-xs text-slate-500">Agent</p>
+                      <p className="truncate text-xs text-slate-500">{t.settingsPage.roleAgent}</p>
                     </div>
                   </div>
                   {agentContactLines}
                 </div>
               ) : property.agentName ? (
                 <div className="mb-5">
-                  <p className="mb-3 text-sm font-semibold text-slate-700">Agent</p>
+                  <p className="mb-3 text-sm font-semibold text-slate-700">{t.settingsPage.roleAgent}</p>
                   <p className="font-semibold text-[#202a36]">{property.agentName}</p>
                   {agentContactLines}
                 </div>
@@ -618,7 +621,7 @@ const PropertyDetailsPage = () => {
 
               <div className="space-y-3">
                 {whatsapp && (
-                  <a href={`https://wa.me/${whatsapp.replace(/\D/g,'')}?text=${encodeURIComponent(`Hi, I'm interested in ${property.title}`)}`}
+                  <a href={`https://wa.me/${whatsapp.replace(/\D/g,'')}?text=${encodeURIComponent(pd.whatsappMessage.replace('{title}', () => property.title))}`}
                     target="_blank" rel="noreferrer"
                     className="flex w-full items-center justify-center gap-2 rounded-full bg-green-600 py-3 text-sm font-semibold text-white transition hover:bg-green-700 cursor-pointer"
                   >
@@ -627,11 +630,11 @@ const PropertyDetailsPage = () => {
                   </a>
                 )}
                 {property.agentEmail && (
-                  <a href={`mailto:${property.agentEmail}?subject=Inquiry: ${property.title}`}
+                  <a href={`mailto:${property.agentEmail}?subject=${encodeURIComponent(pd.emailSubject.replace('{title}', () => property.title))}`}
                     className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-[#202a36] py-3 text-sm font-semibold text-[#202a36] transition hover:bg-[#202a36] hover:text-white cursor-pointer"
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                    Email Agent
+                    {pd.emailAgent}
                   </a>
                 )}
                 {property.agentPhone && (
@@ -639,25 +642,25 @@ const PropertyDetailsPage = () => {
                     className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-slate-50 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 cursor-pointer"
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
-                    Call Agent
+                    {pd.callAgent}
                   </a>
                 )}
               </div>
 
               {/* Quick Contact Form */}
               <hr className="my-5 border-slate-100" />
-              <h3 className="mb-4 text-sm font-semibold text-slate-700">Send a Message</h3>
+              <h3 className="mb-4 text-sm font-semibold text-slate-700">{t.contactPage.formHeading}</h3>
               <form onSubmit={handleContact} className="space-y-3">
-                <input type="text" placeholder="Your name" value={contactForm.name} onChange={e => setContactForm(p => ({...p, name: e.target.value}))}
+                <input type="text" placeholder={t.contactPage.namePlaceholder} value={contactForm.name} onChange={e => setContactForm(p => ({...p, name: e.target.value}))}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4b6741]" required />
-                <input type="email" placeholder="Email address" value={contactForm.email} onChange={e => setContactForm(p => ({...p, email: e.target.value}))}
+                <input type="email" placeholder={t.forgotPasswordPage.emailLabel} value={contactForm.email} onChange={e => setContactForm(p => ({...p, email: e.target.value}))}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4b6741]" required />
-                <textarea rows={3} placeholder="Your message..." value={contactForm.message} onChange={e => setContactForm(p => ({...p, message: e.target.value}))}
+                <textarea rows={3} placeholder={t.contactPage.messagePlaceholder} value={contactForm.message} onChange={e => setContactForm(p => ({...p, message: e.target.value}))}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4b6741]" required />
                 <button type="submit" disabled={sending}
                   className="w-full rounded-full bg-[#4b6741] py-3 text-sm font-semibold text-white transition hover:bg-[#3d5535] disabled:opacity-60 cursor-pointer"
                 >
-                  {sending ? 'Sending...' : 'Send Message'}
+                  {sending ? t.contactPage.sending : t.contactPage.sendBtn}
                 </button>
               </form>
             </div>
@@ -667,7 +670,7 @@ const PropertyDetailsPage = () => {
         {/* Similar Properties */}
         {similar.length > 0 && (
           <div className="mt-16">
-            <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-2xl font-semibold text-[#202a36] mb-8">Similar Properties</h2>
+            <h2 style={{ fontFamily: 'Cinzel, serif' }} className="text-2xl font-semibold text-[#202a36] mb-8">{pd.similarTitle}</h2>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {similar.map(p => <PropertyCard key={p._id} property={p} />)}
             </div>

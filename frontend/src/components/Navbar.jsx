@@ -133,14 +133,14 @@ const Navbar = () => {
   return (
     <>
     <nav
-      aria-label="Main navigation"
+      aria-label={t.accessibility.mainNavigation}
       className="fixed top-0 left-0 right-0 z-50 transition-all duration-500"
       style={navSolid ? solidNavStyle : { backgroundColor: 'transparent' }}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-10">
 
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-3 group" aria-label="VarliKent home">
+        <Link to="/" className="flex items-center gap-3 group" aria-label={t.accessibility.homeLink}>
           <span
             style={{ fontFamily: 'Cinzel, serif', color: '#ffffff' }}
             className="text-lg font-bold tracking-[0.2em] transition-colors duration-300"
@@ -224,7 +224,7 @@ const Navbar = () => {
                 <button
                   key={lang.code}
                   onClick={() => setLanguage(lang.code)}
-                  aria-label={`Switch to ${lang.label}`}
+                  aria-label={t.accessibility.switchLanguage.replace('{language}', lang.label)}
                   className={`px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
                     language === lang.code
                       ? 'bg-[var(--vk-green-brand)] text-white'
@@ -242,7 +242,7 @@ const Navbar = () => {
                 onClick={() => setMoreLangOpen((v) => !v)}
                 aria-expanded={moreLangOpen}
                 aria-haspopup="true"
-                aria-label="More languages"
+                aria-label={t.accessibility.moreLanguages}
                 className={`flex items-center justify-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
                   MORE_LANGS.some(l => l.code === language)
                     ? 'bg-[var(--vk-green-brand)] text-white'
@@ -311,7 +311,7 @@ const Navbar = () => {
                     </Link>
                     <Link to="/settings" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.1em] text-slate-600 hover:bg-slate-50 hover:text-[var(--vk-green-brand)]">
                       <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                      Settings
+                      {t.nav.settings}
                     </Link>
                     {portal && (
                       <Link to={portal.to} onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.1em] text-slate-600 hover:bg-slate-50 hover:text-[var(--vk-green-brand)]">
@@ -355,7 +355,7 @@ const Navbar = () => {
         {/* ── Mobile Hamburger ── */}
 <button
   onClick={() => setMobileOpen(true)}
-  aria-label="Open navigation menu"
+  aria-label={t.accessibility.openMenu}
   className={`lg:hidden cursor-pointer p-2 rounded-lg transition-colors ${
     'text-white hover:bg-white/10'
   }`}
@@ -384,7 +384,7 @@ const Navbar = () => {
       className="fixed inset-0 z-[9999] flex h-dvh flex-col overflow-hidden lg:hidden"
       aria-modal="true"
       role="dialog"
-      aria-label="Navigation menu"
+      aria-label={t.accessibility.navigationMenu}
           >
             {/* Mobile header */}
             <div
@@ -396,7 +396,7 @@ const Navbar = () => {
               </span>
               <button
                 onClick={closeMobile}
-                aria-label="Close menu"
+                aria-label={t.accessibility.closeMenu}
                 className="flex h-10 w-10 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -484,7 +484,7 @@ const Navbar = () => {
               {/* Language switcher */}
               <div className="mt-8">
                 <p className="mb-3 text-[10px] tracking-[0.3em] uppercase" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                  Language
+                  {t.nav.language}
                 </p>
                 <div className="flex gap-2">
                   {LANGS.map((lang) => (
@@ -561,7 +561,7 @@ const Navbar = () => {
                       onClick={closeMobile}
                       className="block py-3 text-sm text-white/60 hover:text-white transition-colors"
                     >
-                      Settings
+                      {t.nav.settings}
                     </Link>
                     {portal && (
                       <Link

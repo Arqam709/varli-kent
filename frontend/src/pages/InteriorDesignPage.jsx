@@ -14,10 +14,11 @@ import useSeo from '../lib/useSeo'
 const fadeUp = { hidden: { opacity: 0, y: 30 }, visible: { opacity: 1, y: 0, transition: { duration: 0.7 } } }
 
 const DESIGN_STYLES = [
-  { id: 'contemporary', label: 'Contemporary', bg: '#252523', materials: 'Marble · Glass · Steel' },
-  { id: 'warm', label: 'Warm Modern', bg: '#2a201a', materials: 'Oak · Linen · Terracotta' },
-  { id: 'coastal', label: 'Coastal', bg: '#1a2228', materials: 'Driftwood · Sea Blue · Rattan' },
-  { id: 'classic', label: 'Classic', bg: '#221e18', materials: 'Velvet · Brass · Dark Wood' },
+  // Name and materials come from translations: interiorPage.styles[id].
+  { id: 'contemporary', bg: '#252523' },
+  { id: 'warm', bg: '#2a201a' },
+  { id: 'coastal', bg: '#1a2228' },
+  { id: 'classic', bg: '#221e18' },
 ]
 
 const DEFAULT_WALL_FINISHES = [
@@ -128,12 +129,12 @@ const SECTION_BG = {
 const CANONICAL_BG = { dark: C.charcoal, light: C.softWhite }
 
 export default function InteriorDesignPage() {
+  const { t } = useLanguage()
   useSeo({
-    title: 'Interior Design Studio — Varlikent Istanbul',
+    title: t.seo.interior,
     description: "Varlikent's interior design studio creates bespoke, luxury interiors for homes and commercial spaces across Istanbul.",
     path: '/interior-design',
   })
-  const { t } = useLanguage()
   const p = t.interiorPage
   const { get: cms, isSectionVisible, bandFor } = usePageContent('interior-design', SECTION_ORDER, DEFAULT_BANDS)
   const bg = (key) => sectionBackground(key, bandFor(key), DEFAULT_BANDS, SECTION_BG, CANONICAL_BG)
@@ -223,8 +224,8 @@ export default function InteriorDesignPage() {
                   border: selectedStyle === style.id ? `1px solid ${C.gold}` : '1px solid rgba(255,255,255,0.08)',
                   outline: 'none',
                 }}>
-                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1rem', color: '#ffffff' }} className="mb-2">{style.label}</h3>
-                <p className="text-xs leading-relaxed" style={{ color: 'rgba(246,243,237,0.35)' }}>{style.materials}</p>
+                <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1rem', color: '#ffffff' }} className="mb-2">{p.styles?.[style.id]?.label}</h3>
+                <p className="text-xs leading-relaxed" style={{ color: 'rgba(246,243,237,0.35)' }}>{p.styles?.[style.id]?.materials}</p>
                 {selectedStyle === style.id && (
                   <span className="mt-3 text-xs tracking-widest uppercase" style={{ color: C.gold }}>{p.selectedLabel}</span>
                 )}
@@ -252,7 +253,7 @@ export default function InteriorDesignPage() {
             </motion.h2>
             {selectedStyle && (
               <p className="text-center text-xs tracking-widest uppercase mb-8" style={{ color: C.gold }}>
-                {DESIGN_STYLES.find(s => s.id === selectedStyle)?.label}
+                {p.styles?.[selectedStyle]?.label}
               </p>
             )}
             {!selectedStyle && <div className="mb-8" />}

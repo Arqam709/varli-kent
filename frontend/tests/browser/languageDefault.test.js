@@ -17,6 +17,7 @@ import assert from 'node:assert/strict'
 import { chromium } from '@playwright/test'
 import { createServer } from 'vite'
 import { readFile } from 'node:fs/promises'
+import translations from '../../src/locales/translations.js'
 
 let server, browser, base
 const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div>
@@ -120,7 +121,9 @@ test('a legacy browser carrying auto-saved English is migrated to Turkish', asyn
 
 test('choosing English after the migration makes it stick permanently', async (t) => {
   const page = await boot(t, { stored: 'en' })
-  await page.getByRole('button', { name: 'Switch to EN' }).click()
+  // The page has just been migrated to Turkish, and the buttons' screen-reader
+  // names are translated (Localization Phase 2), so the button is named in Turkish.
+  await page.getByRole('button', { name: translations.tr.accessibility.switchLanguage.replace('{language}', 'EN') }).click()
   await page.waitForFunction(() => document.documentElement.getAttribute('lang') === 'en')
 
   const picked = await state(page)

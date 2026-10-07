@@ -1,11 +1,13 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
+import { useLanguage } from '../contexts/LanguageContext'
 
 const FavouritesContext = createContext(null)
 
 export const FavouritesProvider = ({ children }) => {
   const { isLoggedIn, user } = useAuth()
+  const { t } = useLanguage()
   const [favouriteIds, setFavouriteIds] = useState(new Set())
 
   const loadFavourites = useCallback(async () => {
@@ -35,7 +37,7 @@ export const FavouritesProvider = ({ children }) => {
 
   const toggleFavourite = async (id) => {
     if (!isLoggedIn) {
-      alert('Please log in to save favourites.')
+      alert(t.favouritesPage.loginRequired)
       return
     }
     const strId = String(id)

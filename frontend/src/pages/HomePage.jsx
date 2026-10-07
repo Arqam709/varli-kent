@@ -213,7 +213,7 @@ function PinnedHero({ t, cms, prefersReducedMotion }) {
       {/* Villa BG */}
       <div ref={bgRef} style={{ position: 'absolute', inset: 0, transformOrigin: 'center', willChange: 'transform' }}>
         <img src={cms('heroImage', '/images/hero-villa.jpg.png')} onError={e => { e.currentTarget.style.display = 'none' }}
-          alt="Luxury Istanbul villa" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          alt={t.hero?.imageAlt} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
       </div>
 
       {/* Gradient overlays */}
@@ -335,7 +335,11 @@ function PinnedHero({ t, cms, prefersReducedMotion }) {
         </p>
         <div ref={taglineRef} style={{ opacity: 0, marginTop: '1.5rem', willChange: 'transform, opacity' }}>
           <p style={{ color: C.gold, fontSize: 'clamp(0.58rem, 1.5vw, 0.82rem)', letterSpacing: '0.45em', textTransform: 'uppercase', fontWeight: 500 }}>
-            Real Estate &nbsp;·&nbsp; Architecture &nbsp;·&nbsp; Construction &nbsp;·&nbsp; Renovation &nbsp;·&nbsp; Interior Design
+            {/* The five service names, from the same labels the service cards use. */}
+            {['realestate', 'architecture', 'construction', 'renovation', 'interior']
+              .map(key => t.services?.items?.[key]?.label)
+              .filter(Boolean)
+              .join(' \u00a0·\u00a0 ')}
           </p>
         </div>
       </div>
@@ -387,7 +391,7 @@ function FeaturedCarousel({ loading, featured, t, cms, navigate, C, mv, vp, Sect
   const translateX = idx > 0 ? `calc(-${idx} * (${cardWidthPct}% + ${gapPx}px))` : '0'
 
   return (
-    <section aria-label="Featured Properties" style={{ backgroundColor: bgColor || C.marble }}>
+    <section aria-label={t.featured?.heading} style={{ backgroundColor: bgColor || C.marble }}>
       <div className="py-20 md:py-28">
         {/* Header */}
         <motion.div initial="hidden" whileInView="show" viewport={vp} variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09 } } }} className="mb-10 md:mb-14 text-center px-4 sm:px-6">
@@ -423,13 +427,13 @@ function FeaturedCarousel({ loading, featured, t, cms, navigate, C, mv, vp, Sect
         {/* Navigation */}
         {showArrows && (
           <div className="mt-8 flex items-center justify-center gap-4">
-            <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0} aria-label="Previous"
+            <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0} aria-label={t.common?.previous}
               className="flex h-11 w-11 items-center justify-center rounded-full border transition-all cursor-pointer disabled:opacity-25"
               style={{ borderColor: 'rgba(var(--vk-dark-rgb), 0.2)', backgroundColor: C.charcoal, color: '#fff' }}>
               ←
             </button>
             <span className="text-xs tracking-widest" style={{ color: C.muted }}>{idx + 1} / {maxIdx + 1}</span>
-            <button onClick={() => setIdx(i => Math.min(maxIdx, i + 1))} disabled={idx >= maxIdx} aria-label="Next"
+            <button onClick={() => setIdx(i => Math.min(maxIdx, i + 1))} disabled={idx >= maxIdx} aria-label={t.common?.next}
               className="flex h-11 w-11 items-center justify-center rounded-full border transition-all cursor-pointer disabled:opacity-25"
               style={{ borderColor: 'rgba(var(--vk-dark-rgb), 0.2)', backgroundColor: C.charcoal, color: '#fff' }}>
               →
@@ -514,13 +518,13 @@ export default function HomePage() {
    * so copying it here would make the home page indistinguishable from every
    * page that sets none.
    */
+  const { t }    = useLanguage()
   useSeo({
-    title: 'Luxury Real Estate in Istanbul',
+    title: t.seo.home,
     description: "VarliKent is Istanbul's full-service property company — architecture, construction, renovation, interior design and real estate.",
     path: '/',
   })
   const navigate = useNavigate()
-  const { t }    = useLanguage()
   const mv       = useMotionVariants()
   const { get: cms, isSectionVisible, bandFor } = usePageContent('home', SECTION_ORDER, DEFAULT_BANDS)
   const bg = (key) => sectionBackground(key, bandFor(key), DEFAULT_BANDS, SECTION_BG, CANONICAL_BG)
@@ -571,7 +575,7 @@ export default function HomePage() {
 
         {/* ── SERVICES — dark charcoal + green glow ── */}
         {isSectionVisible('services') && (
-        <section id="services" aria-label="Services" style={{ backgroundColor: bg('services')}} className="relative overflow-hidden">
+        <section id="services" aria-label={t.nav?.services} style={{ backgroundColor: bg('services')}} className="relative overflow-hidden">
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(ellipse 90% 60% at 50% 0%, rgba(var(--vk-green-rgb), 0.30) 0%, transparent 65%)' }} />
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.6), transparent)' }} />
           <div className="relative mx-auto max-w-7xl px-6 py-28">
@@ -613,7 +617,7 @@ export default function HomePage() {
 
         {/* ── ABOUT / WHO WE ARE — soft white bg ── */}
         {isSectionVisible('about') && (
-        <section aria-label="About VarliKent" style={{ backgroundColor: bg('about')}}>
+        <section aria-label={t.accessibility?.aboutSection} style={{ backgroundColor: bg('about')}}>
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
           <div className="mx-auto max-w-7xl px-6 py-32">
             <div className="grid gap-20 lg:grid-cols-2 items-center">
@@ -661,7 +665,7 @@ export default function HomePage() {
 
         {/* ── PROCESS — charcoal bg ── */}
         {isSectionVisible('process') && (
-        <section id="process" aria-label="How We Work" style={{ backgroundColor: bg('process')}} className="relative overflow-hidden">
+        <section id="process" aria-label={t.process?.label} style={{ backgroundColor: bg('process')}} className="relative overflow-hidden">
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.33), transparent)' }} />
           <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: `linear-gradient(rgba(var(--vk-gold-rgb), 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--vk-gold-rgb), 0.04) 1px, transparent 1px)`, backgroundSize: '52px 52px' }} />
 
@@ -703,14 +707,14 @@ export default function HomePage() {
 
         {/* ── WHY VARLIKENT — soft white bg ── */}
         {isSectionVisible('trust') && (
-        <section aria-label="Why VarliKent" style={{ backgroundColor: bg('trust')}}>
+        <section aria-label={t.trust?.label} style={{ backgroundColor: bg('trust')}}>
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
           <div className="mx-auto max-w-7xl px-6 py-32">
             <div className="grid gap-20 lg:grid-cols-2 items-center">
 
               <motion.div initial="hidden" whileInView="show" viewport={vp} variants={mv.slideLeft()} className="relative">
                 <div className="overflow-hidden rounded-2xl" style={{ border: `1px solid rgba(var(--vk-gold-rgb), 0.18)`, boxShadow: '0 8px 40px rgba(var(--vk-dark-rgb), 0.10)' }}>
-                  <img src={cms('trustImage', '/images/why-villa.png')} alt="VarliKent luxury property Istanbul" className="h-full w-full object-cover" loading="lazy" />
+                  <img src={cms('trustImage', '/images/why-villa.png')} alt={t.trust?.imageAlt} className="h-full w-full object-cover" loading="lazy" />
                 </div>
                 <div className="absolute -bottom-6 -right-6 hidden lg:block rounded-xl px-6 py-5" style={{ backgroundColor: '#fff', border: `1px solid rgba(var(--vk-gold-rgb), 0.3)`, boxShadow: '0 4px 20px rgba(var(--vk-dark-rgb), 0.1)' }}>
                   <p style={{ fontFamily: 'Cinzel, serif', fontSize: '2rem', color: C.gold, fontWeight: 700, lineHeight: 1 }}>10+</p>
@@ -748,7 +752,7 @@ export default function HomePage() {
 
         {/* ── FOR SALE / RENT — dark charcoal + green glow ── */}
         {isSectionVisible('browse') && (
-        <section aria-label="Buy or Rent" style={{ backgroundColor: bg('browse')}} className="relative overflow-hidden">
+        <section aria-label={t.accessibility?.browseSection} style={{ backgroundColor: bg('browse')}} className="relative overflow-hidden">
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 80% 70% at 50% 50%, rgba(var(--vk-green-rgb), 0.28) 0%, transparent 65%)` }} />
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.6), transparent)' }} />
           <div className="relative mx-auto max-w-7xl px-6 py-28">
@@ -820,7 +824,7 @@ export default function HomePage() {
 
         {/* ── FEATURED PROJECTS — dark grey bg ── */}
         {isSectionVisible('projects') && (
-        <section aria-label="Selected Projects" style={{ backgroundColor: bg('projects')}} className="relative overflow-hidden">
+        <section aria-label={t.projects?.heading} style={{ backgroundColor: bg('projects')}} className="relative overflow-hidden">
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
           <div className="mx-auto max-w-7xl px-6 py-32">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-14 text-center">
@@ -852,7 +856,7 @@ export default function HomePage() {
                       <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: '1.2rem', color: C.marble }} className="mb-2">{item.label || key}</h3>
                       <p className="mb-5 text-xs leading-relaxed" style={{ color: C.muted }}>{item.desc}</p>
                       <Link to={href} className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest transition-all duration-300 group-hover:gap-3" style={{ color: C.gold }}>
-                        Explore
+                        {t.services?.explore}
                         <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                       </Link>
                     </div>
@@ -875,7 +879,7 @@ export default function HomePage() {
 
         {/* ── STATS — charcoal bg ── */}
         {isSectionVisible('stats') && (
-        <section aria-label="Statistics" style={{ backgroundColor: bg('stats')}} className="relative py-24">
+        <section aria-label={t.accessibility?.statsSection} style={{ backgroundColor: bg('stats')}} className="relative py-24">
           <div className="mx-auto max-w-5xl px-6">
             <div className="grid grid-cols-2 gap-10 text-center md:grid-cols-4">
               {[
@@ -896,7 +900,7 @@ export default function HomePage() {
 
         {/* ── TESTIMONIALS — soft white bg ── */}
         {isSectionVisible('testimonials') && (
-        <section aria-label="Client Testimonials" style={{ backgroundColor: bg('testimonials')}}>
+        <section aria-label={t.accessibility?.testimonialsSection} style={{ backgroundColor: bg('testimonials')}}>
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.53), transparent)' }} />
           <div className="mx-auto max-w-7xl px-6 py-32">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.09)} className="mb-14 text-center">
@@ -945,7 +949,7 @@ export default function HomePage() {
 
         {/* ── PARTNERS — scrolling logo strip, white bg bracketed by gold lines ── */}
         {isSectionVisible('partners') && (
-        <section aria-label="Partner Companies" style={{ backgroundColor: bg('partners')}} className="relative">
+        <section aria-label={t.accessibility?.partnersSection} style={{ backgroundColor: bg('partners')}} className="relative">
           <div style={{ height: 2, boxShadow: '0 0 12px rgba(var(--vk-gold-rgb), 0.6)', background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 1), transparent)' }} />
           <div className="mx-auto max-w-6xl px-6 py-20">
             <p className="mb-12 text-center text-sm md:text-base font-semibold uppercase tracking-[0.32em]" style={{ color: C.gold }}>
@@ -959,13 +963,13 @@ export default function HomePage() {
 
         {/* ── CTA — charcoal bg ── */}
         {isSectionVisible('cta') && (
-        <section aria-label="Call to Action" className="relative overflow-hidden py-36" style={{ backgroundColor: bg('cta')}}>
+        <section aria-label={t.accessibility?.ctaSection} className="relative overflow-hidden py-36" style={{ backgroundColor: bg('cta')}}>
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 80% 70% at 50% 50%, rgba(var(--vk-green-rgb), 0.28) 0%, transparent 65%)` }} />
           <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(var(--vk-gold-rgb), 0.33), transparent)', position: 'absolute', top: 0, left: 0, right: 0 }} />
 
           <div className="relative z-10 mx-auto max-w-3xl px-6 text-center">
             <motion.div initial="hidden" whileInView="show" viewport={vp} variants={stagger(0.11)}>
-              <motion.div variants={mv.fadeIn()}><SectionLabel dark={isDark('cta')}>{t.cta?.label || 'Get Started'}</SectionLabel></motion.div>
+              <motion.div variants={mv.fadeIn()}><SectionLabel dark={isDark('cta')}>{t.cta.label}</SectionLabel></motion.div>
               <div className="overflow-hidden mb-6">
                 <motion.h2 variants={mv.clipReveal(0.05)} style={{ fontFamily: 'Cinzel, serif', fontSize: 'clamp(2rem, 4.8vw, 3rem)', color: fg('cta'), lineHeight: 1.16 }}>
                   {cms('ctaHeading', t.cta?.heading || 'Ready to Start Your Project?')}
