@@ -26,6 +26,10 @@ import PropertyDetailsPage from '/src/pages/PropertyDetailsPage.jsx'; import Con
 import ResetPassword from '/src/pages/ResetPassword.jsx'; import Navbar from '/src/components/Navbar.jsx'; import '/src/index.css';
 import ConstructionPage from '/src/pages/ConstructionPage.jsx'; import LoginPage from '/src/pages/LoginPage.jsx'; import RegisterPage from '/src/pages/RegisterPage.jsx';
 import PropertyCard from '/src/components/PropertyCard.jsx'; import {GoogleOAuthProvider} from '@react-oauth/google';
+import {ThemeProvider} from '/src/contexts/ThemeContext.jsx'; import {ChatProvider} from '/src/contexts/ChatContext.jsx';
+import SettingsPage from '/src/pages/SettingsPage.jsx'; import FavouritesPage from '/src/pages/FavouritesPage.jsx'; import ForgotPassword from '/src/pages/ForgotPassword.jsx';
+import RenovationPage from '/src/pages/RenovationPage.jsx'; import InteriorDesignPage from '/src/pages/InteriorDesignPage.jsx';
+import ProtectedRoute from '/src/components/ProtectedRoute.jsx'; import HomePage from '/src/pages/HomePage.jsx'; import AboutPage from '/src/pages/AboutPage.jsx';
 const e=React.createElement;
 const card=(extra)=>({district:'Kadıköy',address:'Fixture Sokak 1',status:'Available',beds:2,baths:1,sqm:90,images:[],...extra});
 const CARDS=[card({_id:'c1',title:'Rent Fixture',listingType:'Rent',propertyType:'Apartment',price:2500,priceLabel:'$'}),
@@ -33,8 +37,8 @@ const CARDS=[card({_id:'c1',title:'Rent Fixture',listingType:'Rent',propertyType
   card({_id:'c3',title:'On Request Fixture',listingType:'Rent',propertyType:'Office',price:null,priceLabel:''})];
 const Switcher=()=>{const {setLanguage}=useLanguage();return e('div',{id:'switcher'},['en','tr','ar','de','ru','ur'].map(l=>e('button',{key:l,id:'set-'+l,onClick:()=>setLanguage(l)},l)))};
 const screen=new URLSearchParams(location.search).get('screen');
-const entry={details:'/properties/p1',contact:'/contact',reset:'/reset-password?token=abc',resetNoToken:'/reset-password',navbar:'/',construction:'/construction',login:'/login',register:'/register',cards:'/cards'}[screen];
-createRoot(document.getElementById('root')).render(e(GoogleOAuthProvider,{clientId:'fixture-client'},e(MemoryRouter,{initialEntries:[entry]},e(LanguageProvider,null,e(AuthProvider,null,e(FavouritesProvider,null,
+const entry={details:'/properties/p1',contact:'/contact',reset:'/reset-password?token=abc',resetNoToken:'/reset-password',navbar:'/',construction:'/construction',login:'/login',register:'/register',cards:'/cards',settings:'/settings',favourites:'/favourites',forgot:'/forgot-password',renovation:'/renovation',interior:'/interior-design',home:'/home',about:'/about'}[screen];
+createRoot(document.getElementById('root')).render(e(GoogleOAuthProvider,{clientId:'fixture-client'},e(MemoryRouter,{initialEntries:[entry]},e(LanguageProvider,null,e(AuthProvider,null,e(ThemeProvider,null,e(ChatProvider,null,e(FavouritesProvider,null,
   e(Switcher),e(ToastContainer),
   e(Routes,null,
     e(Route,{path:'/properties/:id',element:e(PropertyDetailsPage)}),
@@ -44,7 +48,14 @@ createRoot(document.getElementById('root')).render(e(GoogleOAuthProvider,{client
     e(Route,{path:'/login',element:e(LoginPage)}),
     e(Route,{path:'/register',element:e(RegisterPage)}),
     e(Route,{path:'/cards',element:e('div',{id:'cards'},CARDS.map(p=>e(PropertyCard,{key:p._id,property:p})))}),
-    e(Route,{path:'/',element:e(Navbar)}))))))));
+    e(Route,{path:'/settings',element:e(ProtectedRoute,null,e(SettingsPage))}),
+    e(Route,{path:'/favourites',element:e(ProtectedRoute,null,e(FavouritesPage))}),
+    e(Route,{path:'/forgot-password',element:e(ForgotPassword)}),
+    e(Route,{path:'/renovation',element:e(RenovationPage)}),
+    e(Route,{path:'/interior-design',element:e(InteriorDesignPage)}),
+    e(Route,{path:'/home',element:e(HomePage)}),
+    e(Route,{path:'/about',element:e(AboutPage)}),
+    e(Route,{path:'/',element:e(Navbar)}))))))))));
 </script></body></html>`
 
 before(async () => {
@@ -104,17 +115,26 @@ const PROPERTY = {
 // A canned reply for an auth route, or 'abort' for a request that never gets one.
 const answer = (route, reply) => (reply === 'abort' ? route.abort() : route.fulfill(reply || { status: 200, json: { success: true } }))
 
-async function open(t, screen, { language = 'tr', resetReply, loginReply, registerReply, property = PROPERTY } = {}) {
+// A signed-in visitor, for the screens that need one.
+const USER = { _id: 'fixture-user', role: 'user', name: 'Fixture Visitor', email: 'visitor@example.test', themePreference: 'default', createdAt: '2025-01-02T12:00:00Z' }
+
+// `replies` is read on every request, so a test can change what the server
+// says between two submissions without reloading the page.
+async function open(t, screen, { language = 'tr', resetReply, loginReply, registerReply, property = PROPERTY, user = null, replies = {}, palettes = {} } = {}) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   page.setDefaultTimeout(15000)
   t.after(() => page.close())
   page.on('pageerror', (error) => console.error('Fixture page error:', error.message))
 
-  await page.addInitScript((lang) => {
+  await page.addInitScript(({ lang, user }) => {
     localStorage.setItem('vk_lang', lang)
     localStorage.setItem('vk_lang_explicit', '1')
     localStorage.setItem('vk_lang_default_migrated', '1')
-  }, language)
+    if (user) {
+      localStorage.setItem('varlikent_token', 'isolated-fixture-token')
+      localStorage.setItem('varlikent_user', JSON.stringify(user))
+    }
+  }, { lang: language, user })
 
   const calls = []
   await page.route('**/*', async (route) => {
@@ -126,6 +146,14 @@ async function open(t, screen, { language = 'tr', resetReply, loginReply, regist
     if (path === '/properties/p1') return route.fulfill({ json: { success: true, property } })
     if (path === '/auth/login') return answer(route, loginReply)
     if (path === '/auth/register') return answer(route, registerReply)
+    if (path === '/auth/me') return route.fulfill({ json: { user } })
+    if (path === '/users/me/profile') return answer(route, replies.profile || { status: 200, json: { success: true, user } })
+    if (path === '/users/me/password') return answer(route, replies.password)
+    if (path === '/contact') return answer(route, replies.contact)
+    if (path === '/about') return route.fulfill({ json: { success: true, about: replies.about || null } })
+    if (path === '/users/favourites') return route.fulfill({ json: { favourites: [] } })
+    if (path === '/chat/conversations') return route.fulfill({ json: { conversations: [] } })
+    if (path.startsWith('/studio-palette/')) return route.fulfill({ json: { success: true, palette: palettes[path.split('/').pop()] || null } })
     if (path === '/properties') return route.fulfill({ json: { success: true, properties: [] } })
     if (path.startsWith('/page-content/')) return route.fulfill({ json: { fields: {}, sections: {} } })
     if (path === '/auth/reset-password') {
@@ -136,6 +164,15 @@ async function open(t, screen, { language = 'tr', resetReply, loginReply, regist
 
   await page.goto(`${base}${FIXTURE}?screen=${screen}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
   return { page, calls }
+}
+
+// What every account screen (login, register, password reset, settings,
+// favourites) must report: its own translated tab title, the site description
+// in the visitor's language, and a request not to be indexed.
+async function expectAccountMetadata(page, lang, title) {
+  await expect.poll(() => page.title()).toBe(`${title} | VarliKent`)
+  assert.equal(await page.locator('meta[name="description"]').getAttribute('content'), translations[lang].seoDescriptions.site)
+  assert.equal(await page.locator('meta[name="robots"]').getAttribute('content'), 'noindex, nofollow')
 }
 
 const fill = (template, values) => Object.entries(values).reduce((text, [k, v]) => text.replace(`{${k}}`, v), template)
@@ -236,6 +273,7 @@ for (const lang of ['en', 'tr', 'ar', 'de', 'ru', 'ur']) {
     const r = translations[lang].resetPasswordPage
 
     await expect(page.getByRole('heading', { name: r.title })).toBeVisible({ timeout: 45000 })
+    await expectAccountMetadata(page, lang, r.title)
     await expect(page.getByLabel(r.newPassword)).toBeVisible()
     await expect(page.getByLabel(r.confirmPassword)).toBeVisible()
     await expect(page.getByRole('button', { name: r.resetButton })).toBeVisible()
@@ -296,6 +334,9 @@ test('navbar landmarks and the mobile language heading are translated', async (t
 // were verified in Turkish while German, Russian and Urdu fell back to English.
 const LANGS = ['en', 'tr', 'ar', 'de', 'ru', 'ur']
 const direction = (lang) => (['ar', 'ur'].includes(lang) ? 'rtl' : 'ltr')
+// What the fixture server says in its `message`. Deliberately not a sentence
+// from any catalogue, so "it is not on the page" cannot pass by coincidence.
+const SERVER_TEXT = 'RAW-SERVER-SENTENCE-9f3a'
 
 // textContent, not innerText: it includes sections still waiting for their
 // scroll-in animation, and is not altered by CSS text-transform.
@@ -383,8 +424,20 @@ for (const lang of LANGS) {
     const tl = translations[lang]
     const rental = { ...PROPERTY, listingType: 'Rent', price: 3200, priceLabel: '€' }
 
-    const { page } = await open(t, 'details', { language: lang, property: rental })
+    const { page } = await open(t, 'details', {
+      language: lang,
+      property: rental,
+      replies: { contact: { status: 500, json: { success: false, message: SERVER_TEXT } } },
+    })
     await expect(page.getByRole('heading', { name: tl.propertyDetails.aboutTitle })).toBeVisible({ timeout: 45000 })
+
+    // A message that the server rejects is reported from the catalogue.
+    await page.getByPlaceholder(tl.contactPage.namePlaceholder).fill('Fixture Visitor')
+    await page.getByPlaceholder(tl.forgotPasswordPage.emailLabel).fill('visitor@example.test')
+    await page.getByPlaceholder(tl.contactPage.messagePlaceholder).fill('Is this still available?')
+    await page.getByRole('button', { name: tl.contactPage.sendBtn, exact: true }).click()
+    await expect(page.getByText(tl.propertyDetails.messageFailed)).toBeVisible()
+    assert.ok(!(await page.locator('body').innerText()).includes(SERVER_TEXT), 'the server message is not shown')
     const rent = tl.price.perMonth.replace('{price}', `€${await amountIn(page, lang, 3200)}`)
     await expect(page.getByText(rent, { exact: true })).toBeVisible()
     await expect(page.getByText(tl.enums.listingType.Rent, { exact: true }).first()).toBeVisible()
@@ -423,6 +476,7 @@ for (const lang of LANGS) {
     await expect(page.getByRole('heading', { name: a.signInTitle })).toBeVisible({ timeout: 45000 })
     await expect(page.locator('html')).toHaveAttribute('dir', direction(lang))
     await expect(page.getByPlaceholder(translations[lang].contactPage.emailPlaceholder)).toBeVisible()
+    await expectAccountMetadata(page, lang, a.signInTitle)
 
     await submitLogin(page, a)
     await expect(page.getByText(a.invalidCredentials)).toBeVisible()
@@ -437,6 +491,7 @@ for (const lang of LANGS) {
     const a = translations[lang].auth
 
     await expect(page.getByRole('heading', { name: a.createTitle })).toBeVisible({ timeout: 45000 })
+    await expectAccountMetadata(page, lang, a.createTitle)
     await expect(page.getByPlaceholder(translations[lang].contactPage.emailPlaceholder)).toBeVisible()
     await page.getByLabel(a.fullName, { exact: true }).fill('Fixture Visitor')
     await page.getByLabel(a.email, { exact: true }).fill('taken@example.test')
@@ -465,3 +520,205 @@ for (const [name, loginReply, key, serverText] of [
     }
   })
 }
+
+// ══════════ Step 2B — settings errors, studio palettes, account-screen titles ══════════
+
+// ── Settings ─────────────────────────────────────────────────────────────
+const serverSays = (status) => ({ status, json: { success: false, message: SERVER_TEXT } })
+
+for (const lang of LANGS) {
+  test(`settings: title and every profile/password failure are reported in ${lang}`, async (t) => {
+    const replies = {}
+    const { page } = await open(t, 'settings', { language: lang, user: USER, replies })
+    const s = translations[lang].settingsPage
+
+    await expect(page.locator('#settings-name')).toBeVisible({ timeout: 45000 })
+    await expect(page.locator('html')).toHaveAttribute('dir', direction(lang))
+    await expectAccountMetadata(page, lang, s.accountSettings)
+
+    // The appearance picker names every theme in the visitor's language.
+    for (const theme of Object.values(translations[lang].themes)) {
+      await expect(page.getByText(theme.label, { exact: true })).toBeVisible()
+      await expect(page.getByText(theme.description, { exact: true })).toBeVisible()
+    }
+    if (lang !== 'en') {
+      const picker = await page.locator('body').innerText()
+      for (const theme of Object.values(translations.en.themes)) {
+        assert.ok(!picker.includes(theme.label) && !picker.includes(theme.description), `${lang}: English theme "${theme.label}" is still shown`)
+      }
+    }
+
+    await page.locator('#settings-current-password').fill('old-password')
+    await page.locator('#settings-new-password').fill('new-password-1')
+    await page.locator('#settings-confirm-password').fill('new-password-1')
+    for (const [reply, key] of [
+      [serverSays(401), 'toastCurrentPasswordIncorrect'],
+      [serverSays(400), 'toastPasswordNotSet'],
+      [serverSays(500), 'toastPasswordFailed'],
+      ['abort', 'toastNetworkError'],
+    ]) {
+      replies.password = reply
+      await page.getByRole('button', { name: s.updatePassword, exact: true }).click()
+      await expect(page.getByText(s[key]).first()).toBeVisible()
+    }
+
+    for (const [reply, key] of [
+      [serverSays(400), 'toastEmailInUse'],
+      [serverSays(403), 'toastEmailLocked'],
+      [serverSays(500), 'toastProfileFailed'],
+    ]) {
+      replies.profile = reply
+      await page.getByRole('button', { name: s.saveChanges, exact: true }).click()
+      await expect(page.getByText(s[key]).first()).toBeVisible()
+    }
+
+    assert.ok(!(await page.locator('body').innerText()).includes(SERVER_TEXT), 'the server message is never shown')
+  })
+}
+
+// ── Favourites and forgot password ───────────────────────────────────────
+for (const lang of LANGS) {
+  test(`favourites and forgot-password set a translated, non-indexed title in ${lang}`, async (t) => {
+    const favourites = await open(t, 'favourites', { language: lang, user: USER })
+    const f = translations[lang].favouritesPage
+    await expect(favourites.page.getByRole('heading', { level: 1, name: f.heading })).toBeVisible({ timeout: 45000 })
+    await expectAccountMetadata(favourites.page, lang, f.heading)
+    await expect(favourites.page.locator('html')).toHaveAttribute('dir', direction(lang))
+
+    const forgot = await open(t, 'forgot', { language: lang })
+    const p = translations[lang].forgotPasswordPage
+    await expect(forgot.page.getByRole('heading', { level: 1, name: p.title })).toBeVisible({ timeout: 45000 })
+    await expectAccountMetadata(forgot.page, lang, p.title)
+  })
+}
+
+test('a page left for an account screen hands over its title and its robots tag', async (t) => {
+  // Same document, two routes: the public page indexes, the account page does not.
+  const { page } = await open(t, 'construction', { language: 'de' })
+  await expect(page.getByRole('heading', { level: 1, name: translations.de.constructionPage.h1 })).toBeAttached({ timeout: 45000 })
+  assert.equal(await page.locator('meta[name="robots"]').getAttribute('content'), 'index, follow')
+  assert.equal(await page.title(), `${translations.de.seo.construction} | VarliKent`)
+})
+
+// ── Studio palettes ──────────────────────────────────────────────────────
+const paletteNames = (lang) => Object.values(translations[lang].studioPalette).flatMap((list) => Object.values(list))
+
+// Everything a visitor can read a palette name from: each piece of page text
+// and each swatch tooltip (Renovation shows its wall and floor finishes only
+// there), one per line — neighbouring swatch labels have nothing between them
+// in the DOM, and must not read as one long word.
+const paletteSurface = (page) => page.evaluate(() => {
+  const pieces = []
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+  while (walker.nextNode()) pieces.push(walker.currentNode.data)
+  for (const el of document.querySelectorAll('[title]')) pieces.push(el.getAttribute('title'))
+  return pieces.join('\n')
+})
+
+// As a whole name: "Beton" must not be found inside "Sichtbeton".
+const mentions = (surface, name) =>
+  new RegExp(`(^|[^\\p{L}])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\p{L}])`, 'u').test(surface)
+
+const STUDIO_PAGES = { renovation: 'renovationPage', interior: 'interiorPage' }
+
+for (const [screen, section] of Object.entries(STUDIO_PAGES)) {
+  for (const lang of LANGS) {
+    test(`${screen}: all 18 default palette names render in ${lang}`, async (t) => {
+      const { page } = await open(t, screen, { language: lang })
+      await expect(page.getByRole('heading', { level: 1, name: translations[lang][section].h1 })).toBeAttached({ timeout: 45000 })
+      await expect(page.locator('html')).toHaveAttribute('dir', direction(lang))
+
+      const surface = await paletteSurface(page)
+      const own = paletteNames(lang)
+      assert.equal(own.length, 18)
+      for (const name of own) assert.ok(mentions(surface, name), `${lang} ${screen}: "${name}" is not rendered`)
+      if (lang !== 'en') {
+        for (const name of paletteNames('en')) assert.ok(!mentions(surface, name), `${lang} ${screen}: English "${name}" is still rendered`)
+      }
+    })
+  }
+}
+
+test('studio palette: names follow a language change, and an admin-saved list is shown as typed', async (t) => {
+  const { page } = await open(t, 'interior')
+  await expect(page.getByRole('heading', { level: 1, name: translations.tr.interiorPage.h1 })).toBeAttached({ timeout: 45000 })
+  for (const lang of ['de', 'ar']) {
+    await page.click(`#set-${lang}`)
+    await expect(page.locator('html')).toHaveAttribute('dir', direction(lang))
+    await expect.poll(async () => mentions(await paletteSurface(page), translations[lang].studioPalette.materials.agedBrass)).toBe(true)
+    const surface = await paletteSurface(page)
+    for (const name of paletteNames(lang)) assert.ok(mentions(surface, name), `${lang}: "${name}"`)
+    // "Beton" is concrete in both Turkish and German, so only names that differ can be gone.
+    const turkishOnly = paletteNames('tr').filter((name) => !paletteNames(lang).includes(name))
+    for (const name of turkishOnly) assert.ok(!mentions(surface, name), `${lang}: Turkish "${name}" is gone`)
+  }
+
+  // Only the materials were saved by an admin; the two finish lists were not.
+  const saved = await open(t, 'renovation', {
+    palettes: { renovation: { materials: [{ name: 'Özel Traverten', color: '#c8b8a0', image: '' }] } },
+  })
+  await expect(saved.page.getByRole('heading', { level: 1, name: translations.tr.renovationPage.h1 })).toBeAttached({ timeout: 45000 })
+  await expect.poll(async () => mentions(await paletteSurface(saved.page), 'Özel Traverten')).toBe(true)
+  const surface = await paletteSurface(saved.page)
+  const tr = translations.tr.studioPalette
+  for (const name of Object.values(tr.materials)) assert.ok(!mentions(surface, name), `default material "${name}" was replaced`)
+  for (const name of [...Object.values(tr.wallFinishes), ...Object.values(tr.floorFinishes)]) assert.ok(mentions(surface, name), `default finish "${name}" is still translated`)
+})
+
+// ── Homepage sample testimonials ─────────────────────────────────────────
+for (const lang of LANGS) {
+  test(`homepage: the testimonials shown when no review exists are in ${lang}`, async (t) => {
+    // The fixture server returns no reviews, which is exactly when these appear.
+    const { page } = await open(t, 'home', { language: lang })
+    const items = translations[lang].testimonials.items
+    await expect.poll(async () => (await bodyText(page)).includes(items[0].text), { timeout: 45000 }).toBe(true)
+    await expect(page.locator('html')).toHaveAttribute('dir', direction(lang))
+
+    const text = await bodyText(page)
+    for (const item of items) {
+      assert.ok(text.includes(item.text) && text.includes(item.role) && text.includes(item.name), `${lang}: "${item.name}" testimonial is not rendered`)
+    }
+    if (lang !== 'en') {
+      for (const item of translations.en.testimonials.items) assert.ok(!text.includes(item.text), `${lang}: English testimonial is still rendered`)
+    }
+    assert.equal(await page.title(), `${translations[lang].seo.home} | VarliKent`)
+    assert.equal(await metaDescription(page), translations[lang].seoDescriptions.home)
+  })
+}
+
+// ── About page defaults ──────────────────────────────────────────────────
+const aboutDefaults = (lang) => {
+  const copy = translations[lang].aboutPage
+  return [copy.heroLabel, copy.heroHeading, copy.heroSubtext, copy.missionLabel, copy.missionHeading,
+    copy.missionParagraph1, copy.missionParagraph2, copy.teamLabel, copy.teamHeading, ...copy.stats, ...copy.teamRoles]
+}
+
+for (const lang of LANGS) {
+  test(`about: the built-in text shown when nothing is saved is in ${lang}`, async (t) => {
+    const { page } = await open(t, 'about', { language: lang })
+    const copy = translations[lang].aboutPage
+    await expect(page.getByRole('heading', { level: 1, name: copy.heroHeading })).toBeAttached({ timeout: 45000 })
+    await expect(page.locator('html')).toHaveAttribute('dir', direction(lang))
+
+    const text = await bodyText(page)
+    for (const string of aboutDefaults(lang)) assert.ok(text.includes(string), `${lang}: "${string}" is not rendered`)
+    if (lang !== 'en') {
+      for (const string of aboutDefaults('en')) assert.ok(!text.includes(string), `${lang}: English "${string}" is still rendered`)
+    }
+    assert.equal(await page.title(), `${translations[lang].seo.about} | VarliKent`)
+  })
+}
+
+test('about: a saved record still replaces the built-in text, field by field', async (t) => {
+  const saved = {
+    heroHeading: { sourceLang: 'tr', tr: 'Kayıtlı Başlık', en: 'Saved Heading' },
+    stats: [{ value: '7', label: { sourceLang: 'tr', tr: 'Kayıtlı İstatistik', en: 'Saved Stat' } }],
+  }
+  const { page } = await open(t, 'about', { replies: { about: saved } })
+  await expect(page.getByRole('heading', { level: 1, name: 'Kayıtlı Başlık' })).toBeAttached({ timeout: 45000 })
+  const text = await bodyText(page)
+  const tr = translations.tr.aboutPage
+  assert.ok(text.includes('Kayıtlı İstatistik'))
+  assert.ok(!text.includes(tr.heroHeading) && !text.includes(tr.stats[0]), 'the saved fields replaced their defaults')
+  assert.ok(text.includes(tr.missionHeading) && text.includes(tr.teamHeading), 'fields the record lacks keep their translated default')
+})

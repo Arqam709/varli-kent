@@ -17,6 +17,8 @@ import translations from '../src/locales/translations.js'
 import { formatPrice } from '../src/lib/formatPrice.js'
 import { localeFor } from '../src/lib/locale.js'
 import { authErrorKey } from '../src/lib/authErrors.js'
+import { settingsErrorKey } from '../src/lib/settingsErrors.js'
+import { readdir } from 'node:fs/promises'
 import { siteMeta } from '../src/lib/useSeo.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -287,7 +289,7 @@ test('4. the site-wide default title and description follow the language, and st
   assert.match(hook, /title \? `\$\{title\} \| VarliKent` : site\.title/)
   assert.match(hook, /description \|\| site\.description/)
   assert.match(hook, /document\.title = site\.title/, 'leaving a page restores the localized default')
-  assert.match(hook, /\[title, description, image, path, type, jsonLd, language\]/)
+  assert.match(hook, /\[title, description, image, path, type, jsonLd, language, noindex\]/)
 })
 
 // ── 5. Sign-in and sign-up errors ──────────────────────────────────────────
@@ -359,4 +361,266 @@ test('5. Login and Register show the mapped message and never the response text'
 
   const context = await read('contexts/AuthContext.jsx')
   assert.equal((context.match(/return \{ success: false, message, error: err \}/g) || []).length, 2, 'login and register hand the error to the page')
+})
+
+// ── 6. Settings error toasts ───────────────────────────────────────────────
+test('6. a failed profile or password save maps to a translated message by status', () => {
+  assert.equal(settingsErrorKey('profile', http(400, { message: 'Email already in use' })), 'toastEmailInUse')
+  assert.equal(settingsErrorKey('profile', http(403, { message: 'The email address of a protected owner account cannot be changed here' })), 'toastEmailLocked')
+  assert.equal(settingsErrorKey('profile', http(500, { message: 'Internal Server Error' })), 'toastProfileFailed')
+  assert.equal(settingsErrorKey('profile', http(401, { message: 'Not authorized, invalid token' })), 'toastProfileFailed')
+  assert.equal(settingsErrorKey('profile', noResponse), 'toastNetworkError')
+
+  assert.equal(settingsErrorKey('password', http(401, { message: 'Current password is incorrect' })), 'toastCurrentPasswordIncorrect')
+  assert.equal(settingsErrorKey('password', http(400, { message: 'This account has no password yet. Use "Forgot password" to set one.' })), 'toastPasswordNotSet')
+  assert.equal(settingsErrorKey('password', http(500)), 'toastPasswordFailed')
+  assert.equal(settingsErrorKey('password', noResponse), 'toastNetworkError')
+  assert.equal(settingsErrorKey('password', undefined), 'toastPasswordFailed')
+
+  // The sentence the server sends never decides anything.
+  for (const message of ['Current password is incorrect', 'Mevcut şifre hatalı', '', undefined]) {
+    assert.equal(settingsErrorKey('password', http(401, { message })), 'toastCurrentPasswordIncorrect')
+  }
+})
+
+const SETTINGS_ERROR_KEYS = ['toastEmailInUse', 'toastEmailLocked', 'toastProfileFailed', 'toastCurrentPasswordIncorrect',
+  'toastPasswordNotSet', 'toastPasswordFailed', 'toastNetworkError']
+
+test('6. every message settingsErrorKey can return exists in all six languages, in its own words', async () => {
+  const source = await read('lib/settingsErrors.js')
+  const returned = new Set([...source.matchAll(/'(toast[a-zA-Z]+)'/g)].map((m) => m[1]))
+  assert.deepEqual([...returned].sort(), [...SETTINGS_ERROR_KEYS].sort())
+
+  for (const key of SETTINGS_ERROR_KEYS) {
+    for (const lang of LANGS) assert.ok(isText(get(lang, `settingsPage.${key}`)), `${lang}.settingsPage.${key}`)
+    for (const lang of OTHERS) assert.notEqual(get(lang, `settingsPage.${key}`), get('en', `settingsPage.${key}`), `${lang}.settingsPage.${key} is still English`)
+  }
+})
+
+test('6. SettingsPage shows the mapped message, and still makes the checks that keep the 400s unambiguous', async () => {
+  const source = await read('pages/SettingsPage.jsx')
+  assert.ok(source.includes("toast.error(s[settingsErrorKey('profile', err)])"))
+  assert.ok(source.includes("toast.error(s[settingsErrorKey('password', err)])"))
+  assert.doesNotMatch(source, /toast\.error\([^)]*\.message/, 'no raw message in a toast')
+  assert.match(source, /console\.log\('Profile update error:'/)
+  assert.match(source, /console\.log\('Password change error:'/)
+
+  // lib/settingsErrors.js reads "profile 400" as a taken address and "password
+  // 400" as an account with no password ONLY because the form rejects every
+  // other cause of those statuses before a request is sent.
+  assert.match(source, /if \(!profile\.name\.trim\(\)\) \{ toast\.error\(s\.toastNameEmpty\); return \}/)
+  assert.match(source, /if \(!pw\.currentPassword \|\| !pw\.newPassword \|\| !pw\.confirmPassword\) \{ toast\.error\(s\.toastPasswordFieldsRequired\); return \}/)
+  assert.match(source, /if \(pw\.newPassword !== pw\.confirmPassword\) \{ toast\.error\(s\.toastPasswordMismatch\); return \}/)
+  assert.match(source, /if \(pw\.newPassword\.length < 6\) \{ toast\.error\(s\.toastPasswordTooShort\); return \}/)
+})
+
+// ── 7. Property messages ───────────────────────────────────────────────────
+const sourceFiles = async (dir = '') => {
+  const entries = await readdir(join(here, '..', 'src', dir), { withFileTypes: true })
+  const nested = await Promise.all(entries.map((entry) => {
+    const rel = dir ? `${dir}/${entry.name}` : entry.name
+    if (entry.isDirectory()) return sourceFiles(rel)
+    return /\.jsx?$/.test(entry.name) ? [rel] : []
+  }))
+  return nested.flat()
+}
+
+test('7. the helper that passes a server sentence through is used by the agent portal only', async () => {
+  // readableError() returns the backend's own English message. That is the
+  // agent inbox's (untranslated, deferred) behaviour; no public screen may
+  // start using it.
+  const users = []
+  for (const file of await sourceFiles()) {
+    if (file === 'lib/propertyMessagingApi.js') continue
+    const source = await read(file)
+    if (/readableError|propertyMessagingApi/.test(source)) users.push(file)
+  }
+  assert.ok(users.length > 0, 'the agent inbox still uses it')
+  for (const file of users) assert.match(file, /(^|\/)Agent[A-Z]/, `${file} is not an agent-portal file`)
+})
+
+test('7. the public property message form reports failure from the catalogue', async () => {
+  const source = await read('pages/PropertyDetailsPage.jsx')
+  assert.match(source, /await api\.post\('\/contact', \{[\s\S]*?\}\)\s*toast\.success\(pd\.messageSent\)[\s\S]*?\} catch \{\s*toast\.error\(pd\.messageFailed\)/)
+  for (const lang of LANGS) assert.ok(isText(get(lang, 'propertyDetails.messageFailed')), lang)
+  for (const lang of OTHERS) assert.notEqual(get(lang, 'propertyDetails.messageFailed'), get('en', 'propertyDetails.messageFailed'), lang)
+})
+
+// ── 8. Studio palette defaults ─────────────────────────────────────────────
+const PALETTE_LISTS = { materials: 8, wallFinishes: 6, floorFinishes: 4 }
+const PALETTE_CONSTANTS = { materials: 'DEFAULT_MATERIALS', wallFinishes: 'DEFAULT_WALL_FINISHES', floorFinishes: 'DEFAULT_FLOOR_FINISHES' }
+const paletteIds = (source, constant) => {
+  const block = source.match(new RegExp(`const ${constant} = \\[([\\s\\S]*?)\\n\\]`))?.[1] || ''
+  return [...block.matchAll(/\{ id: '(\w+)', color: /g)].map((m) => m[1])
+}
+
+test('8. every default palette name is translated in all six languages', () => {
+  for (const [list, count] of Object.entries(PALETTE_LISTS)) {
+    const ids = Object.keys(translations.en.studioPalette[list])
+    assert.equal(ids.length, count, `en.studioPalette.${list}`)
+
+    for (const lang of LANGS) {
+      assert.deepEqual(Object.keys(translations[lang].studioPalette[list]), ids, `${lang}.studioPalette.${list} has the same ids`)
+      for (const id of ids) {
+        const name = translations[lang].studioPalette[list][id]
+        assert.ok(isText(name), `${lang}.studioPalette.${list}.${id}`)
+        if (lang === 'en') continue
+        assert.notEqual(name, translations.en.studioPalette[list][id], `${lang}.studioPalette.${list}.${id} is still English`)
+        if (SCRIPT[lang]) assert.match(name, SCRIPT[lang], `${lang}.studioPalette.${list}.${id} is not written in ${lang}`)
+      }
+    }
+  }
+  assert.equal(Object.values(PALETTE_LISTS).reduce((sum, n) => sum + n, 0), 18)
+})
+
+for (const file of ['pages/RenovationPage.jsx', 'pages/InteriorDesignPage.jsx']) {
+  test(`8. ${file} keeps ids and colours, and takes the default names from the shared catalogue`, async () => {
+    const source = await read(file)
+    for (const [list, constant] of Object.entries(PALETTE_CONSTANTS)) {
+      assert.deepEqual(paletteIds(source, constant), Object.keys(translations.en.studioPalette[list]), `${constant} matches studioPalette.${list}`)
+    }
+    assert.doesNotMatch(source, /\{ (name|label): '[^']+', color: /, 'no default carries a hard-coded name')
+    assert.match(source, /name: names\.materials\[id\]/)
+    assert.match(source, /label: names\.wallFinishes\[id\]/)
+    assert.match(source, /label: names\.floorFinishes\[id\]/)
+    assert.match(source, /useStudioPalette\('[a-z-]+', t\.studioPalette\)/)
+    // An admin-saved palette still wins, list by list.
+    assert.match(source, /materials: overrides\.materials \|\| defaults\.materials,/)
+    assert.match(source, /wallFinishes: overrides\.wallFinishes \|\| defaults\.wallFinishes,/)
+    assert.match(source, /floorFinishes: overrides\.floorFinishes \|\| defaults\.floorFinishes,/)
+  })
+}
+
+test('8. Renovation and Interior Design use the same ids and the same colours', async () => {
+  const renovation = await read('pages/RenovationPage.jsx')
+  const interior = await read('pages/InteriorDesignPage.jsx')
+  for (const constant of Object.values(PALETTE_CONSTANTS)) {
+    const block = (source) => source.match(new RegExp(`const ${constant} = \\[([\\s\\S]*?)\\n\\]`))[1].replace(/\s+/g, ' ')
+    assert.equal(block(renovation), block(interior), constant)
+  }
+})
+
+// ── 9. Account screens title themselves ────────────────────────────────────
+const ACCOUNT_PAGES = {
+  'pages/LoginPage.jsx': ['a.signInTitle', 'auth.signInTitle'],
+  'pages/RegisterPage.jsx': ['a.createTitle', 'auth.createTitle'],
+  'pages/ForgotPassword.jsx': ['p.title', 'forgotPasswordPage.title'],
+  'pages/ResetPassword.jsx': ['r.title', 'resetPasswordPage.title'],
+  'pages/SettingsPage.jsx': ['s.accountSettings', 'settingsPage.accountSettings'],
+  'pages/FavouritesPage.jsx': ['t.favouritesPage.heading', 'favouritesPage.heading'],
+}
+
+for (const [file, [expression, path]] of Object.entries(ACCOUNT_PAGES)) {
+  test(`9. ${file} sets a translated, non-indexed title`, async () => {
+    const source = await read(file)
+    assert.ok(source.includes(`useSeo({ title: ${expression}, language, noindex: true })`), `useSeo({ title: ${expression}, … })`)
+    assert.match(source, /import useSeo from '\.\.\/lib\/useSeo'/)
+    for (const lang of LANGS) assert.ok(isText(get(lang, path)), `${lang}.${path}`)
+    for (const lang of OTHERS) assert.notEqual(get(lang, path), get('en', path), `${lang}.${path} is still English`)
+  })
+}
+
+test('9. the account screens have distinct titles in every language, and noindex reaches the robots tag', async () => {
+  for (const lang of LANGS) {
+    const titles = Object.values(ACCOUNT_PAGES).map(([, path]) => get(lang, path))
+    assert.equal(new Set(titles).size, titles.length, `${lang} account titles are distinct`)
+  }
+  const hook = await read('lib/useSeo.js')
+  assert.match(hook, /setMeta\('robots', noindex \? 'noindex, nofollow' : 'index, follow'\)/)
+  assert.match(hook, /noindex = false/, 'indexing stays the default for the public pages')
+})
+
+// ── 10. Theme names in Settings ────────────────────────────────────────────
+test('10. every theme has a translated name and description in all six languages', async () => {
+  const context = await read('contexts/ThemeContext.jsx')
+  const ids = [...context.matchAll(/^\s+id: '([\w-]+)',$/gm)].map((m) => m[1])
+  assert.equal(ids.length, 8, 'every theme in ThemeContext was read')
+
+  for (const lang of LANGS) {
+    assert.deepEqual(Object.keys(translations[lang].themes), ids, `${lang}.themes covers every theme id`)
+    for (const id of ids) {
+      for (const field of ['label', 'description']) {
+        const value = translations[lang].themes[id][field]
+        assert.ok(isText(value), `${lang}.themes.${id}.${field}`)
+        if (lang === 'en') continue
+        assert.notEqual(value, translations.en.themes[id][field], `${lang}.themes.${id}.${field} is still English`)
+        if (SCRIPT[lang]) assert.match(value, SCRIPT[lang], `${lang}.themes.${id}.${field} is not written in ${lang}`)
+      }
+    }
+  }
+  // English is the wording the theme list itself carries (the admin screens still read it there).
+  for (const id of ids) assert.ok(context.includes(`label: '${translations.en.themes[id].label}'`), `en.themes.${id}.label matches ThemeContext`)
+})
+
+test('10. the Settings theme picker shows the translated name, keyed by the theme id', async () => {
+  const source = await read('pages/SettingsPage.jsx')
+  assert.ok(source.includes('const copy = t.themes[th.id] || th'))
+  assert.ok(source.includes('{copy.label}') && source.includes('{copy.description}'))
+  assert.match(source, /onClick=\{\(\) => setTheme\(th\.id\)\}/, 'the id is still what gets applied')
+})
+
+// ── 11. Sample testimonials on the homepage ────────────────────────────────
+test('11. the testimonials shown before any review exists are translated in all six languages', async () => {
+  const english = translations.en.testimonials.items
+  assert.equal(english.length, 3)
+
+  for (const lang of LANGS) {
+    const items = translations[lang].testimonials.items
+    assert.equal(items?.length, 3, `${lang}.testimonials.items`)
+    items.forEach((item, i) => {
+      for (const field of ['name', 'role', 'text']) assert.ok(isText(item[field]), `${lang}.testimonials.items[${i}].${field}`)
+      assert.equal(item.rating, 5)
+      if (lang === 'en') return
+      assert.notEqual(item.text, english[i].text, `${lang}.testimonials.items[${i}].text is still English`)
+      if (SCRIPT[lang]) assert.match(item.text, SCRIPT[lang], `${lang}.testimonials.items[${i}].text is not written in ${lang}`)
+    })
+  }
+
+  const source = await read('pages/HomePage.jsx')
+  assert.ok(source.includes('(reviews.length > 0 ? reviews.slice(0, 3) : t.testimonials.items)'))
+})
+
+// ── 12. About page defaults ────────────────────────────────────────────────
+const ABOUT_TEXT_KEYS = ['heroLabel', 'heroHeading', 'heroSubtext', 'missionLabel', 'missionHeading',
+  'missionParagraph1', 'missionParagraph2', 'teamLabel', 'teamHeading']
+
+test('12. the About page\'s built-in text is translated in all six languages', () => {
+  const english = translations.en.aboutPage
+  assert.equal(english.stats.length, 4)
+  assert.equal(english.teamRoles.length, 3)
+
+  for (const lang of LANGS) {
+    const copy = translations[lang].aboutPage
+    assert.deepEqual(Object.keys(copy).sort(), Object.keys(english).sort(), lang)
+    const strings = [...ABOUT_TEXT_KEYS.map((key) => [key, copy[key], english[key]]),
+      ...copy.stats.map((value, i) => [`stats[${i}]`, value, english.stats[i]]),
+      ...copy.teamRoles.map((value, i) => [`teamRoles[${i}]`, value, english.teamRoles[i]])]
+    assert.equal(strings.length, 16)
+    for (const [key, value, source] of strings) {
+      assert.ok(isText(value), `${lang}.aboutPage.${key}`)
+      if (lang === 'en') continue
+      assert.notEqual(value, source, `${lang}.aboutPage.${key} is still English`)
+      if (SCRIPT[lang]) assert.match(value, SCRIPT[lang], `${lang}.aboutPage.${key} is not written in ${lang}`)
+    }
+  }
+})
+
+test('12. AboutPage builds its defaults from the catalogue and lets the saved record win', async () => {
+  const source = await read('pages/AboutPage.jsx')
+  assert.match(source, /const defaults = useMemo\(\(\) => defaultsFor\(t\.aboutPage\), \[t\]\)/)
+  assert.match(source, /const data = \{ \.\.\.defaults, \.\.\.about \}/)
+  assert.match(source, /if \(res\.data\?\.about\) setAbout\(res\.data\.about\)/)
+  assert.doesNotMatch(source, /\bDEFAULT\./, 'no English default object is read')
+  for (const key of ABOUT_TEXT_KEYS) assert.ok(source.includes(`${key}: copy.${key},`), key)
+  assert.ok(source.includes('label: copy.stats[i]') && source.includes('role: copy.teamRoles[i]'))
+})
+
+// ── 13. Small labels in the shared chrome ──────────────────────────────────
+test('13. the navbar names the agent link from the catalogue, and the splash logo is labelled with the brand only', async () => {
+  const navbar = await read('components/Navbar.jsx')
+  assert.equal((navbar.match(/portal\.to === '\/admin\/dashboard' \? t\.nav\.dashboard : t\.settingsPage\.agentPanel/g) || []).length, 2)
+  for (const lang of LANGS) assert.ok(isText(get(lang, 'settingsPage.agentPanel')) && isText(get(lang, 'nav.dashboard')), lang)
+
+  const splash = await read('components/LoadingScreen.jsx')
+  assert.ok(splash.includes('aria-label="VarliKent"'))
 })

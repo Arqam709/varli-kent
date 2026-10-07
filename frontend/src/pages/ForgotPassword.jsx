@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom'
 import api from '../lib/api'
 import { assets } from '../assets/assets'
 import { useLanguage } from '../contexts/LanguageContext'
+import useSeo from '../lib/useSeo'
 
 const RESEND_COOLDOWN = 60
 
 const ForgotPassword = () => {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const p = t.forgotPasswordPage
+  useSeo({ title: p.title, language, noindex: true })
 
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)

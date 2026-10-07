@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { assets } from '../assets/assets'
 import api from '../lib/api'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -6,30 +6,26 @@ import { localizedText } from '../lib/localizedText'
 import useSeo from '../lib/useSeo'
 import { C } from '../contexts/ThemeContext'
 
-const DEFAULT = {
-  heroLabel: 'Our Story',
-  heroHeading: 'About Varlikent',
-  heroSubtext: "Istanbul's premier luxury real estate agency, connecting discerning buyers and renters with exceptional properties.",
-  missionLabel: 'Our Mission',
-  missionHeading: 'A refined approach to luxury real estate.',
-  missionParagraph1: "We bring together market insight, local expertise, and exceptional service to help buyers and sellers make confident, premium decisions across Istanbul's most desirable neighborhoods.",
-  missionParagraph2: "Founded with a passion for Istanbul's unique architectural heritage and its exciting modern developments, Varlikent has been a trusted partner for international investors, expatriates, and local families seeking their ideal property.",
+// What the page shows until /about answers, and whenever it cannot: the same
+// structure a saved record has, with its wording taken from the translations
+// (aboutPage) so it is never English for a visitor reading another language.
+const DEFAULT_STAT_VALUES = ['10+', '500+', '120+', '50+']
+const DEFAULT_TEAM_NAMES = ['Selin Kaya', 'Mert Demir', 'Lina Öztürk']
+
+const defaultsFor = (copy) => ({
+  heroLabel: copy.heroLabel,
+  heroHeading: copy.heroHeading,
+  heroSubtext: copy.heroSubtext,
+  missionLabel: copy.missionLabel,
+  missionHeading: copy.missionHeading,
+  missionParagraph1: copy.missionParagraph1,
+  missionParagraph2: copy.missionParagraph2,
   missionImage: '',
-  teamLabel: 'Our Team',
-  teamHeading: 'Meet Our Experts',
-  stats: [
-    { value: '10+', label: 'Years Experience' },
-    { value: '500+', label: 'Properties Listed' },
-    { value: '120+', label: 'Happy Clients' },
-    { value: '50+', label: 'Districts Covered' },
-  ],
-  team: [
-    { name: 'Selin Kaya', role: 'Senior Agent', avatar: '' },
-    { name: 'Mert Demir', role: 'Investment Advisor', avatar: '' },
-    { name: 'Lina Öztürk', role: 'Rental Specialist', avatar: '' },
-  ],
-  contentBlocks: [],
-}
+  teamLabel: copy.teamLabel,
+  teamHeading: copy.teamHeading,
+  stats: DEFAULT_STAT_VALUES.map((value, i) => ({ value, label: copy.stats[i] })),
+  team: DEFAULT_TEAM_NAMES.map((name, i) => ({ name, role: copy.teamRoles[i], avatar: '' })),
+})
 
 const FALLBACK_AVATARS = [assets.profile_img_1, assets.profile_img_2, assets.profile_img_3]
 
@@ -51,13 +47,17 @@ const AboutPage = () => {
     language,
     path: '/about',
   })
-  const [data, setData] = useState(DEFAULT)
+  const defaults = useMemo(() => defaultsFor(t.aboutPage), [t])
+  const [about, setAbout] = useState(null)
 
   useEffect(() => {
     api.get('/about').then(res => {
-      if (res.data?.about) setData({ ...DEFAULT, ...res.data.about })
+      if (res.data?.about) setAbout(res.data.about)
     }).catch(() => {})
   }, [])
+
+  // The saved record wins field by field; anything it lacks keeps its default.
+  const data = { ...defaults, ...about }
 
   
   const loc = (value, fallback = '') => localizedText(value, language, fallback)
@@ -74,13 +74,13 @@ const AboutPage = () => {
         <DarkGlow />
         <div className="relative z-10 container mx-auto px-6 text-center">
           <p className="text-xs uppercase tracking-[0.5em] font-medium mb-4" style={{ color: C.accent }}>
-            {loc(data.heroLabel, DEFAULT.heroLabel)}
+            {loc(data.heroLabel, defaults.heroLabel)}
           </p>
           <h1 style={{ fontFamily: 'Cinzel, serif', color: C.marble }} className="text-5xl lg:text-6xl font-bold leading-tight">
-            {loc(data.heroHeading, DEFAULT.heroHeading)}
+            {loc(data.heroHeading, defaults.heroHeading)}
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed" style={{ color: 'rgba(var(--vk-light-rgb, 246,243,237), 0.55)' }}>
-            {loc(data.heroSubtext, DEFAULT.heroSubtext)}
+            {loc(data.heroSubtext, defaults.heroSubtext)}
           </p>
         </div>
       </section>
@@ -113,16 +113,16 @@ const AboutPage = () => {
           <div className="grid gap-16 lg:grid-cols-2 items-center">
             <div>
               <p className="text-xs uppercase tracking-[0.4em] font-medium mb-4" style={{ color: C.accent }}>
-                {loc(data.missionLabel, DEFAULT.missionLabel)}
+                {loc(data.missionLabel, defaults.missionLabel)}
               </p>
               <h2 style={{ fontFamily: 'Cinzel, serif', color: C.marble }} className="text-4xl font-semibold leading-snug">
-                {loc(data.missionHeading, DEFAULT.missionHeading)}
+                {loc(data.missionHeading, defaults.missionHeading)}
               </h2>
               <p className="mt-6 text-lg leading-8" style={{ color: 'rgba(var(--vk-light-rgb, 246,243,237), 0.65)' }}>
-                {loc(data.missionParagraph1, DEFAULT.missionParagraph1)}
+                {loc(data.missionParagraph1, defaults.missionParagraph1)}
               </p>
               <p className="mt-4 leading-7" style={{ color: 'rgba(var(--vk-light-rgb, 246,243,237), 0.5)' }}>
-                {loc(data.missionParagraph2, DEFAULT.missionParagraph2)}
+                {loc(data.missionParagraph2, defaults.missionParagraph2)}
               </p>
             </div>
             <div className="overflow-hidden rounded-2xl shadow-2xl" style={{ border: '1px solid rgba(var(--vk-light-rgb, 246,243,237), 0.08)' }}>
@@ -218,10 +218,10 @@ const AboutPage = () => {
           <div className="container mx-auto px-6">
             <div className="mb-14 text-center">
               <p className="text-xs uppercase tracking-[0.4em] font-medium mb-4" style={{ color: C.accent }}>
-                {loc(data.teamLabel, DEFAULT.teamLabel)}
+                {loc(data.teamLabel, defaults.teamLabel)}
               </p>
               <h2 style={{ fontFamily: 'Cinzel, serif', color: C.charcoal }} className="text-4xl font-semibold">
-                {loc(data.teamHeading, DEFAULT.teamHeading)}
+                {loc(data.teamHeading, defaults.teamHeading)}
               </h2>
             </div>
             <div className={`grid gap-8 ${sortedTeam.length === 1 ? 'max-w-sm mx-auto' : sortedTeam.length === 2 ? 'md:grid-cols-2 max-w-2xl mx-auto' : 'md:grid-cols-3'}`}>

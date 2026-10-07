@@ -357,9 +357,23 @@ test('14C: private and admin screens are never given indexable metadata', async 
     ["LoginPage.jsx", "RegisterPage.jsx", "ForgotPassword.jsx", "ResetPassword.jsx",
      "SettingsPage.jsx", "FavouritesPage.jsx"].includes(name)
 
+  // The account screens title themselves so the browser tab is translated, but
+  // every such call must opt out of indexing and claim no canonical path. Admin
+  // and agent screens declare no metadata at all.
+  const mayTitleItself = (name) => !name.startsWith("Admin") && !name.startsWith("Agent")
+
   for (const [name, source] of Object.entries(sources)) {
     if (!isPrivate(name)) continue
-    assert.ok(!source.includes("useSeo"), `${name} is a private screen but declares SEO metadata`)
+    const calls = source.match(/useSeo\(\{[^}]*\}\)/g) || []
+    if (!mayTitleItself(name)) {
+      assert.ok(!source.includes("useSeo"), `${name} is a private screen but declares SEO metadata`)
+      continue
+    }
+    assert.equal((source.match(/useSeo\(/g) || []).length, calls.length, `${name} has a useSeo call this test cannot read`)
+    for (const call of calls) {
+      assert.match(call, /noindex: true/, `${name} is a private screen but its metadata is indexable`)
+      assert.doesNotMatch(call, /\bpath:/, `${name} is a private screen but claims a canonical URL`)
+    }
   }
 })
 

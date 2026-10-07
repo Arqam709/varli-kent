@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -11,31 +11,34 @@ import api from '../lib/api'
 import useSeo from '../lib/useSeo'
 
 
+// The built-in palette, used for any list an admin has not saved. Entries carry
+// an id, not a name: the name shown is studioPalette.<list>[id] from the
+// translations, shared with the other studio page so the wording matches.
 const DEFAULT_MATERIALS = [
-  { name: 'Calacatta Marble', color: '#f2ede8' },
-  { name: 'Raw Concrete', color: '#8a8a8a' },
-  { name: 'Dark Walnut', color: '#3d2b1f' },
-  { name: 'Aged Brass', color: C.gold },
-  { name: 'Nero Stone', color: '#1a1a1a' },
-  { name: 'Linen White', color: '#f8f5f0' },
-  { name: 'Forest Green', color: C.green },
-  { name: 'Midnight Navy', color: '#202a36' },
+  { id: 'calacattaMarble', color: '#f2ede8' },
+  { id: 'rawConcrete', color: '#8a8a8a' },
+  { id: 'darkWalnut', color: '#3d2b1f' },
+  { id: 'agedBrass', color: C.gold },
+  { id: 'neroStone', color: '#1a1a1a' },
+  { id: 'linenWhite', color: '#f8f5f0' },
+  { id: 'forestGreen', color: C.green },
+  { id: 'midnightNavy', color: '#202a36' },
 ]
 
 const DEFAULT_WALL_FINISHES = [
-  { label: 'Ivory', color: '#f5f0e8' },
-  { label: 'Warm Sand', color: '#e8ddd0' },
-  { label: 'Slate Blue', color: '#8fa3b1' },
-  { label: 'Sage', color: '#8fa88a' },
-  { label: 'Charcoal', color: '#3d4655' },
-  { label: 'Navy', color: '#202a36' },
+  { id: 'ivory', color: '#f5f0e8' },
+  { id: 'warmSand', color: '#e8ddd0' },
+  { id: 'slateBlue', color: '#8fa3b1' },
+  { id: 'sage', color: '#8fa88a' },
+  { id: 'charcoal', color: '#3d4655' },
+  { id: 'navy', color: '#202a36' },
 ]
 
 const DEFAULT_FLOOR_FINISHES = [
-  { label: 'Dark Oak', color: '#4a3728' },
-  { label: 'Light Ash', color: '#c4a882' },
-  { label: 'Concrete', color: '#8a8a8a' },
-  { label: 'Marble', color: '#efe9e1' },
+  { id: 'darkOak', color: '#4a3728' },
+  { id: 'lightAsh', color: '#c4a882' },
+  { id: 'concrete', color: '#8a8a8a' },
+  { id: 'marble', color: '#efe9e1' },
 ]
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
@@ -66,7 +69,7 @@ const sanitizedFinishes = (value, maximum) => {
   return value.map(item => ({ label: item.label.trim(), color: item.color }))
 }
 
-const useStudioPalette = (pageKey) => {
+const useStudioPalette = (pageKey, names) => {
   const [overrides, setOverrides] = useState({ materials: null, wallFinishes: null, floorFinishes: null })
   useEffect(() => {
     let active = true
@@ -83,10 +86,18 @@ const useStudioPalette = (pageKey) => {
       .catch(() => {})
     return () => { active = false }
   }, [pageKey])
+  // Memoised on the catalogue object, so the lists keep their identity between
+  // renders and only change when the language does.
+  const defaults = useMemo(() => ({
+    materials: DEFAULT_MATERIALS.map(({ id, color }) => ({ id, name: names.materials[id], color })),
+    wallFinishes: DEFAULT_WALL_FINISHES.map(({ id, color }) => ({ id, label: names.wallFinishes[id], color })),
+    floorFinishes: DEFAULT_FLOOR_FINISHES.map(({ id, color }) => ({ id, label: names.floorFinishes[id], color })),
+  }), [names])
+  // An admin-saved list is content and is shown exactly as it was typed.
   return {
-    materials: overrides.materials || DEFAULT_MATERIALS,
-    wallFinishes: overrides.wallFinishes || DEFAULT_WALL_FINISHES,
-    floorFinishes: overrides.floorFinishes || DEFAULT_FLOOR_FINISHES,
+    materials: overrides.materials || defaults.materials,
+    wallFinishes: overrides.wallFinishes || defaults.wallFinishes,
+    floorFinishes: overrides.floorFinishes || defaults.floorFinishes,
   }
 }
 
@@ -107,7 +118,8 @@ const RenovationStudio = ({ p, materials, wallFinishes, floorFinishes }) => {
   const moodLabels = p.lightingMoods
 
   useEffect(() => {
-    setMaterial(current => materials.find(item => item.name === current?.name && item.color === current?.color) || materials.at(0) || null)
+    // A built-in material is the same one after a language change even though its name is not.
+    setMaterial(current => materials.find(item => (item.id && item.id === current?.id) || (item.name === current?.name && item.color === current?.color)) || materials.at(0) || null)
     setWall(current => wallFinishes.some(item => item.color === current) ? current : (wallFinishes.at(1) || wallFinishes.at(0))?.color || '')
     setFloor(current => floorFinishes.some(item => item.color === current) ? current : floorFinishes.at(0)?.color || '')
   }, [materials, wallFinishes, floorFinishes])
@@ -237,7 +249,7 @@ export default function RenovationPage() {
   const { settings } = useSiteSettings()
   const [images, setImages] = useState([])
   const [loadingImages, setLoadingImages] = useState(true)
-  const { materials, wallFinishes, floorFinishes } = useStudioPalette('renovation')
+  const { materials, wallFinishes, floorFinishes } = useStudioPalette('renovation', t.studioPalette)
 
   useEffect(() => {
     api.get('/showroom/renovation')

@@ -83,7 +83,13 @@ export const setJsonLd = (data, targetDocument = document) => {
   el.textContent = serializeJsonLd(data)
 }
 
-const useSeo = ({ title, description, image, path, type = 'website', jsonLd, language } = {}) => {
+/*
+ * `noindex` is for the signed-in and account screens (login, register,
+ * settings, favourites, password reset). They still get a translated tab title
+ * and description, but tell crawlers to stay out — the same routes robots.txt
+ * already disallows.
+ */
+const useSeo = ({ title, description, image, path, type = 'website', jsonLd, language, noindex = false } = {}) => {
   useEffect(() => {
     const site = siteMeta(language)
     const t = title ? `${title} | VarliKent` : site.title
@@ -93,7 +99,7 @@ const useSeo = ({ title, description, image, path, type = 'website', jsonLd, lan
     document.title = t
 
     setMeta('description', d)
-    setMeta('robots', 'index, follow')
+    setMeta('robots', noindex ? 'noindex, nofollow' : 'index, follow')
 
     setMeta('og:title', t, 'property')
     setMeta('og:description', d, 'property')
@@ -117,7 +123,7 @@ const useSeo = ({ title, description, image, path, type = 'website', jsonLd, lan
       // page the visitor opens.
       setJsonLd(null)
     }
-  }, [title, description, image, path, type, jsonLd, language])
+  }, [title, description, image, path, type, jsonLd, language, noindex])
 }
 
 export default useSeo

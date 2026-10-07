@@ -7,6 +7,8 @@ import { useLanguage } from '../contexts/LanguageContext'
 import { localeFor } from '../lib/locale'
 import { useChat } from '../contexts/ChatContext'
 import api from '../lib/api'
+import { settingsErrorKey } from '../lib/settingsErrors'
+import useSeo from '../lib/useSeo'
 
 const Section = ({ title, description, children }) => (
   <div className="rounded-2xl border overflow-hidden" style={{ background: 'var(--t-surface)', borderColor: 'var(--t-border)', boxShadow: 'var(--t-shadow)' }}>
@@ -242,6 +244,7 @@ const AiChatHistorySection = () => {
 const SettingsPage = () => {
   const { language, t } = useLanguage()
   const s = t.settingsPage
+  useSeo({ title: s.accountSettings, language, noindex: true })
   const { user, portal, updateUser, logout } = useAuth()
   const { theme, setTheme, themes } = useTheme()
   const navigate = useNavigate()
@@ -281,7 +284,8 @@ const SettingsPage = () => {
       updateUser(res.data.user)
       toast.success(s.toastProfileUpdated)
     } catch (err) {
-      toast.error(err.response?.data?.message || s.toastProfileFailed)
+      console.log('Profile update error:', err.response?.data || err.message)
+      toast.error(s[settingsErrorKey('profile', err)])
     } finally {
       setProfileLoading(false)
     }
@@ -298,7 +302,8 @@ const SettingsPage = () => {
       toast.success(s.toastPasswordChanged)
       setPw({ currentPassword: '', newPassword: '', confirmPassword: '' })
     } catch (err) {
-      toast.error(err.response?.data?.message || s.toastPasswordFailed)
+      console.log('Password change error:', err.response?.data || err.message)
+      toast.error(s[settingsErrorKey('password', err)])
     } finally {
       setPwLoading(false)
     }
@@ -379,6 +384,9 @@ const SettingsPage = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {themes.map(th => {
               const active = theme === th.id
+              // The name and description shown are translations, keyed by the
+              // theme's id; the id is what is stored and applied.
+              const copy = t.themes[th.id] || th
               return (
                 <button
                   key={th.id}
@@ -397,8 +405,8 @@ const SettingsPage = () => {
                     <div style={{ height: '25%', background: th.preview.light }} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold truncate" style={{ color: 'var(--t-text)' }}>{th.label}</p>
-                    <p className="text-xs leading-snug mt-0.5" style={{ color: 'var(--t-muted)' }}>{th.description}</p>
+                    <p className="text-sm font-semibold truncate" style={{ color: 'var(--t-text)' }}>{copy.label}</p>
+                    <p className="text-xs leading-snug mt-0.5" style={{ color: 'var(--t-muted)' }}>{copy.description}</p>
                   </div>
                   {active && (
                     <svg className="ms-auto shrink-0 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--t-accent)' }}>

@@ -319,7 +319,7 @@ const Navbar = () => {
                         {/* Admins keep their translated "Dashboard"; the agent
                             portal has no translation key yet, so it falls back
                             to the label from AuthContext. */}
-                        {portal.to === '/admin/dashboard' ? t.nav.dashboard : portal.label}
+                        {portal.to === '/admin/dashboard' ? t.nav.dashboard : t.settingsPage.agentPanel}
                       </Link>
                     )}
                     <div className="my-1 border-t border-slate-100" />
@@ -569,7 +569,7 @@ const Navbar = () => {
                         onClick={closeMobile}
                         className="block py-3 text-sm text-white/60 hover:text-white transition-colors"
                       >
-                        {portal.to === '/admin/dashboard' ? t.nav.dashboard : portal.label}
+                        {portal.to === '/admin/dashboard' ? t.nav.dashboard : t.settingsPage.agentPanel}
                       </Link>
                     )}
                     <button

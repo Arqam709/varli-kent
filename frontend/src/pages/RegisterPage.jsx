@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { assets } from '../assets/assets'
 import { authErrorKey } from '../lib/authErrors'
+import useSeo from '../lib/useSeo'
 
 const RegisterPage = () => {
   const [name, setName] = useState('')
@@ -14,8 +15,9 @@ const RegisterPage = () => {
   const [loading, setLoading] = useState(false)
 
   const { register } = useAuth()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const a = t.auth
+  useSeo({ title: a.createTitle, language, noindex: true })
 
   const navigate = useNavigate()
 

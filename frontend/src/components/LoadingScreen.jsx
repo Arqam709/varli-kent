@@ -51,7 +51,7 @@ export default function LoadingScreen({ onComplete }) {
               viewBox="878 395 165 160"
               width="80"
               height="78"
-              aria-label="VarliKent logo mark"
+              aria-label="VarliKent"
             >
               {/* Green polygon 1 */}
               <polygon

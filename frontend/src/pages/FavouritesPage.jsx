@@ -4,10 +4,12 @@ import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import PropertyCard from '../components/PropertyCard'
+import useSeo from '../lib/useSeo'
 
 const FavouritesPage = () => {
   const { isLoggedIn } = useAuth()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  useSeo({ title: t.favouritesPage.heading, language, noindex: true })
   const [properties, setProperties] = useState([])
   const [loading, setLoading] = useState(true)
 

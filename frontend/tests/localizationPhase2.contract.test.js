@@ -46,11 +46,12 @@ const REMOVED = {
     'aria-label="Buy or Rent"', 'aria-label="Selected Projects"', 'aria-label="Statistics"',
     'aria-label="Client Testimonials"', 'aria-label="Partner Companies"', 'aria-label="Call to Action"',
     "title: 'Luxury Real Estate in Istanbul'", 'full-service property company —',
+    'Investment Executive', 'Executive Consultant', 'The team delivered exceptional service',
   ],
   'components/Navbar.jsx': [
     'aria-label="Main navigation"', 'aria-label="VarliKent home"', 'aria-label="More languages"',
     'aria-label="Open navigation menu"', 'aria-label="Navigation menu"', 'aria-label="Close menu"',
-    'aria-label={`Switch to',
+    'aria-label={`Switch to', 'portal.label',
   ],
   'pages/ContactPage.jsx': [
     'View on Maps', 'Office Hours', 'Monday – Friday', '>Saturday<', '>Sunday<', '>Closed<',
@@ -70,7 +71,7 @@ const REMOVED = {
     'placeholder="you@example.com"', 'response?.data?.message', 'toast.error(result.message)', 'error.message ||',
   ],
   'pages/RegisterPage.jsx': ['placeholder="you@example.com"', 'response?.data?.message', 'toast.error(result.message)'],
-  'pages/SettingsPage.jsx': ['alt="Avatar"'],
+  'pages/SettingsPage.jsx': ['alt="Avatar"', 'response?.data?.message', '{th.label}', '{th.description}'],
   'lib/formatPrice.js': ["'Price on request'", "'/mo'"],
   'components/three/ConstructionClipViewer.jsx': [
     'View Construction Model', 'Click to load', 'Drag to rotate', "label: 'Foundation'",
@@ -80,10 +81,18 @@ const REMOVED = {
     "label: 'Contemporary'", "label: 'Warm Modern'", "label: 'Coastal'", "label: 'Classic'",
     'Marble · Glass · Steel', 'Oak · Linen · Terracotta', "title: 'Interior Design Studio",
     'interior design studio creates bespoke',
+    'Calacatta Marble', 'Raw Concrete', 'Dark Walnut', 'Aged Brass', 'Nero Stone', 'Linen White', 'Forest Green', 'Midnight Navy',
+    "'Ivory'", 'Warm Sand', 'Slate Blue', "'Sage'", "'Charcoal'", "'Navy'", 'Dark Oak', 'Light Ash', "'Concrete'", "'Marble'",
   ],
   'pages/TeamPage.jsx': ['Architecture · Construction · Real Estate', "title: 'Our Team", 'Meet the Varlikent team'],
   'contexts/FavouritesContext.jsx': ['Please log in to save favourites.'],
-  'pages/AboutPage.jsx': ["title: 'About Varlikent", 'Learn about Varlikent'],
+  'pages/AboutPage.jsx': [
+    "title: 'About Varlikent", 'Learn about Varlikent',
+    "'Our Story'", "'Our Mission'", 'A refined approach to luxury real estate', 'We bring together market insight',
+    "'Meet Our Experts'", 'Years Experience', 'Properties Listed', 'Happy Clients', 'Districts Covered',
+    'Senior Agent', 'Investment Advisor', 'Rental Specialist',
+  ],
+  'components/LoadingScreen.jsx': ['logo mark'],
   'pages/ArchitecturePage.jsx': [
     "title: 'Architecture Studio", 'architecture studio designs bespoke',
     "label: 'Projects'", "label: 'Years'", "label: 'Awards'", "label: 'Satisfaction'",
@@ -95,7 +104,11 @@ const REMOVED = {
     'General Contracting', 'Site Survey', 'Reinforced Concrete Frames', 'Foundation & Groundwork',
     'Bosphorus Residences', 'Q3 2026', "|| 'Our Work'", "|| 'Construction Showcase'",
   ],
-  'pages/RenovationPage.jsx': ["title: 'Renovation Services", 'Varlikent renovates luxury homes', 'aria-label="Before and after reveal slider"'],
+  'pages/RenovationPage.jsx': [
+    "title: 'Renovation Services", 'Varlikent renovates luxury homes', 'aria-label="Before and after reveal slider"',
+    'Calacatta Marble', 'Raw Concrete', 'Dark Walnut', 'Aged Brass', 'Nero Stone', 'Linen White', 'Forest Green', 'Midnight Navy',
+    "'Ivory'", 'Warm Sand', 'Slate Blue', "'Sage'", "'Charcoal'", "'Navy'", 'Dark Oak', 'Light Ash', "'Concrete'", "'Marble'",
+  ],
   'pages/PrivacyPolicyPage.jsx': ["title: 'Privacy Policy", 'How Varlikent collects', '>Legal<'],
   'pages/PropertiesPage.jsx': ["title: 'Properties for Sale", 'Browse luxury apartments'],
 }

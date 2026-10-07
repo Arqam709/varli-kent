@@ -121,6 +121,11 @@ const translations = {
       "accountRemovalDesc": "To request account deletion, contact our support team. This page does not delete your account.",
       "contactSupport": "Contact support",
       avatarAlt: "Profile photo",
+      toastEmailInUse: "This email address is already in use.",
+      toastEmailLocked: "This account's email address cannot be changed here.",
+      toastCurrentPasswordIncorrect: "Current password is incorrect.",
+      toastPasswordNotSet: "This account has no password yet. Use \"Forgot password\" to set one.",
+      toastNetworkError: "Could not reach the server. Please check your connection and try again.",
     },
     common: {
       cancel: "Cancel",
@@ -355,6 +360,11 @@ const translations = {
       label: 'Client Stories',
       heading: 'What Our Clients Say',
       disclaimer: 'Website testimonials from verified clients',
+      items: [
+        { name: "Elif Acar", role: "Investment Executive", text: "The team delivered exceptional service from search to closing. The property selection and support were outstanding.", rating: 5 },
+        { name: "Can Yıldırım", role: "Executive Consultant", text: "Working with them made buying our home effortless. Professional guidance and excellent communication throughout.", rating: 5 },
+        { name: "Aylin Şener", role: "Architect", text: "A refined, thoughtful approach to property marketing. They helped us close quickly at the right price.", rating: 5 },
+      ],
     },
     cta: {
       heading: 'Ready to Start Your Project?',
@@ -1741,6 +1751,88 @@ const translations = {
       onRequest: "Price on request",
       perMonth: "{price}/mo",
     },
+    studioPalette: {
+      materials: {
+        calacattaMarble: "Calacatta Marble",
+        rawConcrete: "Raw Concrete",
+        darkWalnut: "Dark Walnut",
+        agedBrass: "Aged Brass",
+        neroStone: "Nero Stone",
+        linenWhite: "Linen White",
+        forestGreen: "Forest Green",
+        midnightNavy: "Midnight Navy",
+      },
+      wallFinishes: {
+        ivory: "Ivory",
+        warmSand: "Warm Sand",
+        slateBlue: "Slate Blue",
+        sage: "Sage",
+        charcoal: "Charcoal",
+        navy: "Navy",
+      },
+      floorFinishes: {
+        darkOak: "Dark Oak",
+        lightAsh: "Light Ash",
+        concrete: "Concrete",
+        marble: "Marble",
+      },
+    },
+    themes: {
+      default: {
+        label: "VarliKent Signature",
+        description: "Dark charcoal & forest green — the original",
+      },
+      forest: {
+        label: "Bosphorus Pine",
+        description: "Layered deep-forest greens & aged brass, alternating with warm ivory and parchment",
+      },
+      earth: {
+        label: "Espresso & Terracotta",
+        description: "Layered espresso-brown depths & terracotta, alternating with warm cream and parchment",
+      },
+      navy: {
+        label: "Bosphorus Midnight",
+        description: "Layered navy depths & vintage gold, alternating with cool cloud-white and pearl mist",
+      },
+      "gold-white": {
+        label: "Ivory & Antique Brass",
+        description: "Layered aubergine-espresso darks & antique brass, alternating with porcelain ivory and champagne",
+      },
+      "sand-travertine": {
+        label: "Sand & Travertine",
+        description: "Sun-bleached beige, oat-milk and travertine stone, warmed by soft rose-copper accents — a boutique Bodrum villa in daylight.",
+      },
+      "rosewood-blush": {
+        label: "Blush & Rosewood",
+        description: "A dusty-rose and antique rose-gold palette inspired by boutique-hotel marble lobbies — soft, muted, and unmistakably premium.",
+      },
+      "blush-ivory": {
+        label: "Blush & Ivory",
+        description: "Soft baby pink against crisp ivory white, finished with warm rose-gold accents — light, airy, and unmistakably feminine luxury.",
+      },
+    },
+    aboutPage: {
+      heroLabel: "Our Story",
+      heroHeading: "About Varlikent",
+      heroSubtext: "Istanbul's premier luxury real estate agency, connecting discerning buyers and renters with exceptional properties.",
+      missionLabel: "Our Mission",
+      missionHeading: "A refined approach to luxury real estate.",
+      missionParagraph1: "We bring together market insight, local expertise, and exceptional service to help buyers and sellers make confident, premium decisions across Istanbul's most desirable neighborhoods.",
+      missionParagraph2: "Founded with a passion for Istanbul's unique architectural heritage and its exciting modern developments, Varlikent has been a trusted partner for international investors, expatriates, and local families seeking their ideal property.",
+      teamLabel: "Our Team",
+      teamHeading: "Meet Our Experts",
+      stats: [
+        "Years Experience",
+        "Properties Listed",
+        "Happy Clients",
+        "Districts Covered",
+      ],
+      teamRoles: [
+        "Senior Agent",
+        "Investment Advisor",
+        "Rental Specialist",
+      ],
+    },
   },
 
   tr: {
@@ -1865,6 +1957,11 @@ const translations = {
       "accountRemovalDesc": "Hesabınızın silinmesini talep etmek için destek ekibimizle iletişime geçin. Bu sayfa hesabınızı silmez.",
       "contactSupport": "Destek ekibine ulaşın",
       avatarAlt: "Profil fotoğrafı",
+      toastEmailInUse: "Bu e-posta adresi zaten kullanılıyor.",
+      toastEmailLocked: "Bu hesabın e-posta adresi buradan değiştirilemez.",
+      toastCurrentPasswordIncorrect: "Mevcut şifre hatalı.",
+      toastPasswordNotSet: "Bu hesabın henüz bir şifresi yok. Şifre belirlemek için \"Şifremi Unuttum\" seçeneğini kullanın.",
+      toastNetworkError: "Sunucuya ulaşılamadı. Lütfen bağlantınızı kontrol edip tekrar deneyin.",
     },
     common: {
       cancel: "İptal",
@@ -2099,6 +2196,11 @@ resetPasswordPage: {
       label: 'Müşteri Hikayeleri',
       heading: 'Müşterilerimiz Ne Diyor',
       disclaimer: 'Doğrulanmış müşterilerden web sitesi referansları',
+      items: [
+        { name: "Elif Acar", role: "Yatırım Yöneticisi", text: "Ekip, arayıştan satışın tamamlanmasına kadar olağanüstü bir hizmet sundu. Mülk seçimi ve destek mükemmeldi.", rating: 5 },
+        { name: "Can Yıldırım", role: "Yönetici Danışman", text: "Onlarla çalışmak ev almamızı zahmetsiz hale getirdi. Baştan sona profesyonel rehberlik ve mükemmel iletişim.", rating: 5 },
+        { name: "Aylin Şener", role: "Mimar", text: "Gayrimenkul pazarlamasına özenli ve incelikli bir yaklaşım. Doğru fiyata hızlıca satış yapmamıza yardımcı oldular.", rating: 5 },
+      ],
     },
     cta: {
       heading: 'Projenize Başlamaya Hazır mısınız?',
@@ -3483,6 +3585,88 @@ resetPasswordPage: {
       onRequest: "Fiyat sorunuz",
       perMonth: "{price}/ay",
     },
+    studioPalette: {
+      materials: {
+        calacattaMarble: "Calacatta Mermeri",
+        rawConcrete: "Brüt Beton",
+        darkWalnut: "Koyu Ceviz",
+        agedBrass: "Eskitme Pirinç",
+        neroStone: "Nero Taş",
+        linenWhite: "Keten Beyazı",
+        forestGreen: "Orman Yeşili",
+        midnightNavy: "Gece Laciverti",
+      },
+      wallFinishes: {
+        ivory: "Fildişi",
+        warmSand: "Sıcak Kum",
+        slateBlue: "Arduvaz Mavisi",
+        sage: "Adaçayı Yeşili",
+        charcoal: "Antrasit",
+        navy: "Lacivert",
+      },
+      floorFinishes: {
+        darkOak: "Koyu Meşe",
+        lightAsh: "Açık Dişbudak",
+        concrete: "Beton",
+        marble: "Mermer",
+      },
+    },
+    themes: {
+      default: {
+        label: "VarliKent İmzası",
+        description: "Koyu antrasit ve orman yeşili — özgün tasarım",
+      },
+      forest: {
+        label: "Boğaz Çamı",
+        description: "Katmanlı koyu orman yeşilleri ve eskitme pirinç; sıcak fildişi ve parşömen tonlarıyla dönüşümlü",
+      },
+      earth: {
+        label: "Espresso ve Terakota",
+        description: "Katmanlı espresso kahvesi derinlikleri ve terakota; sıcak krem ve parşömen tonlarıyla dönüşümlü",
+      },
+      navy: {
+        label: "Boğaz Gece Yarısı",
+        description: "Katmanlı lacivert derinlikler ve vintage altın; serin bulut beyazı ve inci sisi tonlarıyla dönüşümlü",
+      },
+      "gold-white": {
+        label: "Fildişi ve Antik Pirinç",
+        description: "Katmanlı patlıcan-espresso koyulukları ve antik pirinç; porselen fildişi ve şampanya tonlarıyla dönüşümlü",
+      },
+      "sand-travertine": {
+        label: "Kum ve Traverten",
+        description: "Güneşte ağarmış bej, yulaf sütü ve traverten taşı; yumuşak gül-bakır vurgularla ısınan tonlar — gün ışığında butik bir Bodrum villası.",
+      },
+      "rosewood-blush": {
+        label: "Pudra ve Gül Ağacı",
+        description: "Butik otellerin mermer lobilerinden ilham alan gül kurusu ve antik rose gold paleti — yumuşak, sakin ve tartışmasız seçkin.",
+      },
+      "blush-ivory": {
+        label: "Pudra ve Fildişi",
+        description: "Canlı fildişi beyazı üzerinde yumuşak bebek pembesi, sıcak rose gold vurgularla tamamlanır — aydınlık, ferah ve tartışmasız feminen bir lüks.",
+      },
+    },
+    aboutPage: {
+      heroLabel: "Hikayemiz",
+      heroHeading: "Varlikent Hakkında",
+      heroSubtext: "Seçkin alıcıları ve kiracıları olağanüstü mülklerle buluşturan, İstanbul’un önde gelen lüks gayrimenkul şirketi.",
+      missionLabel: "Misyonumuz",
+      missionHeading: "Lüks gayrimenkule özenli bir yaklaşım.",
+      missionParagraph1: "Pazar bilgisini, yerel uzmanlığı ve olağanüstü hizmeti bir araya getirerek alıcıların ve satıcıların İstanbul’un en gözde semtlerinde güvenle, üst düzey kararlar almasına yardımcı oluyoruz.",
+      missionParagraph2: "İstanbul’un eşsiz mimari mirasına ve heyecan verici modern projelerine duyduğumuz tutkuyla kurulan Varlikent; uluslararası yatırımcılar, yurt dışından gelenler ve ideal mülkünü arayan yerel aileler için güvenilir bir iş ortağı olmuştur.",
+      teamLabel: "Ekibimiz",
+      teamHeading: "Uzmanlarımızla Tanışın",
+      stats: [
+        "Yıllık Deneyim",
+        "Listelenen Mülk",
+        "Mutlu Müşteri",
+        "Hizmet Verilen Bölge",
+      ],
+      teamRoles: [
+        "Kıdemli Danışman",
+        "Yatırım Danışmanı",
+        "Kiralama Uzmanı",
+      ],
+    },
   },
 
   ar: {
@@ -3607,6 +3791,11 @@ resetPasswordPage: {
       "accountRemovalDesc": "لطلب حذف حسابك، تواصل مع فريق الدعم. هذه الصفحة لا تحذف حسابك.",
       "contactSupport": "التواصل مع الدعم",
       avatarAlt: "صورة الملف الشخصي",
+      toastEmailInUse: "هذا البريد الإلكتروني مستخدم بالفعل.",
+      toastEmailLocked: "لا يمكن تغيير البريد الإلكتروني لهذا الحساب من هنا.",
+      toastCurrentPasswordIncorrect: "كلمة المرور الحالية غير صحيحة.",
+      toastPasswordNotSet: "هذا الحساب ليس له كلمة مرور بعد. استخدم \"نسيت كلمة المرور\" لتعيين واحدة.",
+      toastNetworkError: "تعذّر الوصول إلى الخادم. يرجى التحقق من اتصالك والمحاولة مرة أخرى.",
     },
     common: {
       cancel: "إلغاء",
@@ -3841,6 +4030,11 @@ resetPasswordPage: {
       label: 'قصص العملاء',
       heading: 'ماذا يقول عملاؤنا',
       disclaimer: 'شهادات من عملاء موثّقين على الموقع',
+      items: [
+        { name: "إليف أجار", role: "مديرة استثمار", text: "قدّم الفريق خدمة استثنائية من البحث حتى إتمام الصفقة. كان اختيار العقارات والدعم ممتازين.", rating: 5 },
+        { name: "جان يلدريم", role: "مستشار تنفيذي", text: "العمل معهم جعل شراء منزلنا سهلاً. إرشاد احترافي وتواصل ممتاز طوال الوقت.", rating: 5 },
+        { name: "آيلين شنر", role: "مهندسة معمارية", text: "أسلوب راقٍ ومدروس في تسويق العقارات. ساعدونا على إتمام البيع بسرعة وبالسعر المناسب.", rating: 5 },
+      ],
     },
     cta: {
       heading: 'هل أنت مستعد لبدء مشروعك؟',
@@ -5226,6 +5420,88 @@ resetPasswordPage: {
       onRequest: "السعر عند الطلب",
       perMonth: "{price} شهرياً",
     },
+    studioPalette: {
+      materials: {
+        calacattaMarble: "رخام كالاكاتا",
+        rawConcrete: "خرسانة خام",
+        darkWalnut: "جوز داكن",
+        agedBrass: "نحاس أصفر معتّق",
+        neroStone: "حجر نيرو",
+        linenWhite: "أبيض كتاني",
+        forestGreen: "أخضر غابي",
+        midnightNavy: "كحلي ليلي",
+      },
+      wallFinishes: {
+        ivory: "عاجي",
+        warmSand: "رملي دافئ",
+        slateBlue: "أزرق أردوازي",
+        sage: "أخضر مريمي",
+        charcoal: "فحمي",
+        navy: "كحلي",
+      },
+      floorFinishes: {
+        darkOak: "بلوط داكن",
+        lightAsh: "دردار فاتح",
+        concrete: "خرسانة",
+        marble: "رخام",
+      },
+    },
+    themes: {
+      default: {
+        label: "توقيع فارلي كنت",
+        description: "فحمي داكن وأخضر غابي — التصميم الأصلي",
+      },
+      forest: {
+        label: "صنوبر البوسفور",
+        description: "درجات متراكبة من أخضر الغابات العميق والنحاس الأصفر المعتّق، تتناوب مع العاجي الدافئ ولون الرَّق",
+      },
+      earth: {
+        label: "إسبريسو وتراكوتا",
+        description: "أعماق متراكبة من بنيّ الإسبريسو والتراكوتا، تتناوب مع الكريمي الدافئ ولون الرَّق",
+      },
+      navy: {
+        label: "منتصف ليل البوسفور",
+        description: "أعماق كحلية متراكبة وذهبي عتيق، تتناوب مع أبيض السحاب البارد وضباب اللؤلؤ",
+      },
+      "gold-white": {
+        label: "عاجي ونحاس عتيق",
+        description: "درجات داكنة متراكبة من الباذنجاني والإسبريسو مع النحاس الأصفر العتيق، تتناوب مع عاجي البورسلين والشمبانيا",
+      },
+      "sand-travertine": {
+        label: "رمل وترافرتين",
+        description: "بيج لوّحته الشمس وحليب الشوفان وحجر الترافرتين، تدفئها لمسات ناعمة من النحاس الوردي — فيلا بوتيكية في بودروم تحت ضوء النهار.",
+      },
+      "rosewood-blush": {
+        label: "وردي وخشب الورد",
+        description: "لوحة من الوردي المغبرّ والذهب الوردي العتيق مستوحاة من ردهات الفنادق البوتيكية الرخامية — ناعمة، هادئة، وفاخرة بلا شك.",
+      },
+      "blush-ivory": {
+        label: "وردي وعاجي",
+        description: "وردي فاتح ناعم على أبيض عاجي نقي، تكمّله لمسات دافئة من الذهب الوردي — فخامة أنثوية مضيئة وخفيفة بلا شك.",
+      },
+    },
+    aboutPage: {
+      heroLabel: "قصتنا",
+      heroHeading: "عن فارلي كنت",
+      heroSubtext: "الوكالة الرائدة للعقارات الفاخرة في إسطنبول، نجمع المشترين والمستأجرين المميّزين بعقارات استثنائية.",
+      missionLabel: "رسالتنا",
+      missionHeading: "نهج راقٍ في العقارات الفاخرة.",
+      missionParagraph1: "نجمع بين المعرفة بالسوق والخبرة المحلية والخدمة الاستثنائية لمساعدة المشترين والبائعين على اتخاذ قرارات واثقة ومميّزة في أكثر أحياء إسطنبول طلباً.",
+      missionParagraph2: "تأسست فارلي كنت بشغف بالتراث المعماري الفريد لإسطنبول ومشاريعها الحديثة المثيرة، وأصبحت شريكاً موثوقاً للمستثمرين الدوليين والمغتربين والعائلات المحلية الباحثة عن عقارها المثالي.",
+      teamLabel: "فريقنا",
+      teamHeading: "تعرّف على خبرائنا",
+      stats: [
+        "سنوات من الخبرة",
+        "عقارات معروضة",
+        "عملاء سعداء",
+        "مناطق نخدمها",
+      ],
+      teamRoles: [
+        "وكيلة أولى",
+        "مستشار استثمار",
+        "أخصائية تأجير",
+      ],
+    },
   },
   de: {
     accessibility: { skipToContent: 'Zum Inhalt springen',
@@ -5491,6 +5767,11 @@ resetPasswordPage: {
       toastSignedOut: 'Abgemeldet',
       toastDeleteSupport: 'Die Kontolöschung erfordert Support — kontaktieren Sie info@varlikent.com',
       avatarAlt: "Profilfoto",
+      toastEmailInUse: "Diese E-Mail-Adresse wird bereits verwendet.",
+      toastEmailLocked: "Die E-Mail-Adresse dieses Kontos kann hier nicht geändert werden.",
+      toastCurrentPasswordIncorrect: "Das aktuelle Passwort ist falsch.",
+      toastPasswordNotSet: "Dieses Konto hat noch kein Passwort. Verwenden Sie „Passwort vergessen“, um eines festzulegen.",
+      toastNetworkError: "Der Server ist nicht erreichbar. Bitte prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
     },
     browse: {
       label: 'Nach Typ durchsuchen',
@@ -6800,6 +7081,88 @@ resetPasswordPage: {
       onRequest: "Preis auf Anfrage",
       perMonth: "{price}/Monat",
     },
+    studioPalette: {
+      materials: {
+        calacattaMarble: "Calacatta-Marmor",
+        rawConcrete: "Sichtbeton",
+        darkWalnut: "Dunkler Nussbaum",
+        agedBrass: "Gealtertes Messing",
+        neroStone: "Nero-Stein",
+        linenWhite: "Leinenweiß",
+        forestGreen: "Waldgrün",
+        midnightNavy: "Mitternachtsblau",
+      },
+      wallFinishes: {
+        ivory: "Elfenbein",
+        warmSand: "Warmer Sand",
+        slateBlue: "Schieferblau",
+        sage: "Salbeigrün",
+        charcoal: "Anthrazit",
+        navy: "Marineblau",
+      },
+      floorFinishes: {
+        darkOak: "Dunkle Eiche",
+        lightAsh: "Helle Esche",
+        concrete: "Beton",
+        marble: "Marmor",
+      },
+    },
+    themes: {
+      default: {
+        label: "VarliKent Signatur",
+        description: "Dunkles Anthrazit & Waldgrün — das Original",
+      },
+      forest: {
+        label: "Bosporus-Kiefer",
+        description: "Geschichtete tiefe Waldgrüntöne & gealtertes Messing, im Wechsel mit warmem Elfenbein und Pergament",
+      },
+      earth: {
+        label: "Espresso & Terrakotta",
+        description: "Geschichtete espressobraune Tiefen & Terrakotta, im Wechsel mit warmem Creme und Pergament",
+      },
+      navy: {
+        label: "Bosporus-Mitternacht",
+        description: "Geschichtete marineblaue Tiefen & Vintage-Gold, im Wechsel mit kühlem Wolkenweiß und Perlnebel",
+      },
+      "gold-white": {
+        label: "Elfenbein & Antikmessing",
+        description: "Geschichtete Aubergine-Espresso-Dunkeltöne & Antikmessing, im Wechsel mit Porzellan-Elfenbein und Champagner",
+      },
+      "sand-travertine": {
+        label: "Sand & Travertin",
+        description: "Sonnengebleichtes Beige, Hafermilch und Travertinstein, erwärmt durch sanfte Rosékupfer-Akzente — eine Boutique-Villa in Bodrum bei Tageslicht.",
+      },
+      "rosewood-blush": {
+        label: "Rosé & Rosenholz",
+        description: "Eine Palette aus Altrosa und antikem Roségold, inspiriert von den Marmorlobbys der Boutique-Hotels — weich, gedämpft und unverkennbar hochwertig.",
+      },
+      "blush-ivory": {
+        label: "Rosé & Elfenbein",
+        description: "Zartes Babyrosa auf klarem Elfenbeinweiß, abgerundet mit warmen Roségold-Akzenten — hell, luftig und unverkennbar femininer Luxus.",
+      },
+    },
+    aboutPage: {
+      heroLabel: "Unsere Geschichte",
+      heroHeading: "Über Varlikent",
+      heroSubtext: "Istanbuls führende Agentur für Luxusimmobilien, die anspruchsvolle Käufer und Mieter mit außergewöhnlichen Immobilien zusammenbringt.",
+      missionLabel: "Unsere Mission",
+      missionHeading: "Ein kultivierter Ansatz für Luxusimmobilien.",
+      missionParagraph1: "Wir verbinden Marktkenntnis, lokale Expertise und außergewöhnlichen Service, damit Käufer und Verkäufer in Istanbuls begehrtesten Vierteln sichere, hochwertige Entscheidungen treffen können.",
+      missionParagraph2: "Gegründet aus Leidenschaft für Istanbuls einzigartiges architektonisches Erbe und seine spannenden modernen Projekte, ist Varlikent ein verlässlicher Partner für internationale Investoren, Expatriates und einheimische Familien auf der Suche nach ihrer idealen Immobilie.",
+      teamLabel: "Unser Team",
+      teamHeading: "Lernen Sie unsere Experten kennen",
+      stats: [
+        "Jahre Erfahrung",
+        "Gelistete Immobilien",
+        "Zufriedene Kunden",
+        "Betreute Bezirke",
+      ],
+      teamRoles: [
+        "Senior-Maklerin",
+        "Anlageberater",
+        "Vermietungsspezialistin",
+      ],
+    },
   },
   ru: {
     accessibility: { skipToContent: 'Перейти к содержимому',
@@ -7065,6 +7428,11 @@ resetPasswordPage: {
       toastSignedOut: 'Вы вышли из системы',
       toastDeleteSupport: 'Для удаления аккаунта требуется поддержка — свяжитесь с info@varlikent.com',
       avatarAlt: "Фото профиля",
+      toastEmailInUse: "Этот адрес электронной почты уже используется.",
+      toastEmailLocked: "Адрес электронной почты этой учётной записи нельзя изменить здесь.",
+      toastCurrentPasswordIncorrect: "Текущий пароль указан неверно.",
+      toastPasswordNotSet: "У этой учётной записи пока нет пароля. Чтобы задать его, воспользуйтесь функцией «Забыли пароль».",
+      toastNetworkError: "Не удалось связаться с сервером. Проверьте подключение и попробуйте ещё раз.",
     },
     browse: {
       label: 'Поиск по типу',
@@ -8374,6 +8742,88 @@ resetPasswordPage: {
       onRequest: "Цена по запросу",
       perMonth: "{price}/мес.",
     },
+    studioPalette: {
+      materials: {
+        calacattaMarble: "Мрамор Калакатта",
+        rawConcrete: "Необработанный бетон",
+        darkWalnut: "Тёмный орех",
+        agedBrass: "Состаренная латунь",
+        neroStone: "Камень Неро",
+        linenWhite: "Льняной белый",
+        forestGreen: "Лесной зелёный",
+        midnightNavy: "Полуночный синий",
+      },
+      wallFinishes: {
+        ivory: "Слоновая кость",
+        warmSand: "Тёплый песок",
+        slateBlue: "Сланцево-синий",
+        sage: "Шалфейный",
+        charcoal: "Антрацит",
+        navy: "Тёмно-синий",
+      },
+      floorFinishes: {
+        darkOak: "Тёмный дуб",
+        lightAsh: "Светлый ясень",
+        concrete: "Бетон",
+        marble: "Мрамор",
+      },
+    },
+    themes: {
+      default: {
+        label: "Фирменная VarliKent",
+        description: "Тёмный антрацит и лесной зелёный — оригинальная тема",
+      },
+      forest: {
+        label: "Босфорская сосна",
+        description: "Многослойные глубокие лесные оттенки зелёного и состаренная латунь в чередовании с тёплой слоновой костью и пергаментом",
+      },
+      earth: {
+        label: "Эспрессо и терракота",
+        description: "Многослойные глубокие оттенки эспрессо и терракота в чередовании с тёплым кремовым и пергаментом",
+      },
+      navy: {
+        label: "Босфорская полночь",
+        description: "Многослойные тёмно-синие глубины и винтажное золото в чередовании с прохладным облачно-белым и жемчужной дымкой",
+      },
+      "gold-white": {
+        label: "Слоновая кость и античная латунь",
+        description: "Многослойные тёмные тона баклажана и эспрессо с античной латунью в чередовании с фарфоровой слоновой костью и шампанским",
+      },
+      "sand-travertine": {
+        label: "Песок и травертин",
+        description: "Выгоревший на солнце бежевый, овсяное молоко и травертин, согретые мягкими акцентами розовой меди, — бутик-вилла в Бодруме при дневном свете.",
+      },
+      "rosewood-blush": {
+        label: "Пудровый и розовое дерево",
+        description: "Палитра пыльной розы и античного розового золота, вдохновлённая мраморными лобби бутик-отелей, — мягкая, приглушённая и безусловно премиальная.",
+      },
+      "blush-ivory": {
+        label: "Пудровый и слоновая кость",
+        description: "Нежный светло-розовый на чистом белом цвете слоновой кости с тёплыми акцентами розового золота — светлая, воздушная и безусловно женственная роскошь.",
+      },
+    },
+    aboutPage: {
+      heroLabel: "Наша история",
+      heroHeading: "О Varlikent",
+      heroSubtext: "Ведущее агентство элитной недвижимости Стамбула, которое знакомит взыскательных покупателей и арендаторов с исключительными объектами.",
+      missionLabel: "Наша миссия",
+      missionHeading: "Утончённый подход к элитной недвижимости.",
+      missionParagraph1: "Мы объединяем знание рынка, местный опыт и исключительный сервис, чтобы покупатели и продавцы принимали уверенные решения премиального уровня в самых востребованных районах Стамбула.",
+      missionParagraph2: "Компания Varlikent, основанная из любви к уникальному архитектурному наследию Стамбула и его ярким современным проектам, стала надёжным партнёром для международных инвесторов, экспатов и местных семей, которые ищут идеальную недвижимость.",
+      teamLabel: "Наша команда",
+      teamHeading: "Познакомьтесь с нашими экспертами",
+      stats: [
+        "Лет опыта",
+        "Объектов в каталоге",
+        "Довольных клиентов",
+        "Районов охвата",
+      ],
+      teamRoles: [
+        "Старший агент",
+        "Инвестиционный консультант",
+        "Специалист по аренде",
+      ],
+    },
   },
   ur: {
     accessibility: { skipToContent: 'مواد پر جائیں',
@@ -8639,6 +9089,11 @@ resetPasswordPage: {
       toastSignedOut: 'سائن آؤٹ ہو گئے',
       toastDeleteSupport: 'اکاؤنٹ حذف کرنے کے لیے سپورٹ درکار ہے — info@varlikent.com پر رابطہ کریں',
       avatarAlt: "پروفائل تصویر",
+      toastEmailInUse: "یہ ای میل پتہ پہلے سے استعمال میں ہے۔",
+      toastEmailLocked: "اس اکاؤنٹ کا ای میل پتہ یہاں سے تبدیل نہیں کیا جا سکتا۔",
+      toastCurrentPasswordIncorrect: "موجودہ پاس ورڈ درست نہیں ہے۔",
+      toastPasswordNotSet: "اس اکاؤنٹ کا ابھی کوئی پاس ورڈ نہیں ہے۔ پاس ورڈ بنانے کے لیے \"پاس ورڈ بھول گئے\" استعمال کریں۔",
+      toastNetworkError: "سرور سے رابطہ نہیں ہو سکا۔ براہ کرم اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
     },
     browse: {
       label: 'قسم کے مطابق تلاش کریں',
@@ -9947,6 +10402,88 @@ resetPasswordPage: {
     price: {
       onRequest: "قیمت کے لیے رابطہ کریں",
       perMonth: "{price} ماہانہ",
+    },
+    studioPalette: {
+      materials: {
+        calacattaMarble: "کلاکاٹا سنگِ مرمر",
+        rawConcrete: "خام کنکریٹ",
+        darkWalnut: "گہرا اخروٹ",
+        agedBrass: "پرانا پیتل",
+        neroStone: "نیرو پتھر",
+        linenWhite: "لینن سفید",
+        forestGreen: "جنگلی سبز",
+        midnightNavy: "گہرا نیوی",
+      },
+      wallFinishes: {
+        ivory: "آئیوری",
+        warmSand: "گرم ریت",
+        slateBlue: "سلیٹی نیلا",
+        sage: "سیج سبز",
+        charcoal: "چارکول",
+        navy: "نیوی",
+      },
+      floorFinishes: {
+        darkOak: "گہرا بلوط",
+        lightAsh: "ہلکی ایش لکڑی",
+        concrete: "کنکریٹ",
+        marble: "سنگِ مرمر",
+      },
+    },
+    themes: {
+      default: {
+        label: "VarliKent سگنیچر",
+        description: "گہرا چارکول اور جنگلی سبز — اصل تھیم",
+      },
+      forest: {
+        label: "باسفورس پائن",
+        description: "گہرے جنگلی سبز کی تہیں اور پرانا پیتل، گرم آئیوری اور پارچمنٹ رنگ کے ساتھ باری باری",
+      },
+      earth: {
+        label: "ایسپریسو اور ٹیراکوٹا",
+        description: "ایسپریسو براؤن کی گہری تہیں اور ٹیراکوٹا، گرم کریم اور پارچمنٹ رنگ کے ساتھ باری باری",
+      },
+      navy: {
+        label: "باسفورس نصف شب",
+        description: "نیوی کی گہری تہیں اور ونٹیج گولڈ، ٹھنڈے بادل نما سفید اور موتی جیسی دھند کے ساتھ باری باری",
+      },
+      "gold-white": {
+        label: "آئیوری اور قدیم پیتل",
+        description: "بینگنی اور ایسپریسو کے گہرے رنگوں کی تہیں اور قدیم پیتل، پورسلین آئیوری اور شیمپین کے ساتھ باری باری",
+      },
+      "sand-travertine": {
+        label: "ریت اور ٹراورٹائن",
+        description: "دھوپ سے ہلکا پڑا بیج، اوٹ ملک اور ٹراورٹائن پتھر، جسے نرم روز کاپر لمس گرماتے ہیں — دن کی روشنی میں بودرم کا ایک بوتیک ولا۔",
+      },
+      "rosewood-blush": {
+        label: "بلش اور روز ووڈ",
+        description: "بوتیک ہوٹلوں کی سنگِ مرمر لابیوں سے متاثر ہلکے گلابی اور قدیم روز گولڈ کا پیلیٹ — نرم، دھیما اور بلاشبہ پریمیم۔",
+      },
+      "blush-ivory": {
+        label: "بلش اور آئیوری",
+        description: "صاف آئیوری سفید پر نرم بیبی پنک، گرم روز گولڈ لمس کے ساتھ مکمل — روشن، ہلکا پھلکا اور بلاشبہ نسوانی پرتعیش انداز۔",
+      },
+    },
+    aboutPage: {
+      heroLabel: "ہماری کہانی",
+      heroHeading: "Varlikent کے بارے میں",
+      heroSubtext: "استنبول کی نمایاں پرتعیش رئیل اسٹیٹ ایجنسی، جو باذوق خریداروں اور کرایہ داروں کو غیر معمولی جائیدادوں سے جوڑتی ہے۔",
+      missionLabel: "ہمارا مشن",
+      missionHeading: "پرتعیش رئیل اسٹیٹ کے لیے ایک نفیس انداز۔",
+      missionParagraph1: "ہم مارکیٹ کی سمجھ، مقامی مہارت اور غیر معمولی خدمت کو یکجا کرتے ہیں تاکہ خریدار اور فروخت کنندگان استنبول کے پسندیدہ ترین علاقوں میں پُراعتماد اور اعلیٰ معیار کے فیصلے کر سکیں۔",
+      missionParagraph2: "استنبول کے منفرد تعمیراتی ورثے اور اس کے شاندار جدید منصوبوں سے لگاؤ کے ساتھ قائم ہونے والی Varlikent بین الاقوامی سرمایہ کاروں، تارکینِ وطن اور اپنی مثالی جائیداد تلاش کرنے والے مقامی خاندانوں کی قابلِ اعتماد شراکت دار رہی ہے۔",
+      teamLabel: "ہماری ٹیم",
+      teamHeading: "ہمارے ماہرین سے ملیں",
+      stats: [
+        "سال کا تجربہ",
+        "درج شدہ جائیدادیں",
+        "مطمئن گاہک",
+        "زیرِ خدمت علاقے",
+      ],
+      teamRoles: [
+        "سینئر ایجنٹ",
+        "سرمایہ کاری مشیر",
+        "کرایہ داری ماہر",
+      ],
     },
   },
 }

@@ -914,11 +914,7 @@ export default function HomePage() {
             </motion.div>
 
             <div className="grid gap-6 md:grid-cols-3">
-              {(reviews.length > 0 ? reviews.slice(0, 3) : [
-                { name: 'Elif Acar',    role: 'Investment Executive', text: 'The team delivered exceptional service from search to closing. The property selection and support were outstanding.', rating: 5 },
-                { name: 'Can Yıldırım', role: 'Executive Consultant', text: 'Working with them made buying our home effortless. Professional guidance and excellent communication throughout.', rating: 5 },
-                { name: 'Aylin Şener',  role: 'Architect',            text: 'A refined, thoughtful approach to property marketing. They helped us close quickly at the right price.', rating: 5 },
-              ]).map((item, i) => (
+              {(reviews.length > 0 ? reviews.slice(0, 3) : t.testimonials.items).map((item, i) => (
                 <motion.article key={item._id || i} initial="hidden" whileInView="show" viewport={vp}
                   variants={i === 0 ? mv.slideLeft() : i === 2 ? mv.slideRight() : mv.slideUp()}
                   className="flex flex-col rounded-2xl p-8" style={{ backgroundColor: '#fff', border: `1px solid rgba(var(--vk-gold-rgb), 0.12)`, boxShadow: '0 2px 20px rgba(var(--vk-dark-rgb), 0.06)' }}>

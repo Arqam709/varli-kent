@@ -10,6 +10,7 @@ import { useMsal } from '@azure/msal-react'
 import { microsoftLoginRequest } from '../lib/msal'
 import { InteractionStatus } from '@azure/msal-browser'
 import { authErrorKey } from '../lib/authErrors'
+import useSeo from '../lib/useSeo'
 
 const LoginPage = () => {
   const [email, setEmail] = useState('')
@@ -18,8 +19,9 @@ const LoginPage = () => {
 
   const { login, loginWithToken } = useAuth()
   const { instance, accounts, inProgress } = useMsal()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const a = t.auth
+  useSeo({ title: a.signInTitle, language, noindex: true })
 
   const navigate = useNavigate()
   const location = useLocation()

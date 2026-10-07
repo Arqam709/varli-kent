@@ -3,12 +3,14 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import { assets } from '../assets/assets'
 import { useLanguage } from '../contexts/LanguageContext'
+import useSeo from '../lib/useSeo'
 
 const ResetPassword = () => {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const r = t.resetPasswordPage
+  useSeo({ title: r.title, language, noindex: true })
   const token = searchParams.get('token')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
