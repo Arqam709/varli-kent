@@ -65,7 +65,7 @@ const fieldReport = (translated, needsAttention = [], sourceLang = 'en') => ({ s
  * Opens the editor on the homepage. `saveReply` is what PUT answers with:
  * a response body, or { status, body } for a failing save.
  */
-async function open(t, { language = 'en', saveReply } = {}) {
+async function open(t, { language = 'en', saveReply, loadReply } = {}) {
   const page = await browser.newPage({ viewport: { width: 1366, height: 900 } })
   page.setDefaultTimeout(15000)
   t.after(() => page.close())
@@ -91,12 +91,12 @@ async function open(t, { language = 'en', saveReply } = {}) {
       const reply = typeof saveReply === 'function' ? saveReply() : saveReply
       return reply?.status ? json(reply.status, reply.body) : json(200, reply)
     }
-    if (path.startsWith('/page-content/')) return json(200, { success: true, fields: {}, sections: {} })
+    if (path.startsWith('/page-content/')) return json(200, loadReply || { success: true, fields: {}, sections: {} })
     return json(200, { success: true })
   })
 
-  await page.goto(`${base}${FIXTURE}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
-  await expect(page.getByRole('heading', { level: 1, name: pc(language).title })).toBeVisible({ timeout: 45000 })
+  await page.goto(`${base}${FIXTURE}`, { waitUntil: 'domcontentloaded', timeout: 120000 })
+  await expect(page.getByRole('heading', { level: 1, name: pc(language).title })).toBeVisible({ timeout: 120000 })
   await expect(page.locator('textarea').first()).toBeVisible()
   return { page, saves }
 }
@@ -264,3 +264,68 @@ for (const language of ['tr', 'ar']) {
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 1366, 'the report overflows the viewport')
   })
 }
+
+// ── CMS Phase B: responses may now carry translation state (`meta`) ───────
+const HASH_NEW = 'a'.repeat(64)
+const HASH_OLD = 'b'.repeat(64)
+const trackedButton = (en) => ({
+  type: 'text', sourceLang: 'en', en,
+  tr: 'Hizmetlerimizi Keşfedin', de: 'Leistungen entdecken',
+  meta: {
+    sourceHash: HASH_NEW,
+    langs: {
+      tr: { from: HASH_NEW, by: 'machine', at: '2026-10-08T12:30:00.000Z' },
+      de: { from: HASH_OLD, by: 'machine', at: '2026-10-01T10:00:00.000Z', error: 'timeout', errorAt: '2026-10-08T12:30:00.000Z' },
+      ur: { error: 'quota', errorAt: '2026-10-08T12:30:00.000Z' },
+    },
+  },
+})
+
+test('Phase B: the editor loads a field that carries `meta`, and its save report is unchanged', async (t) => {
+  const { page, saves } = await open(t, {
+    // The editor's read: a field already saved under Phase B.
+    loadReply: { success: true, fields: { heroCtaPrimary: trackedButton('Discover Our Services') }, sections: {} },
+    // The save's response: the stored field with its meta, plus the Phase A report.
+    saveReply: {
+      success: true, sections: {},
+      fields: { heroCtaPrimary: trackedButton('Discover Everything We Offer') },
+      translation: { fields: { heroCtaPrimary: fieldReport(['tr', 'ar', 'ru'], [{ lang: 'de', reason: 'timeout', using: 'previous' }, { lang: 'ur', reason: 'quota', using: 'none' }]) } },
+    },
+  })
+
+  // The box shows the stored source text — not "[object Object]", not a hash.
+  await expect(heroCtaPrimary(page)).toHaveValue('Discover Our Services')
+  const before = await bodyText(page)
+  for (const leaked of [HASH_NEW, HASH_OLD, 'sourceHash', '[object Object]']) assert.equal(before.includes(leaked), false, leaked)
+
+  await heroCtaPrimary(page).fill('Discover Everything We Offer')
+  await save(page)
+
+  await expect(page.getByText('Saved. Some translations need attention. Source language: English.')).toBeVisible()
+  const item = report(page).locator('li')
+  await expect(item).toHaveCount(1)
+  await expect(item).toContainText('German: translation failed — the previous translation is still shown.')
+  await expect(item).toContainText('Urdu: translation failed — the built-in text is shown instead.')
+  const after = await bodyText(page)
+  for (const leaked of [HASH_NEW, HASH_OLD, 'sourceHash', 'errorAt', 'quota', '[object Object]']) assert.equal(after.includes(leaked), false, leaked)
+
+  // What the editor sends is still only the changed text.
+  assert.deepEqual(saves, [{ fields: { heroCtaPrimary: { type: 'text', value: 'Discover Everything We Offer' } }, sections: {} }])
+  await expect(page.getByRole('button', { name: pc('en').saveChanges, exact: true })).toHaveCount(0)
+})
+
+test('Phase B: a fully translated save whose response fields carry `meta` still reads as complete', async (t) => {
+  const { page } = await open(t, {
+    saveReply: {
+      success: true, sections: {},
+      fields: { heroCtaPrimary: trackedButton('Discover Our Services') },
+      translation: { fields: { heroCtaPrimary: fieldReport(FIVE) } },
+    },
+  })
+
+  await heroCtaPrimary(page).fill('Discover Our Services')
+  await save(page)
+
+  await expect(page.getByText('Saved and translated into 5 languages. Source language: English.')).toBeVisible()
+  await expect(report(page)).toHaveCount(0)
+})

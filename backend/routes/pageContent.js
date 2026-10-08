@@ -3,6 +3,7 @@ import PageContent from '../models/PageContent.js'
 import { protect } from '../middleware/auth.js'
 import { requireRole, requirePermission } from '../middleware/checkPermission.js'
 import { sanitizePoisonedTranslations, isUnchangedSource, localizeTextWithReport } from '../utils/autoTranslate.js'
+import { withTranslationState, withoutTranslationState, translationStatesOf } from '../utils/translationState.js'
 import {
   isKnownPage,
   isKnownSection,
@@ -93,6 +94,17 @@ const describeTranslation = ({ sourceLang, targets }) => {
   return { sourceLang, translated, needsAttention }
 }
 
+/*
+ * The fields map as the PUBLIC may see it: content only.
+ *
+ * A text field can carry `meta` — source hashes, when each language was
+ * translated, why an attempt failed (utils/translationState.js). That is for
+ * the people editing the page. Visitors get the text and nothing else, so it
+ * is removed from every field here rather than left to each caller to remember.
+ */
+const publicFields = (fields) =>
+  Object.fromEntries(Object.entries(fields).map(([key, field]) => [key, withoutTranslationState(field)]))
+
 router.get('/:pageKey', async (req, res, next) => {
   try {
     const { pageKey } = req.params
@@ -105,13 +117,53 @@ router.get('/:pageKey', async (req, res, next) => {
 
     res.json({
       success: true,
-      fields: sanitizePoisonedTranslations(doc?.fields || {}),
+      fields: publicFields(sanitizePoisonedTranslations(doc?.fields || {})),
       sections: doc?.sections || {},
     })
   } catch (err) {
     next(err)
   }
 })
+
+/*
+ * GET /api/page-content/:pageKey/admin — the page as its editors see it.
+ *
+ * The same content as the public GET, plus what the public one withholds: each
+ * text field's `meta`, and `translationStates`, the state of every language
+ * derived from it (source / missing / unknown / translated / manual / stale).
+ * A field saved before this metadata existed has no `meta`, and its stored
+ * translations read as 'unknown'.
+ *
+ * Guarded exactly as the PUT below is: whoever may edit a page may read this.
+ * Reading never writes — no field gains metadata by being looked at.
+ */
+router.get(
+  '/:pageKey/admin',
+  protect,
+  requireRole('owner', 'admin'),
+  requirePermission('manage_page_content'),
+  async (req, res, next) => {
+    try {
+      const { pageKey } = req.params
+
+      if (!isKnownPage(pageKey)) {
+        return res.status(404).json({ success: false, message: `Unknown page '${pageKey}'` })
+      }
+
+      const doc = await PageContent.findOne({ pageKey }).lean()
+      const fields = sanitizePoisonedTranslations(doc?.fields || {})
+
+      const translationStates = {}
+      for (const [key, field] of Object.entries(fields)) {
+        if (field?.type === 'text') translationStates[key] = translationStatesOf(field)
+      }
+
+      res.json({ success: true, fields, sections: doc?.sections || {}, translationStates })
+    } catch (err) {
+      next(err)
+    }
+  }
+)
 
 router.put(
   '/:pageKey',
@@ -160,7 +212,9 @@ router.put(
         // previously good translation for any language the provider fails on
         // during this save.
         const { value: localized, report } = await localizeTextWithReport(entry.value, stored)
-        nextFields[key] = { type: 'text', ...localized }
+        // The text is stored exactly as before; `meta` beside it records which
+        // source each translation belongs to. Only a field saved here gains it.
+        nextFields[key] = { type: 'text', ...withTranslationState(localized, report, stored) }
         translatedFields[key] = describeTranslation(report)
       }
 

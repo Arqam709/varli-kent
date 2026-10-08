@@ -120,7 +120,7 @@ const USER = { _id: 'fixture-user', role: 'user', name: 'Fixture Visitor', email
 
 // `replies` is read on every request, so a test can change what the server
 // says between two submissions without reloading the page.
-async function open(t, screen, { language = 'tr', resetReply, loginReply, registerReply, property = PROPERTY, user = null, replies = {}, palettes = {} } = {}) {
+async function open(t, screen, { language = 'tr', resetReply, loginReply, registerReply, property = PROPERTY, user = null, replies = {}, palettes = {}, pageContent = null } = {}) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   page.setDefaultTimeout(15000)
   t.after(() => page.close())
@@ -155,7 +155,7 @@ async function open(t, screen, { language = 'tr', resetReply, loginReply, regist
     if (path === '/chat/conversations') return route.fulfill({ json: { conversations: [] } })
     if (path.startsWith('/studio-palette/')) return route.fulfill({ json: { success: true, palette: palettes[path.split('/').pop()] || null } })
     if (path === '/properties') return route.fulfill({ json: { success: true, properties: [] } })
-    if (path.startsWith('/page-content/')) return route.fulfill({ json: { fields: {}, sections: {} } })
+    if (path.startsWith('/page-content/')) return route.fulfill({ json: pageContent || { fields: {}, sections: {} } })
     if (path === '/auth/reset-password') {
       return route.fulfill(resetReply || { status: 200, json: { success: true } })
     }
@@ -722,3 +722,40 @@ test('about: a saved record still replaces the built-in text, field by field', a
   assert.ok(!text.includes(tr.heroHeading) && !text.includes(tr.stats[0]), 'the saved fields replaced their defaults')
   assert.ok(text.includes(tr.missionHeading) && text.includes(tr.teamHeading), 'fields the record lacks keep their translated default')
 })
+
+// ── CMS Phase B: translation state never reaches, or changes, a public page ─
+// The public API strips `meta`. This renders the homepage twice from the same
+// hero content — once as the API sends it, once with `meta` left in, as if that
+// stripping had failed — and requires the two to be indistinguishable.
+const HERO_CONTENT = {
+  heroLabel: { type: 'text', sourceLang: 'en', en: 'Istanbul Studio', tr: 'İstanbul Stüdyosu', ar: 'استوديو إسطنبول' },
+  // German is a stale translation, Russian failed: neither state may show.
+  heroCtaPrimary: { type: 'text', sourceLang: 'en', en: 'Discover Our Services', tr: 'Hizmetlerimizi Keşfedin', de: 'Leistungen entdecken' },
+}
+const HERO_META = {
+  heroLabel: { sourceHash: 'a'.repeat(64), langs: { tr: { from: 'a'.repeat(64), by: 'machine', at: '2026-10-08T12:30:00.000Z' }, ar: { from: 'a'.repeat(64), by: 'machine', at: '2026-10-08T12:30:00.000Z' } } },
+  heroCtaPrimary: { sourceHash: 'c'.repeat(64), langs: { tr: { from: 'c'.repeat(64), by: 'machine', at: '2026-10-08T12:30:00.000Z' }, de: { from: 'b'.repeat(64), by: 'machine', at: '2026-10-01T10:00:00.000Z', error: 'timeout', errorAt: '2026-10-08T12:30:00.000Z' }, ru: { error: 'quota', errorAt: '2026-10-08T12:30:00.000Z' } } },
+}
+const heroWithMeta = Object.fromEntries(Object.entries(HERO_CONTENT).map(([key, field]) => [key, { ...field, meta: HERO_META[key] }]))
+
+for (const lang of LANGS) {
+  test(`homepage hero renders the same with or without translation state in ${lang}`, async (t) => {
+    const expected = {
+      label: HERO_CONTENT.heroLabel[lang] || translations[lang].hero.label,
+      button: HERO_CONTENT.heroCtaPrimary[lang] || translations[lang].hero.ctaPrimary,
+    }
+    const rendered = []
+    for (const fields of [HERO_CONTENT, heroWithMeta]) {
+      const { page } = await open(t, 'home', { language: lang, pageContent: { success: true, fields, sections: {} } })
+      await expect.poll(async () => (await bodyText(page)).includes(expected.label), { timeout: 60000 }).toBe(true)
+      const text = await bodyText(page)
+      assert.ok(text.includes(expected.button), `${lang}: the hero button reads "${expected.button}"`)
+      for (const leaked of ['a'.repeat(64), 'b'.repeat(64), 'sourceHash', 'errorAt', '[object Object]']) {
+        assert.equal(text.includes(leaked), false, `${lang}: "${leaked}" is on the page`)
+      }
+      await expect(page.locator('html')).toHaveAttribute('dir', direction(lang))
+      rendered.push({ label: text.includes(expected.label), button: text.includes(expected.button), title: await page.title() })
+    }
+    assert.deepEqual(rendered[1], rendered[0], 'the page is the same either way')
+  })
+}

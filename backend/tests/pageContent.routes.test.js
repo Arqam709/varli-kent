@@ -558,12 +558,24 @@ const TARGET_LANGS = ['tr', 'ar', 'de', 'ru', 'ur']
 const STORED_FIELD_KEYS = ['type', 'sourceLang', 'en', 'tr', 'ar', 'de', 'ru', 'ur']
 const REPORT_WORDS = ['translation', 'translated', 'needsAttention', 'reason', 'using', 'status', 'targets']
 
+// A stored field's content, without the translation state Phase B keeps beside it.
+const content = (field) => {
+  const { meta: _meta, ...rest } = field
+  return rest
+}
+
+/*
+ * The save REPORT is request-scoped and must never be stored. A saved text
+ * field may carry `meta` (Phase B's persistent translation state), which is a
+ * different thing with its own vocabulary — so the report's words must appear
+ * nowhere in the document, `meta` included.
+ */
 const assertNothingReportedIsStored = () => {
   for (const [pageKey, doc] of store) {
     assert.deepEqual(Object.keys(doc).sort(), ['fields', 'pageKey', 'sections'], `${pageKey} gained a top-level key`)
     for (const [key, field] of Object.entries(doc.fields)) {
       for (const stored of Object.keys(field)) {
-        assert.ok([...STORED_FIELD_KEYS, 'url'].includes(stored), `${pageKey}.${key} stores an unexpected key: ${stored}`)
+        assert.ok([...STORED_FIELD_KEYS, 'url', 'meta'].includes(stored), `${pageKey}.${key} stores an unexpected key: ${stored}`)
       }
     }
     const serialized = JSON.stringify(doc)
@@ -579,6 +591,7 @@ test('10a. a fully translated save reports every language for the field, and kee
   assert.equal(res.body.success, true)
   assert.equal(res.body.fields.heroCtaPrimary.en, 'Discover Our Services')
   assert.deepEqual(res.body.sections, {})
+  assert.deepEqual(Object.keys(res.body).sort(), ['fields', 'sections', 'success', 'translation'])
   assert.deepEqual(res.body.translation, {
     fields: { heroCtaPrimary: { sourceLang: 'en', translated: TARGET_LANGS, needsAttention: [] } },
   })
@@ -602,8 +615,8 @@ test('10b. one failed language with a previous translation: 200, the old value k
     translated: ['tr', 'ar', 'ru', 'ur'],
     needsAttention: [{ lang: 'de', reason: 'provider_error', using: 'previous' }],
   })
-  // Stored exactly what the route stored before it could report anything.
-  assert.deepEqual(store.get('home').fields.heroCtaPrimary, {
+  // The text stored is exactly what the route stored before it could report anything.
+  assert.deepEqual(content(store.get('home').fields.heroCtaPrimary), {
     type: 'text', sourceLang: 'en', en: 'Discover Our Services',
     tr: '[tr] Discover Our Services', ar: '[ar] Discover Our Services', de: 'Leistungen entdecken',
     ru: '[ru] Discover Our Services', ur: '[ur] Discover Our Services',
@@ -667,7 +680,7 @@ test('10e. every translation fails: still 200, the source is saved, and all five
 
   assert.equal(res.status, 200)
   assert.equal(res.body.success, true)
-  assert.deepEqual(store.get('home').fields.heroCtaPrimary, { type: 'text', sourceLang: 'en', en: 'Discover Our Services' })
+  assert.deepEqual(content(store.get('home').fields.heroCtaPrimary), { type: 'text', sourceLang: 'en', en: 'Discover Our Services' })
   const report = res.body.translation.fields.heroCtaPrimary
   assert.deepEqual(report.translated, [])
   assert.deepEqual(report.needsAttention.map((item) => item.lang), TARGET_LANGS)
@@ -761,4 +774,316 @@ test('10j. the public GET is unchanged: same three keys, and no trace of a save 
   })
   for (const word of REPORT_WORDS) assert.equal(JSON.stringify(res.body).includes(`"${word}"`), false, word)
   assertNothingReportedIsStored()
+})
+
+/* ══════════════════════ 11. CMS Phase B — persistent translation state ══════════════
+ *
+ * A saved text field gains `meta`: the hash of its source text and, per
+ * language, which source hash that translation was made from. The state of a
+ * language (translated / stale / unknown / missing …) is DERIVED from that.
+ * Nothing is written except by a save, and only for the field being saved.
+ */
+
+const { sourceHash, translationStatesOf } = await import('../utils/translationState.js')
+
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+const HASH = /^[0-9a-f]{64}$/
+const stored = (key, pageKey = 'home') => store.get(pageKey).fields[key]
+const adminRead = (pageKey = 'home') => request('GET', `/api/page-content/${pageKey}/admin`)
+const containsMeta = (value) => JSON.stringify(value).includes('"meta"')
+
+// A field as production holds them today: text in several languages, no `meta`.
+const LEGACY_BUTTON = { type: 'text', sourceLang: 'en', en: 'Explore Services', tr: 'Hizmetleri Keşfedin', de: 'Leistungen entdecken', verified: false }
+
+test('11a. a save records the source hash and machine provenance for every language it translated', async () => {
+  currentUser = OWNER
+  const before = Date.now()
+  const res = await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+  assert.equal(res.status, 200)
+
+  const field = stored('heroCtaPrimary')
+  const hash = sourceHash('Discover Our Services')
+  assert.match(hash, HASH)
+  assert.equal(field.meta.sourceHash, hash)
+  assert.deepEqual(Object.keys(field.meta).sort(), ['langs', 'sourceHash'])
+  assert.deepEqual(Object.keys(field.meta.langs).sort(), [...TARGET_LANGS].sort(), 'one entry per target, none for the source')
+
+  for (const lang of TARGET_LANGS) {
+    const entry = field.meta.langs[lang]
+    assert.deepEqual(Object.keys(entry).sort(), ['at', 'by', 'from'], `${lang} carries no status and no error`)
+    assert.equal(entry.from, hash)
+    assert.equal(entry.by, 'machine')
+    assert.match(entry.at, ISO)
+    assert.ok(Date.parse(entry.at) >= before - 1000 && Date.parse(entry.at) <= Date.now() + 1000)
+  }
+  // The flat content is exactly what it always was.
+  assert.deepEqual(content(field), {
+    type: 'text', sourceLang: 'en', en: 'Discover Our Services',
+    tr: '[tr] Discover Our Services', ar: '[ar] Discover Our Services', de: '[de] Discover Our Services',
+    ru: '[ru] Discover Our Services', ur: '[ur] Discover Our Services',
+  })
+  assert.deepEqual(translationStatesOf(field), { en: 'source', tr: 'translated', ar: 'translated', de: 'translated', ru: 'translated', ur: 'translated' })
+})
+
+test('11b. metadata is lazy: only the field being saved gains or changes it', async () => {
+  const untouched = { type: 'text', sourceLang: 'en', en: 'We Design, Build', de: 'Wir entwerfen, bauen', verified: false }
+  store.set('home', {
+    pageKey: 'home',
+    fields: { heroCtaPrimary: structuredClone(LEGACY_BUTTON), heroHeading1: structuredClone(untouched), heroImage: { type: 'image', url: 'https://cdn.test/hero.png' } },
+    sections: { services: true },
+  })
+  currentUser = OWNER
+
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+
+  assert.ok(stored('heroCtaPrimary').meta, 'the saved field has metadata')
+  assert.deepEqual(stored('heroHeading1'), untouched, 'a field that was not saved is byte-for-byte unchanged')
+  assert.deepEqual(stored('heroImage'), { type: 'image', url: 'https://cdn.test/hero.png' })
+  assert.equal(containsMeta(stored('heroHeading1')), false)
+
+  // Re-sending unchanged text is still skipped, and still adds nothing.
+  await request('PUT', '/api/page-content/home', { fields: { heroHeading1: text('We Design, Build') } })
+  assert.deepEqual(stored('heroHeading1'), untouched)
+  // An image never has translation state.
+  await request('PUT', '/api/page-content/home', { fields: { heroImage: image('https://cdn.test/new.png') } })
+  assert.deepEqual(stored('heroImage'), { type: 'image', url: 'https://cdn.test/new.png' })
+})
+
+test('11c. THE STALE CASE: a tracked translation whose retranslation fails keeps its text and its old provenance', async () => {
+  currentUser = OWNER
+  // Version 1: everything translates and is tracked.
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Explore Services') } })
+  const v1 = structuredClone(stored('heroCtaPrimary'))
+  const hashV1 = sourceHash('Explore Services')
+  assert.equal(v1.meta.langs.de.from, hashV1)
+
+  // Version 2: German fails.
+  providerBehaviour = { de: 'fail' }
+  const res = await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+  const field = stored('heroCtaPrimary')
+  const hashV2 = sourceHash('Discover Our Services')
+  assert.notEqual(hashV1, hashV2)
+
+  assert.equal(field.meta.sourceHash, hashV2)
+  assert.equal(field.de, '[de] Explore Services', 'the German TEXT is kept exactly')
+  assert.equal(field.meta.langs.de.from, hashV1, 'still recorded as a translation of version 1')
+  assert.equal(field.meta.langs.de.by, 'machine')
+  assert.equal(field.meta.langs.de.at, v1.meta.langs.de.at, 'the time it was last successfully translated is not moved')
+  assert.equal(field.meta.langs.de.error, 'provider_error')
+  assert.match(field.meta.langs.de.errorAt, ISO)
+  assert.deepEqual(Object.keys(field.meta.langs.de).sort(), ['at', 'by', 'error', 'errorAt', 'from'])
+
+  assert.deepEqual(translationStatesOf(field), { en: 'source', tr: 'translated', ar: 'translated', de: 'stale', ru: 'translated', ur: 'translated' })
+  assert.equal(field.meta.langs.tr.from, hashV2)
+
+  // Phase A's report describes this request; Phase B's state describes the record. Both hold.
+  assert.deepEqual(res.body.translation.fields.heroCtaPrimary.needsAttention, [{ lang: 'de', reason: 'provider_error', using: 'previous' }])
+  assertNothingReportedIsStored()
+})
+
+test('11d. a later successful translation replaces the entry and clears the old error', async () => {
+  currentUser = OWNER
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Explore Services') } })
+  providerBehaviour = { de: 'fail' }
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+  assert.equal(stored('heroCtaPrimary').meta.langs.de.error, 'provider_error')
+
+  providerBehaviour = {}
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Everything We Offer') } })
+
+  const field = stored('heroCtaPrimary')
+  assert.deepEqual(Object.keys(field.meta.langs.de).sort(), ['at', 'by', 'from'], 'no error survives a success')
+  assert.equal(field.meta.langs.de.from, sourceHash('Discover Everything We Offer'))
+  assert.equal(field.de, '[de] Discover Everything We Offer')
+  assert.equal(translationStatesOf(field).de, 'translated')
+})
+
+test('11e. a LEGACY translation that survives a failed save stays unknown — no provenance is invented', async () => {
+  store.set('home', { pageKey: 'home', fields: { heroCtaPrimary: structuredClone(LEGACY_BUTTON) }, sections: {} })
+  currentUser = OWNER
+  providerBehaviour = { de: 'fail' }
+
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+
+  const field = stored('heroCtaPrimary')
+  assert.equal(field.de, 'Leistungen entdecken', 'the legacy German text is kept')
+  assert.deepEqual(Object.keys(field.meta.langs.de).sort(), ['error', 'errorAt'], 'a failure is recorded, a provenance is not')
+  assert.equal(field.meta.langs.de.error, 'provider_error')
+  assert.equal(translationStatesOf(field).de, 'unknown', 'not current, and not stale either')
+  // Turkish translated this time, so it is tracked from now on.
+  assert.equal(field.tr, '[tr] Discover Our Services')
+  assert.equal(translationStatesOf(field).tr, 'translated')
+  // The legacy `verified` flag is not carried into, or read by, the new state.
+  assert.equal('verified' in field, false)
+})
+
+test('11f. a failed language with nothing stored is missing: no empty value, only the failure', async () => {
+  currentUser = OWNER
+  providerBehaviour = { de: 'fail', ru: 'echo', ur: 'poison' }
+
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+
+  const field = stored('heroCtaPrimary')
+  for (const [lang, reason] of [['de', 'provider_error'], ['ru', 'echo'], ['ur', 'quota']]) {
+    assert.equal(lang in field, false, `${lang} has no value`)
+    assert.deepEqual(Object.keys(field.meta.langs[lang]).sort(), ['error', 'errorAt'])
+    assert.equal(field.meta.langs[lang].error, reason)
+    assert.equal(translationStatesOf(field)[lang], 'missing')
+  }
+  assert.equal(JSON.stringify(field).includes('MYMEMORY'), false, 'only the reason identifier is stored, never the provider sentence')
+  assert.equal(translationStatesOf(field).tr, 'translated')
+})
+
+test('11g. several fields in one save are tracked independently', async () => {
+  currentUser = OWNER
+  providerBehaviour = { 'de|Istanbul Studio': 'fail', 'ur|Discover Our Services': 'fail' }
+
+  await request('PUT', '/api/page-content/home', {
+    fields: { heroLabel: text('Istanbul Studio'), heroCtaPrimary: text('Discover Our Services') },
+  })
+
+  assert.equal(stored('heroLabel').meta.sourceHash, sourceHash('Istanbul Studio'))
+  assert.equal(stored('heroCtaPrimary').meta.sourceHash, sourceHash('Discover Our Services'))
+  assert.deepEqual(translationStatesOf(stored('heroLabel')), { en: 'source', tr: 'translated', ar: 'translated', de: 'missing', ru: 'translated', ur: 'translated' })
+  assert.deepEqual(translationStatesOf(stored('heroCtaPrimary')), { en: 'source', tr: 'translated', ar: 'translated', de: 'translated', ru: 'translated', ur: 'missing' })
+  assert.equal(stored('heroLabel').meta.langs.ur.from, sourceHash('Istanbul Studio'))
+  assert.equal(stored('heroCtaPrimary').meta.langs.de.from, sourceHash('Discover Our Services'))
+})
+
+test('11h. a change of source language is followed, not second-guessed', async () => {
+  currentUser = OWNER
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Explore Services') } })
+  const english = structuredClone(stored('heroCtaPrimary'))
+
+  // The next save is Turkish; German fails, so its English-era translation is kept.
+  providerBehaviour = { de: 'fail' }
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Hizmetleri Keşfedin') } })
+
+  const field = stored('heroCtaPrimary')
+  const hashTr = sourceHash('Hizmetleri Keşfedin')
+  assert.equal(field.sourceLang, 'tr')
+  assert.equal(field.tr, 'Hizmetleri Keşfedin')
+  assert.equal(field.meta.sourceHash, hashTr)
+  assert.equal('tr' in field.meta.langs, false, 'the source language has no translation entry')
+  assert.equal(field.meta.langs.en.from, hashTr, 'English is now a translation of the Turkish source')
+  assert.equal(field.meta.langs.de.from, english.meta.sourceHash, 'German still points at the English text it came from')
+  assert.deepEqual(translationStatesOf(field), { en: 'translated', tr: 'source', ar: 'translated', de: 'stale', ru: 'translated', ur: 'translated' })
+})
+
+test('11i. the public GET never exposes translation state', async () => {
+  store.set('home', { pageKey: 'home', fields: { heroHeading1: structuredClone(LEGACY_BUTTON) }, sections: { services: true } })
+  currentUser = OWNER
+  providerBehaviour = { de: 'fail', ru: 'echo' }
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services'), heroLabel: text('Istanbul Studio') } })
+  assert.ok(stored('heroCtaPrimary').meta && stored('heroLabel').meta, 'the state really is stored')
+  currentUser = null
+
+  const res = await request('GET', '/api/page-content/home')
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(Object.keys(res.body).sort(), ['fields', 'sections', 'success'])
+  assert.equal(containsMeta(res.body), false)
+  const serialized = JSON.stringify(res.body)
+  for (const leaked of ['sourceHash', '"from"', '"by"', '"errorAt"', '"error"', 'translationStates', sourceHash('Discover Our Services'), 'provider_error']) {
+    assert.equal(serialized.includes(leaked), false, `the public response contains ${leaked}`)
+  }
+  // Everything else is exactly the stored content.
+  assert.deepEqual(res.body.fields.heroCtaPrimary, content(stored('heroCtaPrimary')))
+  assert.deepEqual(res.body.fields.heroLabel, content(stored('heroLabel')))
+  assert.deepEqual(res.body.fields.heroHeading1, LEGACY_BUTTON, 'a legacy field is returned as it always was')
+  assert.deepEqual(res.body.sections, { services: true })
+})
+
+test('11j. the protected admin read returns the metadata and the derived states', async () => {
+  store.set('home', { pageKey: 'home', fields: { heroHeading1: structuredClone(LEGACY_BUTTON), heroImage: { type: 'image', url: 'https://cdn.test/hero.png' } }, sections: { cta: false } })
+  currentUser = ADMIN_WITH
+  providerBehaviour = { de: 'fail' }
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+  const callsAfterSave = providerCalls.length
+
+  const res = await adminRead()
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(Object.keys(res.body).sort(), ['fields', 'sections', 'success', 'translationStates'])
+  assert.deepEqual(res.body.fields.heroCtaPrimary, stored('heroCtaPrimary'), 'the field with its meta')
+  assert.equal(res.body.fields.heroCtaPrimary.meta.sourceHash, sourceHash('Discover Our Services'))
+  assert.deepEqual(res.body.sections, { cta: false })
+  assert.deepEqual(res.body.translationStates, {
+    heroCtaPrimary: { en: 'source', tr: 'translated', ar: 'translated', de: 'missing', ru: 'translated', ur: 'translated' },
+    // Legacy text with no metadata: present values are unknown, absent ones missing.
+    heroHeading1: { en: 'source', tr: 'unknown', ar: 'missing', de: 'unknown', ru: 'missing', ur: 'missing' },
+  })
+  assert.equal('heroImage' in res.body.translationStates, false, 'an image has no translation state')
+
+  // Reading wrote nothing and translated nothing.
+  assert.equal(providerCalls.length, callsAfterSave)
+  assert.deepEqual(stored('heroHeading1'), LEGACY_BUTTON)
+})
+
+test('11k. the admin read is guarded exactly like the save', async () => {
+  store.set('home', { pageKey: 'home', fields: { heroHeading1: structuredClone(LEGACY_BUTTON) }, sections: {} })
+
+  currentUser = null
+  assert.equal((await adminRead()).status, 401)
+  for (const user of [CUSTOMER, AGENT, ADMIN_WITHOUT]) {
+    currentUser = user
+    const res = await adminRead()
+    assert.equal(res.status, 403, `${user.role} was allowed`)
+    assert.equal(containsMeta(res.body) || 'fields' in (res.body || {}), false)
+  }
+  for (const user of [OWNER, ADMIN_WITH]) {
+    currentUser = user
+    assert.equal((await adminRead()).status, 200, `${user.role} was refused`)
+  }
+
+  currentUser = OWNER
+  assert.equal((await adminRead('about')).status, 404, 'an unknown page')
+  const empty = await adminRead('contact')
+  assert.equal(empty.status, 200)
+  assert.deepEqual(empty.body, { success: true, fields: {}, sections: {}, translationStates: {} })
+})
+
+test('11l. a document with no metadata anywhere loads, reads and saves as it always did', async () => {
+  const legacy = {
+    pageKey: 'home',
+    fields: {
+      heroCtaPrimary: structuredClone(LEGACY_BUTTON),
+      heroLabel: { type: 'text', sourceLang: 'en', en: 'Istanbul', verified: false },
+      heroImage: { type: 'image', url: '/images/hero.png' },
+    },
+    sections: { projects: false },
+  }
+  store.set('home', structuredClone(legacy))
+
+  const publicRead = await request('GET', '/api/page-content/home')
+  assert.equal(publicRead.status, 200)
+  assert.deepEqual(publicRead.body.fields, legacy.fields)
+
+  currentUser = OWNER
+  const admin = await adminRead()
+  assert.equal(admin.status, 200)
+  assert.deepEqual(admin.body.fields, legacy.fields)
+  assert.deepEqual(admin.body.translationStates.heroCtaPrimary, { en: 'source', tr: 'unknown', ar: 'missing', de: 'unknown', ru: 'missing', ur: 'missing' })
+  assert.deepEqual(store.get('home'), legacy, 'neither read changed the document')
+
+  const res = await request('PUT', '/api/page-content/home', { fields: { heroLabel: text('Istanbul Studio') }, sections: { projects: true } })
+  assert.equal(res.status, 200)
+  assert.deepEqual(stored('heroCtaPrimary'), legacy.fields.heroCtaPrimary, 'the field that was not saved is still pure legacy')
+  assert.equal(stored('heroLabel').en, 'Istanbul Studio')
+  assert.ok(stored('heroLabel').meta)
+})
+
+test('11m. the save response still carries the Phase A report, with the saved metadata beside it', async () => {
+  currentUser = OWNER
+  providerBehaviour = { de: 'fail' }
+  const res = await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(Object.keys(res.body).sort(), ['fields', 'sections', 'success', 'translation'])
+  assert.deepEqual(res.body.translation.fields.heroCtaPrimary, {
+    sourceLang: 'en',
+    translated: ['tr', 'ar', 'ru', 'ur'],
+    needsAttention: [{ lang: 'de', reason: 'provider_error', using: 'none' }],
+  })
+  assert.deepEqual(res.body.fields.heroCtaPrimary, stored('heroCtaPrimary'), 'the editor is given what was stored, meta included')
 })

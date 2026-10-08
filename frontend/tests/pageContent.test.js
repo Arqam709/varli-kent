@@ -10,6 +10,7 @@ import test from 'node:test'
 
 import { resolveCmsField, isSectionVisibleIn, computeBands, buildSavePayload, isEmptyPayload, sectionBackground } from '../src/lib/pageContentResolve.js'
 import { PAGE_CONTENT_REGISTRY, defaultValues, allFieldDefs } from '../src/lib/pageContentRegistry.js'
+import { localizedText, editableText } from '../src/lib/localizedText.js'
 
 const textField = (langs) => ({ type: 'text', sourceLang: 'en', ...langs })
 
@@ -351,4 +352,63 @@ test('7f. hiding a homepage section between differing bands repairs the clash', 
 
   assert.equal(out.services, 'dark')
   assert.equal(out.browse, 'light', 'two dark bands ended up adjacent')
+})
+
+/* ══════════════ CMS Phase B — a field may carry `meta` ══════════════
+ *
+ * The backend now records translation state beside a saved field's text. The
+ * public API strips it, and an editor response includes it. Either way nothing
+ * on the frontend may read it or be changed by it: rendering is decided by the
+ * language slots alone, exactly as before.
+ */
+
+const HASH_NEW = 'a'.repeat(64)
+const HASH_OLD = 'b'.repeat(64)
+const META = {
+  sourceHash: HASH_NEW,
+  langs: {
+    tr: { from: HASH_NEW, by: 'machine', at: '2026-10-08T12:30:00.000Z' },
+    de: { from: HASH_OLD, by: 'machine', at: '2026-10-01T10:00:00.000Z', error: 'timeout', errorAt: '2026-10-08T12:30:00.000Z' },
+    ru: { error: 'quota', errorAt: '2026-10-08T12:30:00.000Z' },
+  },
+}
+const ALL_SIX = ['en', 'tr', 'ar', 'de', 'ru', 'ur']
+
+test('Phase B: a field with `meta` resolves exactly as the same field without it, in all six languages', () => {
+  const plain = textField({ en: 'Discover Our Services', tr: 'Hizmetlerimizi Keşfedin', de: 'Leistungen entdecken' })
+  const tracked = { ...plain, meta: META }
+
+  for (const lang of ALL_SIX) {
+    assert.equal(resolveCmsField(tracked, lang, `CATALOGUE-${lang}`), resolveCmsField(plain, lang, `CATALOGUE-${lang}`), lang)
+    assert.equal(resolveCmsField(tracked, lang, undefined), resolveCmsField(plain, lang, undefined), `${lang} without a fallback`)
+    assert.equal(localizedText(tracked, lang, ''), localizedText(plain, lang, ''), `localizedText ${lang}`)
+  }
+  // A stale translation is still what is rendered; a failed one still falls back.
+  assert.equal(resolveCmsField(tracked, 'de', 'CATALOGUE'), 'Leistungen entdecken')
+  assert.equal(resolveCmsField(tracked, 'ru', 'CATALOGUE'), 'CATALOGUE')
+  assert.equal(resolveCmsField(tracked, 'ar', 'CATALOGUE'), 'CATALOGUE')
+})
+
+test('Phase B: `meta` is never rendered and never mistaken for text', () => {
+  const tracked = { ...textField({ en: 'Discover Our Services' }), meta: META }
+
+  for (const lang of [...ALL_SIX, 'meta', 'sourceHash', 'langs']) {
+    const shown = resolveCmsField(tracked, lang, 'CATALOGUE')
+    assert.equal(typeof shown, 'string', lang)
+    assert.equal(shown.includes(HASH_NEW) || shown.includes('timeout') || shown.includes('[object'), false, lang)
+  }
+  // The editor still edits the admin's own source text.
+  assert.equal(editableText(tracked), 'Discover Our Services')
+  assert.equal(editableText({ sourceLang: 'tr', tr: 'Hizmetler', en: 'Services', meta: META }), 'Hizmetler')
+})
+
+test('Phase B: the save payload is still built from the text alone', () => {
+  const defs = allFieldDefs('home')
+  const baselineValues = defaultValues('home')
+  const values = { ...baselineValues, heroCtaPrimary: 'Discover Our Services' }
+
+  const payload = buildSavePayload({ fieldDefs: defs, baselineValues, values, baselineSections: {}, sections: {} })
+
+  assert.deepEqual(payload, { fields: { heroCtaPrimary: { type: 'text', value: 'Discover Our Services' } }, sections: {} })
+  assert.equal(JSON.stringify(payload).includes('meta'), false)
 })
