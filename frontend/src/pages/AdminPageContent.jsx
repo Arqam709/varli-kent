@@ -6,6 +6,7 @@ import { PAGE_CONTENT_REGISTRY, PAGE_CONTENT_KEYS, allFieldDefs, defaultValues }
 import { editableText } from '../lib/localizedText'
 import { buildSavePayload, isEmptyPayload } from '../lib/pageContentResolve'
 import { pageContentFieldLabel, pageContentPageLabel, pageContentSectionTitle } from '../lib/pageContentAdminLabels'
+import { summarizeSaveReport, languageList } from '../lib/pageContentSaveReport'
 import { useLanguage } from '../contexts/LanguageContext'
 import ContactInterestsManager from '../components/ContactInterestsManager'
 
@@ -155,8 +156,55 @@ function SectionCard({ section, title, visible, onToggleVisible, values, setFiel
   )
 }
 
+// "Section — Field" for every field on a page, to name the ones a save report
+// mentions. Captions repeat between sections ("Heading"), so the section is
+// part of the name.
+const fieldCaptions = (pageKey, pc) => {
+  const page = PAGE_CONTENT_REGISTRY[pageKey]
+  const captions = {}
+  for (const f of page.hero.fields) captions[f.key] = `${pc.hero || 'Hero'} — ${pageContentFieldLabel(pc, f)}`
+  for (const section of page.sections) {
+    for (const f of section.fields) captions[f.key] = `${pageContentSectionTitle(pc, pageKey, section)} — ${pageContentFieldLabel(pc, f)}`
+  }
+  return captions
+}
+
+/*
+ * What the last save could not translate, field by field. Shown until it is
+ * dismissed or the next save replaces it — a toast is gone in five seconds,
+ * and "German still shows the old text" is something to act on, not glance at.
+ */
+function SaveReport({ report, pageKey, language, pc, onDismiss }) {
+  const captions = fieldCaptions(pageKey, pc)
+
+  return (
+    <div role="status" data-testid="save-report" className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+      <div className="flex items-start justify-between gap-4">
+        <p className="font-semibold">{pc.saveReportTitle}</p>
+        <button type="button" onClick={onDismiss} className="shrink-0 text-xs font-semibold underline cursor-pointer">
+          {pc.saveReportDismiss}
+        </button>
+      </div>
+      <ul className="mt-3 max-h-64 space-y-3 overflow-y-auto">
+        {report.issues.map((issue) => (
+          <li key={issue.fieldKey}>
+            <p className="font-medium">{captions[issue.fieldKey] || issue.fieldKey}</p>
+            {issue.previous.length > 0 && (
+              <p className="mt-0.5">{pc.saveIssuePrevious.replace('{languages}', () => languageList(issue.previous, language))}</p>
+            )}
+            {issue.missing.length > 0 && (
+              <p className="mt-0.5">{pc.saveIssueMissing.replace('{languages}', () => languageList(issue.missing, language))}</p>
+            )}
+            {issue.tooLong && <p className="mt-0.5">{pc.saveIssueTooLong}</p>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 const AdminPageContent = () => {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const pc = t.adminPages?.pageContent || {}
 
   const [pageKey, setPageKey] = useState(PAGE_CONTENT_KEYS[0])
@@ -168,6 +216,8 @@ const AdminPageContent = () => {
   const [loadFailed, setLoadFailed] = useState(false)
   const [saving, setSaving] = useState(false)
   const [heroOpen, setHeroOpen] = useState(true)
+  // The translation problems of the most recent save, or null.
+  const [saveReport, setSaveReport] = useState(null)
 
   /*
    * What the server last told us this page contains. Every save diffs against
@@ -208,6 +258,7 @@ const AdminPageContent = () => {
     const ticket = ++loadTicket.current
     setLoading(true)
     setLoadFailed(false)
+    setSaveReport(null)
 
     const fallback = defaultValues(key)
     setValues(fallback)
@@ -272,11 +323,35 @@ const AdminPageContent = () => {
 
   const dirty = !isEmptyPayload(payload)
 
+  /*
+   * Says what the server reported — nothing more. The source edit is saved in
+   * every case that reaches here; what varies is how much of it was translated.
+   * A response with no report (a backend that predates it) gets a plain
+   * "Saved.", never a claim about translation.
+   */
+  const announceSave = (report) => {
+    const source = report.sourceLangs.length > 0
+      ? ` ${pc.savedSourceLanguage.replace('{languages}', () => languageList(report.sourceLangs, language))}`
+      : ''
+
+    if (report.outcome === 'complete') {
+      toast.success(pc.savedTranslated.replace('{count}', () => report.languageCount) + source)
+    } else if (report.outcome === 'partial') {
+      toast.warn(pc.savedPartial + source)
+    } else if (report.outcome === 'untranslated') {
+      toast.warn(pc.savedUntranslated + source)
+    } else {
+      toast.success(pc.savedNeutral)
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
-      await api.put(`/page-content/${pageKey}`, payload)
-      toast.success(pc.savedSuccess || 'Saved — translated into all six languages automatically')
+      const res = await api.put(`/page-content/${pageKey}`, payload)
+      const report = summarizeSaveReport(res.data?.translation)
+      announceSave(report)
+      setSaveReport(report.issues.length > 0 ? report : null)
       // The save succeeded, so what is on screen is now what the server holds.
       // A failed save deliberately leaves the baseline alone, so the same delta
       // is still pending and the admin can simply press Save again.
@@ -314,6 +389,10 @@ const AdminPageContent = () => {
             </button>
           ))}
         </div>
+
+        {saveReport && (
+          <SaveReport report={saveReport} pageKey={pageKey} language={language} pc={pc} onDismiss={() => setSaveReport(null)} />
+        )}
 
         {loading && (
           <div className="py-16 text-center text-sm text-slate-400">{pc.loading || 'Loading…'}</div>

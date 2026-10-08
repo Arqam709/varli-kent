@@ -33,6 +33,8 @@ import {
   sanitizePoisonedTranslations,
   translateOne,
   localizeText,
+  localizeTextWithReport,
+  TRANSLATION_FAILURE_REASONS,
   TRANSLATE_TIMEOUT_MS,
 } from '../utils/autoTranslate.js'
 
@@ -574,4 +576,195 @@ test('12A1: isLocalizedObject distinguishes the two stored shapes', () => {
   assert.equal(isLocalizedObject({ sourceLang: 'en' }), false, 'no language values is not localized')
   assert.equal(isLocalizedObject(null), false)
   assert.equal(isLocalizedObject([]), false)
+})
+
+/* ══════════════ CMS Phase A — the per-language report ══════════════
+ *
+ * localizeTextWithReport returns the object localizeText always returned
+ * (`value`) plus an account of what happened to each language (`report`).
+ * The report is for the save response; nothing here may reach `value`.
+ */
+
+const NEW_SOURCE = 'Discover Our Services'
+const TARGETS = ['tr', 'ar', 'de', 'ru', 'ur']
+// A field that already has a real translation in every language.
+const STORED = {
+  sourceLang: 'en',
+  en: 'Explore Services',
+  tr: 'Hizmetleri Keşfedin',
+  ar: 'استكشف الخدمات',
+  de: 'Leistungen entdecken',
+  ru: 'Изучить услуги',
+  ur: 'خدمات دیکھیں',
+}
+
+const TWO_LANGUAGES = 'PLEASE SELECT TWO DISTINCT LANGUAGES'
+const refuses = { ok: false, status: 400, json: async () => ({}) }
+
+// A provider scripted per target language; unlisted languages translate.
+const scripted = (script) => async (url) => {
+  const target = targetOf(url)
+  if (!(target in script)) return goodProvider(url)
+  const step = script[target]
+  return typeof step === 'function' ? step(url) : step
+}
+const allTargets = (step) => scripted(Object.fromEntries(TARGETS.map((lang) => [lang, step])))
+const sourceOf = (url) => new URL(url).searchParams.get('q')
+const echo = async (url) => ok({ responseStatus: 200, responseData: { translatedText: sourceOf(url) } })
+const timesOut = async () => { throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }) }
+
+const STORED_KEYS = ['sourceLang', ...SUPPORTED_LANGUAGES]
+const assertNoReportInValue = (value) => {
+  for (const key of Object.keys(value)) assert.ok(STORED_KEYS.includes(key), `value carries an unexpected key: ${key}`)
+  for (const word of ['status', 'reason', 'using', 'targets', 'translated', 'failed']) {
+    assert.equal(JSON.stringify(value).includes(`"${word}"`), false, `value mentions "${word}"`)
+  }
+}
+
+test('Phase A: all five targets succeed — every one is reported translated', async () => {
+  const { value, report } = await localizeTextWithReport(NEW_SOURCE, STORED, goodProvider)
+
+  assert.equal(report.sourceLang, 'en')
+  assert.deepEqual(Object.keys(report.targets).sort(), [...TARGETS].sort())
+  for (const lang of TARGETS) assert.deepEqual(report.targets[lang], { status: 'translated' }, lang)
+
+  assert.deepEqual(value, { sourceLang: 'en', en: NEW_SOURCE, tr: '[tr]', ar: '[ar]', de: '[de]', ru: '[ru]', ur: '[ur]' })
+  assertNoReportInValue(value)
+})
+
+test('Phase A: localizeText still returns exactly the stored object, with or without failures', async () => {
+  for (const provider of [goodProvider, scripted({ de: refuses }), allTargets(refuses), scripted({ ru: echo })]) {
+    for (const existing of [null, STORED]) {
+      const plain = await localizeText(NEW_SOURCE, existing, provider)
+      const { value } = await localizeTextWithReport(NEW_SOURCE, existing, provider)
+      assert.deepEqual(plain, value)
+      assertNoReportInValue(plain)
+    }
+  }
+})
+
+test('Phase A: one target fails and its previous translation is kept — reported as failed, using the previous value', async () => {
+  const { value, report } = await localizeTextWithReport(NEW_SOURCE, STORED, scripted({ de: timesOut }))
+
+  assert.equal(value.en, NEW_SOURCE, 'the source edit is saved')
+  assert.equal(value.de, STORED.de, 'the previous German translation is kept')
+  assert.deepEqual(report.targets.de, { status: 'failed', reason: 'timeout', using: 'previous' })
+  for (const lang of TARGETS.filter((l) => l !== 'de')) {
+    assert.deepEqual(report.targets[lang], { status: 'translated' }, lang)
+    assert.equal(value[lang], `[${lang}]`)
+  }
+})
+
+test('Phase A: one target fails with nothing stored before — the slot stays absent and is reported as missing', async () => {
+  const { value, report } = await localizeTextWithReport(NEW_SOURCE, null, scripted({ de: refuses }))
+
+  assert.equal(value.en, NEW_SOURCE)
+  assert.equal('de' in value, false, 'no German value is invented')
+  assert.deepEqual(report.targets.de, { status: 'failed', reason: 'provider_error', using: 'none' })
+  assert.deepEqual(report.targets.tr, { status: 'translated' })
+})
+
+test('Phase A: several targets fail for different reasons, each reported on its own', async () => {
+  const provider = scripted({
+    ar: ok({ responseStatus: 200, responseData: { translatedText: '   ' } }),
+    de: ok({ responseStatus: 200, responseData: { translatedText: QUOTA_WARNING } }),
+    ru: ok({ responseStatus: 200, responseData: { translatedText: LENGTH_LIMIT } }),
+    ur: ok({ responseStatus: 403, responseData: { translatedText: TWO_LANGUAGES } }),
+  })
+  // Only German and Russian had a translation before.
+  const existing = { sourceLang: 'en', en: STORED.en, de: STORED.de, ru: STORED.ru }
+  const { value, report } = await localizeTextWithReport(NEW_SOURCE, existing, provider)
+
+  assert.deepEqual(report.targets, {
+    tr: { status: 'translated' },
+    ar: { status: 'failed', reason: 'invalid_response', using: 'none' },
+    de: { status: 'failed', reason: 'quota', using: 'previous' },
+    ru: { status: 'failed', reason: 'too_long', using: 'previous' },
+    ur: { status: 'failed', reason: 'same_language', using: 'none' },
+  })
+  assert.deepEqual(value, { sourceLang: 'en', en: NEW_SOURCE, tr: '[tr]', de: STORED.de, ru: STORED.ru })
+})
+
+test('Phase A: every target fails — the source is still returned for saving and all five are reported', async () => {
+  const { value, report } = await localizeTextWithReport(NEW_SOURCE, STORED, allTargets(refuses))
+
+  assert.equal(value.sourceLang, 'en')
+  assert.equal(value.en, NEW_SOURCE, 'the source edit survives a total provider failure')
+  for (const lang of TARGETS) {
+    assert.deepEqual(report.targets[lang], { status: 'failed', reason: 'provider_error', using: 'previous' }, lang)
+    assert.equal(value[lang], STORED[lang])
+  }
+
+  const fresh = await localizeTextWithReport(NEW_SOURCE, null, allTargets(refuses))
+  assert.deepEqual(fresh.value, { sourceLang: 'en', en: NEW_SOURCE })
+  for (const lang of TARGETS) assert.equal(fresh.report.targets[lang].using, 'none', lang)
+})
+
+test('Phase A: a provider echo is reported as a failure, never as a translation', async () => {
+  const { value, report } = await localizeTextWithReport(NEW_SOURCE, null, scripted({ de: echo }))
+
+  assert.deepEqual(report.targets.de, { status: 'failed', reason: 'echo', using: 'none' })
+  assert.equal('de' in value, false, 'the echoed English is not stored as German')
+
+  const kept = await localizeTextWithReport(NEW_SOURCE, STORED, scripted({ de: echo }))
+  assert.deepEqual(kept.report.targets.de, { status: 'failed', reason: 'echo', using: 'previous' })
+  assert.equal(kept.value.de, STORED.de)
+})
+
+test('Phase A: provider error text is neither stored nor reported as success', async () => {
+  const { value, report } = await localizeTextWithReport(NEW_SOURCE, null, allTargets(ok({ responseStatus: 200, responseData: { translatedText: QUOTA_WARNING } })))
+
+  for (const lang of TARGETS) assert.deepEqual(report.targets[lang], { status: 'failed', reason: 'quota', using: 'none' }, lang)
+  assert.deepEqual(value, { sourceLang: 'en', en: NEW_SOURCE })
+  assert.equal(JSON.stringify(value).includes('MYMEMORY'), false)
+  assert.equal(JSON.stringify(report).includes('MYMEMORY'), false, 'the provider sentence is not passed on in the report')
+})
+
+test('Phase A: a stored copy of the source is not "the previous translation" — it is reported as missing', async () => {
+  // Legacy data: German holding the old English text.
+  const legacy = { sourceLang: 'en', en: STORED.en, de: STORED.en }
+  const { value, report } = await localizeTextWithReport(NEW_SOURCE, legacy, scripted({ de: refuses }))
+
+  assert.equal('de' in value, false)
+  assert.deepEqual(report.targets.de, { status: 'failed', reason: 'provider_error', using: 'none' })
+})
+
+test('Phase A: an unparseable provider answer is an invalid response', async () => {
+  const garbled = { ok: true, json: async () => { throw new SyntaxError('Unexpected token < in JSON') } }
+  const { report } = await localizeTextWithReport(NEW_SOURCE, null, scripted({ ru: garbled }))
+  assert.deepEqual(report.targets.ru, { status: 'failed', reason: 'invalid_response', using: 'none' })
+})
+
+test('Phase A: the report names the stored source language and only the languages that were asked for', async () => {
+  const turkish = await localizeTextWithReport('Hizmetlerimizi keşfedin', null, goodProvider)
+  assert.equal(turkish.report.sourceLang, 'tr')
+  assert.equal(turkish.value.sourceLang, 'tr')
+  assert.deepEqual(Object.keys(turkish.report.targets).sort(), ['ar', 'de', 'en', 'ru', 'ur'])
+
+  // Empty text is stored as-is; nothing is translated, so nothing is reported.
+  let calls = 0
+  const counting = async (url) => { calls += 1; return goodProvider(url) }
+  const empty = await localizeTextWithReport('', STORED, counting)
+  assert.deepEqual(empty.report, { sourceLang: 'en', targets: {} })
+  assert.deepEqual(empty.value, { sourceLang: 'en', en: '' })
+  assert.equal(calls, 0)
+})
+
+test('Phase A: every reason the report can carry is one of the documented identifiers', async () => {
+  const failures = [refuses, echo, timesOut,
+    ok({ responseStatus: 200, responseData: { translatedText: QUOTA_WARNING } }),
+    ok({ responseStatus: 200, responseData: { translatedText: LENGTH_LIMIT } }),
+    ok({ responseStatus: 200, responseData: { translatedText: BAD_PAIR } }),
+    ok({ responseStatus: 403, responseData: { translatedText: TWO_LANGUAGES } }),
+    ok({ responseStatus: 200, responseData: {} }),
+    ok(null)]
+
+  const seen = new Set()
+  for (const failure of failures) {
+    const { report } = await localizeTextWithReport(NEW_SOURCE, null, scripted({ de: failure }))
+    assert.equal(report.targets.de.status, 'failed')
+    assert.ok(TRANSLATION_FAILURE_REASONS.includes(report.targets.de.reason), report.targets.de.reason)
+    seen.add(report.targets.de.reason)
+  }
+  assert.deepEqual([...seen].sort(), ['echo', 'invalid_response', 'provider_error', 'quota', 'same_language', 'timeout', 'too_long'])
 })

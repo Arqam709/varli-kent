@@ -70,7 +70,10 @@ mock.module('../models/PageContent.js', {
 // ── Scripted translation provider ───────────────────────────────────────
 /** Every MyMemory URL the code under test requested. */
 let providerCalls = []
-/** lang -> 'ok' | 'fail' | 'poison'. Missing means 'ok'. */
+/**
+ * lang -> 'ok' | 'fail' | 'poison' | 'echo'. Missing means 'ok'. A key of
+ * `<lang>|<source text>` scripts one language for one field's text only.
+ */
 let providerBehaviour = {}
 
 const realFetch = globalThis.fetch
@@ -90,8 +93,9 @@ const fakeFetch = async (url, options) => {
   const lang = new URL(href).searchParams.get('langpair').split('|')[1]
   const text = new URL(href).searchParams.get('q')
 
-  const mode = providerBehaviour[lang] || 'ok'
+  const mode = providerBehaviour[`${lang}|${text}`] || providerBehaviour[lang] || 'ok'
   if (mode === 'fail') return { ok: false, json: async () => ({}) }
+  if (mode === 'echo') return { ok: true, json: async () => ({ responseStatus: 200, responseData: { translatedText: text } }) }
   if (mode === 'poison') {
     return { ok: true, json: async () => ({ responseStatus: 200, responseData: { translatedText: 'MYMEMORY WARNING: YOU USED ALL AVAILABLE FREE TRANSLATIONS' } }) }
   }
@@ -545,4 +549,216 @@ test('9. each of the seven pages accepts a write to its hero heading', async () 
     const res = await request('PUT', `/api/page-content/${pageKey}`, { fields: { [key]: text('Hello') } })
     assert.equal(res.status, 200, `${pageKey} rejected its own hero heading`)
   }
+})
+
+/* ══════════════════════ 10. CMS Phase A — the save response reports translation honestly ══════════════ */
+
+const TARGET_LANGS = ['tr', 'ar', 'de', 'ru', 'ur']
+// The shape a stored text field has, and nothing more.
+const STORED_FIELD_KEYS = ['type', 'sourceLang', 'en', 'tr', 'ar', 'de', 'ru', 'ur']
+const REPORT_WORDS = ['translation', 'translated', 'needsAttention', 'reason', 'using', 'status', 'targets']
+
+const assertNothingReportedIsStored = () => {
+  for (const [pageKey, doc] of store) {
+    assert.deepEqual(Object.keys(doc).sort(), ['fields', 'pageKey', 'sections'], `${pageKey} gained a top-level key`)
+    for (const [key, field] of Object.entries(doc.fields)) {
+      for (const stored of Object.keys(field)) {
+        assert.ok([...STORED_FIELD_KEYS, 'url'].includes(stored), `${pageKey}.${key} stores an unexpected key: ${stored}`)
+      }
+    }
+    const serialized = JSON.stringify(doc)
+    for (const word of REPORT_WORDS) assert.equal(serialized.includes(`"${word}"`), false, `${pageKey} stores "${word}"`)
+  }
+}
+
+test('10a. a fully translated save reports every language for the field, and keeps the existing response keys', async () => {
+  currentUser = OWNER
+  const res = await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+
+  assert.equal(res.status, 200)
+  assert.equal(res.body.success, true)
+  assert.equal(res.body.fields.heroCtaPrimary.en, 'Discover Our Services')
+  assert.deepEqual(res.body.sections, {})
+  assert.deepEqual(res.body.translation, {
+    fields: { heroCtaPrimary: { sourceLang: 'en', translated: TARGET_LANGS, needsAttention: [] } },
+  })
+  assertNothingReportedIsStored()
+})
+
+test('10b. one failed language with a previous translation: 200, the old value kept, and reported as using it', async () => {
+  store.set('home', {
+    pageKey: 'home',
+    fields: { heroCtaPrimary: { type: 'text', sourceLang: 'en', en: 'Explore Services', de: 'Leistungen entdecken', tr: 'Hizmetleri Keşfedin' } },
+    sections: {},
+  })
+  currentUser = OWNER
+  providerBehaviour = { de: 'fail' }
+
+  const res = await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+
+  assert.equal(res.status, 200, 'a failed translation is not a failed save')
+  assert.deepEqual(res.body.translation.fields.heroCtaPrimary, {
+    sourceLang: 'en',
+    translated: ['tr', 'ar', 'ru', 'ur'],
+    needsAttention: [{ lang: 'de', reason: 'provider_error', using: 'previous' }],
+  })
+  // Stored exactly what the route stored before it could report anything.
+  assert.deepEqual(store.get('home').fields.heroCtaPrimary, {
+    type: 'text', sourceLang: 'en', en: 'Discover Our Services',
+    tr: '[tr] Discover Our Services', ar: '[ar] Discover Our Services', de: 'Leistungen entdecken',
+    ru: '[ru] Discover Our Services', ur: '[ur] Discover Our Services',
+  })
+  assertNothingReportedIsStored()
+})
+
+test('10c. one failed language with nothing stored before: reported as having no translation, slot left absent', async () => {
+  currentUser = OWNER
+  providerBehaviour = { de: 'fail' }
+
+  const res = await request('PUT', '/api/page-content/home', { fields: { heroHeading1: text('We Plan') } })
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(res.body.translation.fields.heroHeading1.needsAttention, [{ lang: 'de', reason: 'provider_error', using: 'none' }])
+  assert.equal('de' in store.get('home').fields.heroHeading1, false)
+  assertNothingReportedIsStored()
+})
+
+test('10d. several fields in one save: each field keeps its own per-language result', async () => {
+  store.set('home', {
+    pageKey: 'home',
+    fields: { heroLabel: { type: 'text', sourceLang: 'en', en: 'Istanbul', de: 'Istanbul — alt' } },
+    sections: {},
+  })
+  currentUser = OWNER
+  // German fails for the label only; Urdu fails for the button only.
+  providerBehaviour = { 'de|Istanbul Studio': 'fail', 'ur|Discover Our Services': 'fail' }
+
+  const res = await request('PUT', '/api/page-content/home', {
+    fields: { heroLabel: text('Istanbul Studio'), heroCtaPrimary: text('Discover Our Services') },
+  })
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(res.body.translation.fields, {
+    heroLabel: {
+      sourceLang: 'en',
+      translated: ['tr', 'ar', 'ru', 'ur'],
+      needsAttention: [{ lang: 'de', reason: 'provider_error', using: 'previous' }],
+    },
+    heroCtaPrimary: {
+      sourceLang: 'en',
+      translated: ['tr', 'ar', 'de', 'ru'],
+      needsAttention: [{ lang: 'ur', reason: 'provider_error', using: 'none' }],
+    },
+  })
+
+  const stored = store.get('home').fields
+  assert.equal(stored.heroLabel.de, 'Istanbul — alt')
+  assert.equal(stored.heroLabel.ur, '[ur] Istanbul Studio')
+  assert.equal(stored.heroCtaPrimary.de, '[de] Discover Our Services')
+  assert.equal('ur' in stored.heroCtaPrimary, false)
+  assertNothingReportedIsStored()
+})
+
+test('10e. every translation fails: still 200, the source is saved, and all five languages are reported', async () => {
+  currentUser = OWNER
+  providerBehaviour = Object.fromEntries(TARGET_LANGS.map((lang) => [lang, 'fail']))
+
+  const res = await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+
+  assert.equal(res.status, 200)
+  assert.equal(res.body.success, true)
+  assert.deepEqual(store.get('home').fields.heroCtaPrimary, { type: 'text', sourceLang: 'en', en: 'Discover Our Services' })
+  const report = res.body.translation.fields.heroCtaPrimary
+  assert.deepEqual(report.translated, [])
+  assert.deepEqual(report.needsAttention.map((item) => item.lang), TARGET_LANGS)
+  for (const item of report.needsAttention) assert.deepEqual(item, { lang: item.lang, reason: 'provider_error', using: 'none' })
+  assertNothingReportedIsStored()
+})
+
+test('10f. an echo and a quota warning are reported with their reasons, and neither is stored', async () => {
+  currentUser = OWNER
+  providerBehaviour = { de: 'echo', ru: 'poison' }
+
+  const res = await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(res.body.translation.fields.heroCtaPrimary.needsAttention, [
+    { lang: 'de', reason: 'echo', using: 'none' },
+    { lang: 'ru', reason: 'quota', using: 'none' },
+  ])
+  assert.equal(JSON.stringify(res.body).includes('MYMEMORY'), false, 'the provider sentence is not sent to the admin')
+  const field = store.get('home').fields.heroCtaPrimary
+  assert.equal('de' in field, false)
+  assert.equal('ru' in field, false)
+  assertNothingReportedIsStored()
+})
+
+test('10g. unchanged text is still skipped: no provider call, and nothing reported for it', async () => {
+  store.set('home', {
+    pageKey: 'home',
+    // German is missing — re-saving the same text must NOT become an automatic retry.
+    fields: { heroCtaPrimary: { type: 'text', sourceLang: 'en', en: 'Explore Services', tr: 'Hizmetleri Keşfedin' } },
+    sections: {},
+  })
+  currentUser = OWNER
+
+  const res = await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Explore Services') } })
+
+  assert.equal(res.status, 200)
+  assert.equal(providerCalls.length, 0)
+  assert.deepEqual(res.body.translation, { fields: {} })
+  assert.deepEqual(store.get('home').fields.heroCtaPrimary, { type: 'text', sourceLang: 'en', en: 'Explore Services', tr: 'Hizmetleri Keşfedin' })
+})
+
+test('10h. a save with no text to translate reports an empty set', async () => {
+  currentUser = OWNER
+  const res = await request('PUT', '/api/page-content/home', {
+    fields: { heroImage: image('https://cdn.test/hero.png') },
+    sections: { services: false },
+  })
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(res.body.translation, { fields: {} })
+  assert.equal(providerCalls.length, 0)
+})
+
+test('10i. a rejected or failed save keeps its failure status and reports no translation', async () => {
+  currentUser = OWNER
+
+  const invalid = await request('PUT', '/api/page-content/home', { fields: { notAField: text('x') } })
+  assert.equal(invalid.status, 400)
+  assert.equal(invalid.body.success, false)
+  assert.equal('translation' in invalid.body, false)
+  assert.equal(store.has('home'), false)
+
+  // The database refusing the write is a real failure, whatever was translated.
+  const realSave = FakeDoc.prototype.save
+  FakeDoc.prototype.save = async () => { throw new Error('database unavailable') }
+  try {
+    const failed = await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+    assert.equal(failed.status, 500)
+    assert.equal(failed.body.success, false)
+    assert.equal('translation' in failed.body, false)
+  } finally {
+    FakeDoc.prototype.save = realSave
+  }
+  assert.equal(store.has('home'), false)
+})
+
+test('10j. the public GET is unchanged: same three keys, and no trace of a save report', async () => {
+  currentUser = OWNER
+  providerBehaviour = { de: 'fail', ur: 'echo' }
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+  currentUser = null
+
+  const res = await request('GET', '/api/page-content/home')
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(Object.keys(res.body).sort(), ['fields', 'sections', 'success'])
+  assert.deepEqual(res.body.fields.heroCtaPrimary, {
+    type: 'text', sourceLang: 'en', en: 'Discover Our Services',
+    tr: '[tr] Discover Our Services', ar: '[ar] Discover Our Services', ru: '[ru] Discover Our Services',
+  })
+  for (const word of REPORT_WORDS) assert.equal(JSON.stringify(res.body).includes(`"${word}"`), false, word)
+  assertNothingReportedIsStored()
 })

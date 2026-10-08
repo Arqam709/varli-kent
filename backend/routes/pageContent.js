@@ -2,7 +2,7 @@ import express from 'express'
 import PageContent from '../models/PageContent.js'
 import { protect } from '../middleware/auth.js'
 import { requireRole, requirePermission } from '../middleware/checkPermission.js'
-import { sanitizePoisonedTranslations, isUnchangedSource, localizeText } from '../utils/autoTranslate.js'
+import { sanitizePoisonedTranslations, isUnchangedSource, localizeTextWithReport } from '../utils/autoTranslate.js'
 import {
   isKnownPage,
   isKnownSection,
@@ -73,6 +73,26 @@ const validatePayload = (pageKey, body) => {
   return { ok: true }
 }
 
+/*
+ * One field's translation outcome, as the save response reports it.
+ *
+ *   { sourceLang, translated: [lang…], needsAttention: [{ lang, reason, using }] }
+ *
+ * `using` is what visitors of that language now get from the stored record:
+ * 'previous' (the translation it already had) or 'none' (no stored translation).
+ */
+const describeTranslation = ({ sourceLang, targets }) => {
+  const translated = []
+  const needsAttention = []
+
+  for (const [lang, outcome] of Object.entries(targets)) {
+    if (outcome.status === 'translated') translated.push(lang)
+    else needsAttention.push({ lang, reason: outcome.reason, using: outcome.using })
+  }
+
+  return { sourceLang, translated, needsAttention }
+}
+
 router.get('/:pageKey', async (req, res, next) => {
   try {
     const { pageKey } = req.params
@@ -122,6 +142,10 @@ router.put(
       const nextFields = { ...(doc.fields || {}) }
       const nextSections = { ...(doc.sections || {}) }
 
+      // What happened to each field this request actually translated. Part of
+      // the RESPONSE only: it is never copied into the document.
+      const translatedFields = {}
+
       for (const [key, entry] of Object.entries(incomingFields)) {
         if (entry.type === 'image') {
           nextFields[key] = { type: 'image', url: entry.url }
@@ -135,8 +159,9 @@ router.put(
         // `stored` is passed as `existing`, which is what preserves a
         // previously good translation for any language the provider fails on
         // during this save.
-        const localized = await localizeText(entry.value, stored)
+        const { value: localized, report } = await localizeTextWithReport(entry.value, stored)
         nextFields[key] = { type: 'text', ...localized }
+        translatedFields[key] = describeTranslation(report)
       }
 
       for (const [key, visible] of Object.entries(incomingSections)) {
@@ -149,10 +174,20 @@ router.put(
       doc.markModified('sections')
       await doc.save()
 
+      // The source edit is saved whatever the provider did, so a language that
+      // failed is reported — not turned into a failed request.
+      const failures = Object.entries(translatedFields).flatMap(([key, field]) =>
+        field.needsAttention.map(({ lang, reason, using }) => `${key}.${lang} (${reason}, using ${using})`))
+      if (failures.length > 0) {
+        console.warn(`[page-content] ${pageKey}: saved, but automatic translation needs attention — ${failures.join(', ')}`)
+      }
+
       res.json({
         success: true,
         fields: sanitizePoisonedTranslations(doc.fields),
         sections: doc.sections,
+        // Additive: a client that predates it simply does not read it.
+        translation: { fields: translatedFields },
       })
     } catch (err) {
       next(err)

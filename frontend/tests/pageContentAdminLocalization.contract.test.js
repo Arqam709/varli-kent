@@ -26,6 +26,7 @@ import { dirname, join } from 'node:path'
 import translations from '../src/locales/translations.js'
 import { PAGE_CONTENT_KEYS, PAGE_CONTENT_REGISTRY, allFieldDefs } from '../src/lib/pageContentRegistry.js'
 import { pageContentFieldLabel, pageContentPageLabel, pageContentSectionTitle } from '../src/lib/pageContentAdminLabels.js'
+import { summarizeSaveReport, languageList } from '../src/lib/pageContentSaveReport.js'
 import {
   CONTACT_INTEREST_FORM_MESSAGES,
   checkNewInterestForm,
@@ -276,4 +277,145 @@ test('validation messages follow the Admin language; English messages are unchan
 test('a `$` in an interest name is inserted literally', () => {
   const problem = { code: 'clash', interest: managed({ labels: { en: 'Cash $& Carry' } }) }
   assert.equal(describeInterestFormProblem(problem), '“Cash $& Carry” already uses this ID or value. Edit it instead.')
+})
+
+/* ══════════════ CMS Phase A — the editor reports a save honestly ══════════════
+ *
+ * The editor used to answer every save with "translated into all six languages
+ * automatically", whatever the translation provider had done. It now says what
+ * the save response reports — and nothing at all about translation when the
+ * response carries no report.
+ */
+
+// Every language the catalogue has, not only the three the Admin switcher
+// offers: these messages must exist wherever the interface can be rendered.
+const ALL_LANGUAGES = ['en', 'tr', 'ar', 'de', 'ru', 'ur']
+const SAVE_MESSAGE_KEYS = ['savedNeutral', 'savedTranslated', 'savedPartial', 'savedUntranslated', 'savedSourceLanguage',
+  'saveReportTitle', 'saveIssuePrevious', 'saveIssueMissing', 'saveIssueTooLong', 'saveReportDismiss']
+
+const fieldReport = (translated, needsAttention = [], sourceLang = 'en') => ({ sourceLang, translated, needsAttention })
+const FIVE = ['tr', 'ar', 'de', 'ru', 'ur']
+
+test('Phase A: a response without a report claims nothing', () => {
+  for (const missing of [undefined, null, {}, { fields: null }, { fields: [] }, 'translated', { translated: FIVE }]) {
+    assert.deepEqual(summarizeSaveReport(missing), { outcome: 'unknown', languageCount: 0, sourceLangs: [], issues: [] })
+  }
+})
+
+test('Phase A: a report with nothing translated in it is "none", not a success claim', () => {
+  // Images and section toggles only.
+  assert.equal(summarizeSaveReport({ fields: {} }).outcome, 'none')
+  // A field that was emptied: stored, but nothing was sent for translation.
+  assert.deepEqual(summarizeSaveReport({ fields: { heroLabel: fieldReport([], []) } }),
+    { outcome: 'none', languageCount: 0, sourceLangs: [], issues: [] })
+})
+
+test('Phase A: every language translated is a complete save', () => {
+  const summary = summarizeSaveReport({ fields: { heroCtaPrimary: fieldReport(FIVE) } })
+  assert.deepEqual(summary, { outcome: 'complete', languageCount: 5, sourceLangs: ['en'], issues: [] })
+
+  // Several fields are still five languages, not ten.
+  const two = summarizeSaveReport({ fields: { heroLabel: fieldReport(FIVE), heroCtaPrimary: fieldReport(FIVE) } })
+  assert.equal(two.languageCount, 5)
+  assert.equal(two.outcome, 'complete')
+})
+
+test('Phase A: a partial save keeps every field\'s own failures, split by what visitors now see', () => {
+  const summary = summarizeSaveReport({
+    fields: {
+      heroLabel: fieldReport(['tr', 'ar', 'ru', 'ur'], [{ lang: 'de', reason: 'timeout', using: 'previous' }]),
+      heroCtaPrimary: fieldReport(['tr', 'ar', 'de', 'ru'], [{ lang: 'ur', reason: 'too_long', using: 'none' }]),
+      heroHeading1: fieldReport(FIVE),
+    },
+  })
+
+  assert.equal(summary.outcome, 'partial')
+  assert.equal(summary.languageCount, 5)
+  assert.deepEqual(summary.issues, [
+    { fieldKey: 'heroLabel', previous: ['de'], missing: [], tooLong: false },
+    { fieldKey: 'heroCtaPrimary', previous: [], missing: ['ur'], tooLong: true },
+  ])
+})
+
+test('Phase A: nothing translated is "untranslated" — the save itself is never called a failure', () => {
+  const failed = FIVE.map((lang) => ({ lang, reason: 'provider_error', using: lang === 'de' ? 'previous' : 'none' }))
+  const summary = summarizeSaveReport({ fields: { heroCtaPrimary: fieldReport([], failed) } })
+
+  assert.equal(summary.outcome, 'untranslated')
+  assert.equal(summary.languageCount, 0)
+  assert.deepEqual(summary.issues, [{ fieldKey: 'heroCtaPrimary', previous: ['de'], missing: ['tr', 'ar', 'ru', 'ur'], tooLong: false }])
+})
+
+test('Phase A: the stored source language is carried through, and a malformed entry cannot break the summary', () => {
+  const summary = summarizeSaveReport({
+    fields: {
+      heroLabel: fieldReport(['en', 'ar', 'de', 'ru', 'ur'], [], 'tr'),
+      heroCtaPrimary: fieldReport(FIVE, [], 'en'),
+      broken: null,
+      alsoBroken: { translated: 'tr', needsAttention: {} },
+    },
+  })
+  assert.deepEqual(summary.sourceLangs, ['tr', 'en'])
+  assert.equal(summary.outcome, 'complete')
+  assert.equal(summary.languageCount, 6)
+})
+
+test('Phase A: language names are written in the reader\'s language', () => {
+  assert.equal(languageList(['de'], 'en'), 'German')
+  assert.equal(languageList(['de', 'ur'], 'en'), 'German and Urdu')
+  assert.equal(languageList(['de', 'ur'], 'tr'), 'Almanca ve Urduca')
+  assert.match(languageList(['de', 'ur'], 'ar'), /الألمانية/)
+  assert.match(languageList(['tr'], 'ru'), /турецкий/)
+  assert.match(languageList(['ar'], 'ur'), /عربی/)
+  assert.equal(languageList(['de'], 'de'), 'Deutsch')
+})
+
+test('Phase A: every save message exists in all six languages, in its own words, with its placeholders', () => {
+  for (const key of SAVE_MESSAGE_KEYS) {
+    for (const lang of ALL_LANGUAGES) assert.ok(isText(pc(lang)[key]), `${lang}.adminPages.pageContent.${key} is missing`)
+    for (const lang of ALL_LANGUAGES.filter((l) => l !== 'en')) {
+      assert.notEqual(pc(lang)[key], pc('en')[key], `${lang}.adminPages.pageContent.${key} is still English`)
+    }
+  }
+  for (const lang of ALL_LANGUAGES) {
+    assert.match(pc(lang).savedTranslated, /\{count\}/, lang)
+    for (const key of ['savedSourceLanguage', 'saveIssuePrevious', 'saveIssueMissing']) assert.match(pc(lang)[key], /\{languages\}/, `${lang}.${key}`)
+  }
+})
+
+test('Phase A: the "translated into all six languages" claim is gone from the catalogue and the editor', async () => {
+  for (const lang of ALL_LANGUAGES) {
+    assert.equal('savedSuccess' in pc(lang), false, `${lang} still has the unconditional success message`)
+  }
+  const src = await readSrc('pages', 'AdminPageContent.jsx')
+  assert.equal(src.includes('savedSuccess'), false)
+  assert.equal(/all six languages/i.test(src), false)
+})
+
+test('Phase A: the editor announces what the response reports, and a plain "Saved." when it reports nothing', async () => {
+  const src = await readSrc('pages', 'AdminPageContent.jsx')
+
+  assert.ok(src.includes('const report = summarizeSaveReport(res.data?.translation)'))
+  assert.ok(src.includes('announceSave(report)'))
+  assert.ok(src.includes('setSaveReport(report.issues.length > 0 ? report : null)'))
+
+  const announce = src.slice(src.indexOf('const announceSave = '), src.indexOf('const handleSave = '))
+  assert.match(announce, /report\.outcome === 'complete'[\s\S]*?toast\.success\(pc\.savedTranslated/)
+  assert.match(announce, /report\.outcome === 'partial'[\s\S]*?toast\.warn\(pc\.savedPartial/)
+  assert.match(announce, /report\.outcome === 'untranslated'[\s\S]*?toast\.warn\(pc\.savedUntranslated/)
+  // 'unknown' (an older backend) and 'none' fall through to the neutral message.
+  assert.match(announce, /\} else \{\s*toast\.success\(pc\.savedNeutral\)/)
+  assert.equal((announce.match(/toast\.error/g) || []).length, 0, 'a translation problem is never shown as a failed save')
+
+  // A save that really fails is still an error, and leaves the pending edit pending.
+  const save = src.slice(src.indexOf('const handleSave = '))
+  assert.match(save, /\} catch \(err\) \{\s*toast\.error\(/)
+  assert.ok(save.indexOf('setBaseline({ values, sections })') < save.indexOf('} catch (err)'))
+})
+
+test('Phase A: the request the editor sends is unchanged', async () => {
+  const src = await readSrc('pages', 'AdminPageContent.jsx')
+  assert.ok(src.includes('await api.put(`/page-content/${pageKey}`, payload)'))
+  const payload = src.slice(src.indexOf('const payload = useMemo('), src.indexOf('const dirty ='))
+  assert.equal(/saveReport|translation/.test(payload), false)
 })

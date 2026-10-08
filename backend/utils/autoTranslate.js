@@ -103,6 +103,46 @@ export const sanitizePoisonedTranslations = (value) => {
 
 export const TRANSLATE_TIMEOUT_MS = 5000
 
+/*
+ * Why one translation attempt produced nothing, as a small fixed vocabulary.
+ *
+ * Request-scoped: it travels back to the caller in localizeTextWithReport's
+ * report so an admin can be told the truth about a save, and is never stored.
+ * The provider's own sentence is deliberately not passed on — these names are
+ * what the rest of the app is allowed to depend on.
+ *
+ *   timeout           no answer within TRANSLATE_TIMEOUT_MS
+ *   provider_error    unreachable, a failing HTTP status, or a refusal we do
+ *                     not recognise
+ *   invalid_response  an answer that is not the JSON shape a translation has
+ *   echo              the input handed back unchanged
+ *   too_long          refused for exceeding the provider's query length
+ *   same_language     refused because source and target are the same language
+ *   quota             the free daily allowance is used up
+ *   unknown           a failure with no attempt to explain it
+ */
+export const TRANSLATION_FAILURE_REASONS = Object.freeze([
+  'timeout', 'provider_error', 'invalid_response', 'echo', 'too_long', 'same_language', 'quota', 'unknown',
+])
+
+// MyMemory explains a refusal in the field a translation would occupy. The
+// three it is known to send map to a reason; anything else stays generic
+// rather than being guessed at.
+const reasonFromProviderText = (text) => {
+  if (typeof text !== 'string') return 'provider_error'
+  if (/QUERY LENGTH LIMIT/i.test(text)) return 'too_long'
+  if (/TWO DISTINCT LANGUAGES/i.test(text)) return 'same_language'
+  if (/MYMEMORY WARNING/i.test(text)) return 'quota'
+  return 'provider_error'
+}
+
+const reasonFromThrown = (error) => {
+  if (error?.name === 'TimeoutError' || error?.name === 'AbortError') return 'timeout'
+  // response.json() on a body that is not JSON.
+  if (error instanceof SyntaxError) return 'invalid_response'
+  return 'provider_error'
+}
+
 const comparable = (text) => text.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
 
 /**
@@ -129,6 +169,10 @@ export const isSameText = (a, b) =>
  *
  * The distinction matters because retrying an echo would spend three requests
  * of a limited daily quota to be told the same thing three times.
+ *
+ * Every failure also carries a `reason` (TRANSLATION_FAILURE_REASONS). It
+ * changes nothing about what is retried or stored; it only lets the caller
+ * report what happened.
  */
 /**
  * Whether an HTTP failure status is worth asking about again.
@@ -154,7 +198,7 @@ const attemptTranslation = async (text, targetLang, fetchImpl) => {
     const response = await fetchImpl(url, { signal: AbortSignal.timeout(TRANSLATE_TIMEOUT_MS) })
 
     if (response && response.ok === false) {
-      return { ok: false, retry: isRetryableStatus(response.status), detected: null }
+      return { ok: false, retry: isRetryableStatus(response.status), detected: null, reason: 'provider_error' }
     }
 
     const data = await response.json()
@@ -167,24 +211,29 @@ const attemptTranslation = async (text, targetLang, fetchImpl) => {
     // limited, upstream hiccup) rather than "there is no translation", so it
     // is the one isTranslationFailure case worth asking about again.
     if (data && typeof data === 'object' && data.responseStatus && Number(data.responseStatus) !== 200) {
-      return { ok: false, retry: true, detected }
+      return { ok: false, retry: true, detected, reason: reasonFromProviderText(data.responseData?.translatedText) }
     }
 
-    if (isTranslationFailure(data)) return { ok: false, retry: false, detected }
+    if (isTranslationFailure(data)) {
+      const refusal = data?.responseData?.translatedText
+      // Blank or absent text is a malformed answer; provider garbage is a refusal.
+      const reason = typeof refusal === 'string' && refusal.trim() !== '' ? reasonFromProviderText(refusal) : 'invalid_response'
+      return { ok: false, retry: false, detected, reason }
+    }
 
     const translated = data.responseData.translatedText
-    if (!isUsableText(translated)) return { ok: false, retry: false, detected }
+    if (!isUsableText(translated)) return { ok: false, retry: false, detected, reason: 'invalid_response' }
 
     // An echo is "no translation", not a translation. The target is then left
     // absent (or keeps a previous real one), and clients fall back to the
     // source language deliberately. A phrase that genuinely reads the same in
     // both languages — a brand name — loses nothing: the fallback shows the
     // identical text.
-    if (isSameText(translated, text)) return { ok: false, retry: false, detected }
+    if (isSameText(translated, text)) return { ok: false, retry: false, detected, reason: 'echo' }
 
     return { ok: true, value: translated, detected }
-  } catch {
-    return { ok: false, retry: true, detected: null }
+  } catch (error) {
+    return { ok: false, retry: true, detected: null, reason: reasonFromThrown(error) }
   }
 }
 
@@ -210,19 +259,22 @@ const RETRY_BACKOFF_MS = 300
  * on the first attempt, so a save is not measurably slower.
  */
 const translateOneDetecting = async (text, targetLang, fetchImpl = fetch) => {
-  if (!isUsableText(text)) return { value: null, detected: null }
+  if (!isUsableText(text)) return { value: null, detected: null, reason: 'unknown' }
 
   let detected = null
+  // Of the attempts made, the last one's explanation is the one reported.
+  let reason = 'unknown'
 
   for (let attempt = 1; attempt <= TRANSLATE_ATTEMPTS; attempt += 1) {
     const result = await attemptTranslation(text, targetLang, fetchImpl)
     detected = detected || result.detected
     if (result.ok) return { value: result.value, detected }
-    if (!result.retry) return { value: null, detected }
+    reason = result.reason || 'unknown'
+    if (!result.retry) return { value: null, detected, reason }
     if (attempt < TRANSLATE_ATTEMPTS) await sleep(RETRY_BACKOFF_MS * attempt)
   }
 
-  return { value: null, detected }
+  return { value: null, detected, reason }
 }
 
 export const translateOne = async (text, targetLang, fetchImpl = fetch) => {
@@ -271,14 +323,34 @@ export const localizeFields = async (body, fields, existing = {}, fetchImpl = fe
   return out
 }
 
-export const localizeText = async (text, existing = null, fetchImpl = fetch) => {
+/*
+ * localizeText, plus an account of what happened to each language.
+ *
+ *   value    exactly the object localizeText returns — what gets stored
+ *   report   { sourceLang, targets: { <lang>: outcome } }, one outcome for
+ *            every language that was asked for:
+ *
+ *              { status: 'translated' }
+ *              { status: 'failed', reason, using: 'previous' | 'none' }
+ *
+ *            `using` says what `value` holds for a language that failed:
+ *            'previous' — the translation it already had was kept;
+ *            'none'     — nothing, so readers fall back.
+ *
+ * The report describes this one call and belongs to the response that carries
+ * it. It is not part of `value` and must never be written to the database.
+ */
+export const localizeTextWithReport = async (text, existing = null, fetchImpl = fetch) => {
   const source = typeof text === 'string' ? text : ''
   const heuristicLang = detectLang(source)
 
   if (!isUsableText(source)) {
     // Nothing to translate and nothing to detect from, so the heuristic's answer
     // is final and no request is made.
-    return { sourceLang: heuristicLang, [heuristicLang]: source }
+    return {
+      value: { sourceLang: heuristicLang, [heuristicLang]: source },
+      report: { sourceLang: heuristicLang, targets: {} },
+    }
   }
 
   const previous = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {}
@@ -319,31 +391,36 @@ export const localizeText = async (text, existing = null, fetchImpl = fetch) => 
 
   const targets = SUPPORTED_LANGUAGES.filter((lang) => lang !== sourceLang)
 
-  const translations = await Promise.all(
+  const outcomes = await Promise.all(
     targets.map((lang) => {
       const alreadyFetched = firstTargets.indexOf(lang)
-      if (alreadyFetched !== -1) return firstPass[alreadyFetched].value
+      if (alreadyFetched !== -1) return firstPass[alreadyFetched]
       // Only reachable when detection overrode the heuristic: this is the
       // language the first pass treated as the source and so never asked for.
-      return translateOne(source, lang, fetchImpl)
+      return translateOneDetecting(source, lang, fetchImpl)
     })
   )
 
   // The admin's own words are stored verbatim, never round-tripped through
   // the provider and back.
   const result = { sourceLang, [sourceLang]: source }
+  const report = { sourceLang, targets: {} }
 
   // The previous document's own source text, e.g. the English an older copy was
   // made from. Only used to recognise stored echoes below.
   const previousSource = typeof previous.sourceLang === 'string' ? previous[previous.sourceLang] : undefined
 
   targets.forEach((lang, i) => {
-    const translated = translations[i]
+    const translated = outcomes[i].value
 
     if (translated !== null) {
       result[lang] = translated
+      report.targets[lang] = { status: 'translated' }
       return
     }
+
+    const failure = { status: 'failed', reason: outcomes[i].reason || 'unknown', using: 'none' }
+    report.targets[lang] = failure
 
     // Failed. Keep the translation this language already had — but only a
     // REAL one. A stored value that is just a copy of the source (new or
@@ -356,7 +433,15 @@ export const localizeText = async (text, existing = null, fetchImpl = fetch) => 
     if (lang !== previous.sourceLang && isSameText(kept, previousSource)) return
 
     result[lang] = kept
+    failure.using = 'previous'
   })
 
-  return result
+  return { value: result, report }
 }
+
+/**
+ * The localized object for `text` — the stored shape every caller expects.
+ * See localizeTextWithReport for the same result with its report.
+ */
+export const localizeText = async (text, existing = null, fetchImpl = fetch) =>
+  (await localizeTextWithReport(text, existing, fetchImpl)).value
