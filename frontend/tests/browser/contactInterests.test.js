@@ -191,7 +191,9 @@ async function open(t, { view = 'admin', language = 'en', configure } = {}) {
     return route.continue()
   })
 
-  await page.goto(`${base}/__contact_interests.html?view=${view}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
+  // The first load of a run compiles the whole editor through Vite and has
+  // taken up to 62 s on a busy machine, so 60 s was inside that range.
+  await page.goto(`${base}/__contact_interests.html?view=${view}`, { waitUntil: 'domcontentloaded', timeout: 120000 })
   return { page, state }
 }
 

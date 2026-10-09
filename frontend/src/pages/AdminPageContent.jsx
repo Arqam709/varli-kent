@@ -7,6 +7,8 @@ import { editableText } from '../lib/localizedText'
 import { buildSavePayload, isEmptyPayload } from '../lib/pageContentResolve'
 import { pageContentFieldLabel, pageContentPageLabel, pageContentSectionTitle } from '../lib/pageContentAdminLabels'
 import { summarizeSaveReport, languageList } from '../lib/pageContentSaveReport'
+import { describeFieldTranslations } from '../lib/pageContentTranslationStatus'
+import { FieldTranslationStatus, PageTranslationSummary } from '../components/PageContentTranslationStatus'
 import { useLanguage } from '../contexts/LanguageContext'
 import ContactInterestsManager from '../components/ContactInterestsManager'
 
@@ -75,7 +77,7 @@ function ImageField({ label, value, onChange, pc }) {
   )
 }
 
-function FieldRows({ fields, values, setField, pc }) {
+function FieldRows({ fields, values, setField, pc, translations, language }) {
   if (!fields.length) {
     return <p className="text-sm italic text-slate-400">{pc.managedElsewhere || 'The records in this section are managed on their own admin page — here you can only show or hide it.'}</p>
   }
@@ -100,6 +102,9 @@ function FieldRows({ fields, values, setField, pc }) {
                   value={values[f.key] ?? ''}
                   onChange={(e) => setField(f.key, e.target.value)}
                 />
+                {translations?.[f.key] && (
+                  <FieldTranslationStatus rows={translations[f.key]} caption={caption} language={language} pc={pc} />
+                )}
               </div>
             )}
           </div>
@@ -126,7 +131,7 @@ function ExpandButton({ open, onClick, pc }) {
   )
 }
 
-function SectionCard({ section, title, visible, onToggleVisible, values, setField, pc }) {
+function SectionCard({ section, title, visible, onToggleVisible, values, setField, pc, translations, language }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -149,7 +154,7 @@ function SectionCard({ section, title, visible, onToggleVisible, values, setFiel
       </div>
       {open && (
         <div className="border-t border-slate-100 px-6 py-6" style={{ background: 'linear-gradient(180deg, #FAFAF7, #F7F6F2)' }}>
-          <FieldRows fields={section.fields} values={values} setField={setField} pc={pc} />
+          <FieldRows fields={section.fields} values={values} setField={setField} pc={pc} translations={translations} language={language} />
         </div>
       )}
     </div>
@@ -218,6 +223,13 @@ const AdminPageContent = () => {
   const [heroOpen, setHeroOpen] = useState(true)
   // The translation problems of the most recent save, or null.
   const [saveReport, setSaveReport] = useState(null)
+  /*
+   * What is STORED for this page, with the backend's translation state for it:
+   * { fields, states }, or null when that state is not available (an older
+   * backend, or the richer read failed). It only ever feeds the read-only
+   * status display — the form's values and baseline never come from here.
+   */
+  const [stored, setStored] = useState(null)
 
   /*
    * What the server last told us this page contains. Every save diffs against
@@ -259,6 +271,7 @@ const AdminPageContent = () => {
     setLoading(true)
     setLoadFailed(false)
     setSaveReport(null)
+    setStored(null)
 
     const fallback = defaultValues(key)
     setValues(fallback)
@@ -268,12 +281,26 @@ const AdminPageContent = () => {
     setBaseline({ values: fallback, sections: {} })
 
     try {
-      const res = await api.get(`/page-content/${key}`)
-      const stored = res.data.fields || {}
+      /*
+       * The editors' read returns the same content as the public one plus each
+       * field's translation state. It is tried first; if it is not there (a
+       * backend from before it existed) or fails, the public read still loads
+       * the page — editing never depends on the status display.
+       */
+      let res
+      let states = null
+      try {
+        res = await api.get(`/page-content/${key}/admin`)
+        states = res.data.translationStates || null
+      } catch {
+        res = await api.get(`/page-content/${key}`)
+      }
+
+      const fields = res.data.fields || {}
       const merged = { ...fallback }
 
       for (const def of allFieldDefs(key)) {
-        const field = stored[def.key]
+        const field = fields[def.key]
         if (!field) continue
 
         const value = def.type === 'image' ? field.url : editableText(field)
@@ -288,6 +315,7 @@ const AdminPageContent = () => {
       setValues(merged)
       setSections(res.data.sections || {})
       setBaseline({ values: merged, sections: res.data.sections || {} })
+      setStored(states ? { fields, states } : null)
     } catch {
       // Everything below still shows the real current site copy from the
       // registry, so the editor stays usable and honest about why.
@@ -324,6 +352,34 @@ const AdminPageContent = () => {
   const dirty = !isEmptyPayload(payload)
 
   /*
+   * Re-reads the stored translation state after a save, so the chips describe
+   * what was just written. A read only. If it fails the status is withdrawn
+   * rather than left showing what was true before the save.
+   */
+  const refreshStored = async (key) => {
+    const ticket = loadTicket.current
+    try {
+      const res = await api.get(`/page-content/${key}/admin`)
+      if (ticket !== loadTicket.current) return
+      setStored(res.data.translationStates ? { fields: res.data.fields || {}, states: res.data.translationStates } : null)
+    } catch {
+      if (ticket === loadTicket.current) setStored(null)
+    }
+  }
+
+  // One row per language for every text field, from what is stored — not from
+  // what is being typed: an unsaved edit has no translations yet.
+  const translations = useMemo(() => {
+    if (!stored) return null
+    const rows = {}
+    for (const def of allFieldDefs(pageKey)) {
+      if (def.type === 'image') continue
+      rows[def.key] = describeFieldTranslations({ pageKey, def, field: stored.fields[def.key], states: stored.states[def.key] })
+    }
+    return rows
+  }, [stored, pageKey])
+
+  /*
    * Says what the server reported — nothing more. The source edit is saved in
    * every case that reaches here; what varies is how much of it was translated.
    * A response with no report (a backend that predates it) gets a plain
@@ -356,6 +412,7 @@ const AdminPageContent = () => {
       // A failed save deliberately leaves the baseline alone, so the same delta
       // is still pending and the admin can simply press Save again.
       setBaseline({ values, sections })
+      refreshStored(pageKey)
     } catch (err) {
       toast.error(err?.response?.data?.message || pc.saveFailed || 'Failed to save — your changes are still here but have not reached the server.')
     } finally {
@@ -398,6 +455,11 @@ const AdminPageContent = () => {
           <div className="py-16 text-center text-sm text-slate-400">{pc.loading || 'Loading…'}</div>
         )}
 
+        {!loading && !loadFailed && (translations
+          ? <PageTranslationSummary rowsByField={translations} pc={pc} />
+          : <p data-testid="translation-status-unavailable" className="px-1 text-xs text-slate-400">{pc.statusUnavailable}</p>
+        )}
+
         {!loading && loadFailed && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
             {pc.loadFailed || 'Could not reach the page-content API. Everything below shows the real current site content — it will save once the backend is reachable.'}
@@ -417,7 +479,7 @@ const AdminPageContent = () => {
               </div>
               {heroOpen && (
                 <div className="border-t border-slate-100 px-6 py-6" style={{ background: 'linear-gradient(180deg, #FAFAF7, #F7F6F2)' }}>
-                  <FieldRows fields={page.hero.fields} values={values} setField={setField} pc={pc} />
+                  <FieldRows fields={page.hero.fields} values={values} setField={setField} pc={pc} translations={translations} language={language} />
                 </div>
               )}
             </div>
@@ -432,6 +494,8 @@ const AdminPageContent = () => {
                 values={values}
                 setField={setField}
                 pc={pc}
+                translations={translations}
+                language={language}
               />
             ))}
 

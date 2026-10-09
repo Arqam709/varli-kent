@@ -419,3 +419,105 @@ test('Phase A: the request the editor sends is unchanged', async () => {
   const payload = src.slice(src.indexOf('const payload = useMemo('), src.indexOf('const dirty ='))
   assert.equal(/saveReport|translation/.test(payload), false)
 })
+
+/* ══════════════ CMS Phase C1 — translation status and read-only preview ══════════════
+ *
+ * The editor shows, per text field, the state of each language and what its
+ * visitors currently see. It is display only: C1 adds no way to retry, edit or
+ * otherwise change a translation.
+ */
+
+const STATUS_UI_KEYS = [
+  'statusSource', 'statusCurrent', 'statusManual', 'statusBuiltin', 'statusExisting', 'statusStale', 'statusOutdated', 'statusMissing',
+  'explainSource', 'explainCurrent', 'explainManual', 'explainBuiltin', 'explainExisting', 'explainStale', 'explainOutdated', 'explainMissing',
+  'originStored', 'originBuiltin', 'originSource',
+  'failureFailed', 'failureQuota', 'failureTooLong', 'failureEcho',
+  'translationsShow', 'translationsHide', 'translationsOf', 'sourceLanguage', 'visitorsSee', 'noTextShown',
+  'summaryTitle', 'summaryCalm', 'summaryAttention', 'statusUnavailable',
+]
+
+test('Phase C1: every status, explanation, failure and summary string exists in all six languages, in its own words', () => {
+  for (const key of STATUS_UI_KEYS) {
+    for (const lang of ALL_LANGUAGES) assert.ok(isText(pc(lang)[key]), `${lang}.adminPages.pageContent.${key} is missing`)
+    for (const lang of ALL_LANGUAGES.filter((l) => l !== 'en')) {
+      assert.notEqual(pc(lang)[key], pc('en')[key], `${lang}.adminPages.pageContent.${key} is still English`)
+    }
+  }
+  for (const lang of ALL_LANGUAGES) {
+    assert.match(pc(lang).translationsOf, /\{field\}/, lang)
+    assert.match(pc(lang).sourceLanguage, /\{language\}/, lang)
+    assert.match(pc(lang).summaryAttention, /\{count\}/, lang)
+    // The eight statuses must read differently from one another.
+    const labels = STATUS_UI_KEYS.slice(0, 8).map((key) => pc(lang)[key])
+    assert.equal(new Set(labels).size, labels.length, `${lang}: two statuses share a label`)
+  }
+})
+
+test('Phase C1: every string the status component reads is one of those keys', async () => {
+  const src = await readSrc('components', 'PageContentTranslationStatus.jsx')
+  const direct = [...src.matchAll(/\bpc\.([A-Za-z]+)/g)].map((m) => m[1])
+  const viaTables = [...src.matchAll(/: '((?:status|explain|origin|failure)[A-Za-z]+)'/g)].map((m) => m[1])
+  const used = [...new Set([...direct, ...viaTables])]
+  assert.ok(used.length >= 28, `only ${used.length} keys found`)
+  for (const key of used) assert.ok(STATUS_UI_KEYS.includes(key), `${key} is read but not a Phase C1 key`)
+  for (const key of STATUS_UI_KEYS.filter((k) => k !== 'statusUnavailable')) assert.ok(used.includes(key), `${key} is never shown`)
+})
+
+test('Phase C1: status is written out, the disclosure is a real button, and the preview is read-only', async () => {
+  const src = await readSrc('components', 'PageContentTranslationStatus.jsx')
+
+  // Never colour alone: every chip and preview row prints the status label.
+  assert.equal((src.match(/\{pc\[STATUS_LABEL\[row\.status\]\]\}/g) || []).length, 2, 'chip and preview row both print the status')
+  // The attention mark is decoration; the words carry the meaning.
+  assert.match(src, /const AttentionMark = \(\) => \(\s*<span aria-hidden="true"/)
+
+  // Keyboard-reachable disclosure wired to its panel.
+  assert.match(src, /<button\s+type="button"\s+onClick=\{\(\) => setOpen\(\(value\) => !value\)\}\s+aria-expanded=\{open\}\s+aria-controls=\{panelId\}/)
+  assert.match(src, /<div id=\{panelId\} data-testid="translation-preview"/)
+  assert.match(src, /focus-visible:ring-2/)
+  assert.match(src, /motion-reduce:transition-none/)
+
+  // Each language's text is set in its own language and direction.
+  assert.match(src, /lang=\{row\.lang\}\s+dir=\{RTL_LANGUAGES\.includes\(row\.lang\) \? 'rtl' : 'ltr'\}/)
+
+  // Display only: one button (the disclosure), no field, no request, no handler that changes anything.
+  assert.equal((src.match(/<button/g) || []).length, 1)
+  assert.equal(/<(input|textarea|select|form)\b/.test(src), false, 'nothing editable')
+  assert.equal(/contentEditable|onChange|onSubmit/.test(src), false)
+  assert.equal(/\bapi\b|fetch\(|axios/.test(src), false, 'the component makes no request')
+  assert.equal(/retry/i.test(src), false, 'no retry in C1')
+})
+
+test('Phase C1: no retry, and no second write, anywhere in the editor', async () => {
+  const src = await readSrc('pages', 'AdminPageContent.jsx')
+  assert.equal((src.match(/api\.put\(/g) || []).length, 1, 'exactly one write: the save')
+  assert.equal(/api\.(post|patch|delete)\(/.test(src.replace(/api\.post\('\/upload'/, '')), false, 'no other write besides the image upload')
+  assert.equal(/retry/i.test(src), false)
+  for (const lib of ['pageContentTranslationStatus.js', 'pageContentCatalogue.js']) {
+    const helper = await readSrc('lib', lib)
+    assert.equal(/\bapi\b|fetch\(|axios|retry/i.test(helper), false, `${lib} is pure`)
+  }
+})
+
+test('Phase C1: the editor reads the protected endpoint first and falls back to the public read', async () => {
+  const src = await readSrc('pages', 'AdminPageContent.jsx')
+  const load = src.slice(src.indexOf('const loadPage = useCallback('), src.indexOf('useEffect(() => { loadPage(pageKey) }'))
+
+  assert.match(load, /try \{\s*res = await api\.get\(`\/page-content\/\$\{key\}\/admin`\)\s*states = res\.data\.translationStates \|\| null\s*\} catch \{\s*res = await api\.get\(`\/page-content\/\$\{key\}`\)\s*\}/)
+  assert.ok(load.includes('setStored(states ? { fields, states } : null)'))
+  // The form is still filled the way it always was, from whichever read answered.
+  assert.ok(load.includes('def.type === \'image\' ? field.url : editableText(field)'))
+  assert.ok(load.includes('setBaseline({ values: merged, sections: res.data.sections || {} })'))
+
+  // After a save the state is re-read with a GET.
+  const refresh = src.slice(src.indexOf('const refreshStored = '), src.indexOf('const translations = useMemo('))
+  assert.match(refresh, /await api\.get\(`\/page-content\/\$\{key\}\/admin`\)/)
+  assert.equal(/api\.(put|post|patch|delete)/.test(refresh), false)
+  assert.match(src, /setBaseline\(\{ values, sections \}\)\s+refreshStored\(pageKey\)/)
+
+  // What is shown comes from what is stored — never from what is being typed.
+  const derive = src.slice(src.indexOf('const translations = useMemo('), src.indexOf('const announceSave = '))
+  assert.match(derive, /describeFieldTranslations\(\{ pageKey, def, field: stored\.fields\[def\.key\], states: stored\.states\[def\.key\] \}\)/)
+  assert.match(derive, /\}, \[stored, pageKey\]\)/)
+  assert.equal(/\bvalues\b/.test(derive), false)
+})
