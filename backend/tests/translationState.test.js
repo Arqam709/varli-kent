@@ -15,6 +15,8 @@ import {
   translationStatesOf,
   withTranslationState,
   withoutTranslationState,
+  translationEntryAfter,
+  retryBlockedBy,
 } from '../utils/translationState.js'
 import { localizeTextWithReport, TRANSLATION_FAILURE_REASONS } from '../utils/autoTranslate.js'
 import { SUPPORTED_LANGUAGES, resolveLocalized, isLocalizedObject, unwrapLocalized, localizedSearchText } from '../utils/localizedField.js'
@@ -343,4 +345,83 @@ test('compat: recording state never changes the content it sits beside', async (
   assert.deepEqual(previous, frozen, 'nor is the previous record')
   for (const key of Object.keys(value)) assert.equal(stored[key], value[key], key)
   assert.deepEqual(Object.keys(stored).sort(), [...Object.keys(value), 'meta'].sort())
+})
+
+/* ══════════════ 6. CMS Phase C2 — one language, one attempt ══════════════ */
+
+test('retry entry: a success is a fresh machine entry for the source it was made from', () => {
+  const stale = { from: OLD, by: 'machine', at: T1.toISOString(), error: 'provider_error', errorAt: T2.toISOString() }
+
+  const entry = translationEntryAfter({ translated: true, earlier: stale, hash: H, now: T3 })
+
+  assert.deepEqual(entry, { from: H, by: 'machine', at: T3.toISOString() }, 'no error survives a success')
+  assert.deepEqual(translationEntryAfter({ translated: true, earlier: undefined, hash: H, now: T3 }), entry, 'the same for a language that had nothing')
+})
+
+test('retry entry: a failure keeps the earlier provenance exactly and adds only the failure', () => {
+  const stale = { from: OLD, by: 'machine', at: T1.toISOString() }
+  const frozen = structuredClone(stale)
+
+  const entry = translationEntryAfter({ translated: false, reason: 'timeout', earlier: stale, hash: H, now: T3 })
+
+  assert.deepEqual(entry, { from: OLD, by: 'machine', at: T1.toISOString(), error: 'timeout', errorAt: T3.toISOString() })
+  assert.deepEqual(stale, frozen, 'the earlier entry is not mutated')
+
+  // An older failure is replaced by the newer one, not accumulated.
+  const again = translationEntryAfter({ translated: false, reason: 'quota', earlier: entry, hash: H, now: T2 })
+  assert.deepEqual(again, { from: OLD, by: 'machine', at: T1.toISOString(), error: 'quota', errorAt: T2.toISOString() })
+})
+
+test('retry entry: a failure for a language with no provenance records the failure and invents nothing', () => {
+  for (const earlier of [undefined, null, {}, { error: 'echo', errorAt: T1.toISOString() }, 'nonsense']) {
+    const entry = translationEntryAfter({ translated: false, reason: 'provider_error', earlier, hash: H, now: T3 })
+    assert.deepEqual(entry, { error: 'provider_error', errorAt: T3.toISOString() })
+  }
+})
+
+test('retry eligibility: only a stale machine translation or a missing one may be retried', () => {
+  const machine = (from) => ({ from, by: 'machine', at: T1.toISOString() })
+  const manual = (from) => ({ from, by: 'manual', at: T1.toISOString() })
+  const value = {
+    ...tracked({ tr: machine(H), ar: manual(H), de: machine(OLD), ru: manual(OLD) }),
+    tr: 'Hizmetleri Keşfedin', ar: 'استكشف الخدمات', de: 'Leistungen entdecken', ru: 'Изучить услуги',
+  }
+
+  assert.equal(retryBlockedBy(value, 'en'), 'source_language')
+  assert.equal(retryBlockedBy(value, 'tr'), 'already_current')
+  assert.equal(retryBlockedBy(value, 'ar'), 'manual_translation')
+  assert.equal(retryBlockedBy(value, 'de'), null, 'a stale machine translation is retryable')
+  assert.equal(retryBlockedBy(value, 'ru'), 'manual_translation', 'a stale hand-written translation is not')
+  assert.equal(retryBlockedBy(value, 'ur'), null, 'a missing translation is retryable')
+})
+
+test('retry eligibility: text of unknown origin is never retryable — and a recorded failure does not change that', () => {
+  const legacy = { type: 'text', sourceLang: 'en', en: 'Explore Services', de: 'Leistungen entdecken', verified: false }
+  assert.equal(translationStateOf(legacy, 'de'), 'unknown')
+  assert.equal(retryBlockedBy(legacy, 'de'), 'legacy_translation')
+
+  // The save that failed left a failure beside the legacy text. It is still legacy text.
+  const failed = { ...legacy, meta: { sourceHash: H, langs: { de: { error: 'provider_error', errorAt: T2.toISOString() } } } }
+  assert.equal(translationStateOf(failed, 'de'), 'unknown')
+  assert.equal(retryBlockedBy(failed, 'de'), 'legacy_translation')
+
+  // Half a provenance is no provenance.
+  for (const entry of [{ from: OLD }, { by: 'machine' }, { from: 'not-a-hash', by: 'machine' }, { from: OLD, by: 'someone' }]) {
+    const value = { ...legacy, meta: { sourceHash: H, langs: { de: entry } } }
+    assert.equal(retryBlockedBy(value, 'de'), 'legacy_translation', JSON.stringify(entry))
+  }
+})
+
+test('retry eligibility: a failed attempt leaves a retryable language retryable', async () => {
+  // Missing with a failure recorded: the common "Needs attention / Missing" case.
+  const first = await save('Explore Services', null, scripted({ de: refuses }), T1)
+  assert.equal(translationStateOf(first.stored, 'de'), 'missing')
+  assert.equal(retryBlockedBy(first.stored, 'de'), null)
+
+  // Stale with a failure recorded.
+  const v1 = await save('An earlier wording', null, translates, T1)
+  const v2 = await save('Explore Services', v1.stored, scripted({ de: refuses }), T2)
+  assert.equal(translationStateOf(v2.stored, 'de'), 'stale')
+  assert.equal(retryBlockedBy(v2.stored, 'de'), null)
+  for (const lang of ['tr', 'ar', 'ru', 'ur']) assert.equal(retryBlockedBy(v2.stored, lang), 'already_current', lang)
 })

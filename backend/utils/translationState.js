@@ -104,6 +104,61 @@ export const translationStateOf = (value, lang) => {
 export const translationStatesOf = (value) =>
   Object.fromEntries(SUPPORTED_LANGUAGES.map((lang) => [lang, translationStateOf(value, lang)]))
 
+// The entry of a language whose automatic translation just failed: whatever
+// provenance its kept text really had, untouched, with the failure beside it.
+const failedEntry = (earlier, reason, stamp) => {
+  const entry = {}
+  if (hasProvenance(earlier)) {
+    entry.from = earlier.from
+    entry.by = earlier.by
+    if (typeof earlier.at === 'string') entry.at = earlier.at
+  }
+  entry.error = reason
+  entry.errorAt = stamp
+  return entry
+}
+
+/**
+ * The entry to store for ONE language after ONE attempt to translate it — the
+ * single-language counterpart of withTranslationState, used by a retry.
+ *
+ *   translated: true    { from: hash, by: 'machine', at } — a fresh entry, so
+ *                       an earlier error is gone
+ *   translated: false   the earlier entry's provenance kept exactly as it was
+ *                       (or none, if it had none), plus `error` and `errorAt`
+ *
+ * `hash` is the hash of the source text the attempt was made from.
+ */
+export const translationEntryAfter = ({ translated, reason, earlier, hash, now = new Date() }) =>
+  translated
+    ? { from: hash, by: 'machine', at: now.toISOString() }
+    : failedEntry(earlier, reason, now.toISOString())
+
+/**
+ * Why a language of a localized value may NOT be retried automatically, or null
+ * when it may.
+ *
+ *   source_language      it is the language the text was written in
+ *   already_current      a machine translation of the current source exists
+ *   manual_translation   it was written by hand — current or stale, a machine
+ *                        must not replace it
+ *   legacy_translation   text exists whose origin was never recorded. It may
+ *                        be hand-written; it is never overwritten on a guess.
+ *
+ * What remains is retryable: a tracked MACHINE translation of an earlier
+ * source (stale), or no stored text at all (missing). The decision is made
+ * from the stored record alone — an earlier failed attempt changes nothing.
+ */
+export const retryBlockedBy = (value, lang) => {
+  const state = translationStateOf(value, lang)
+  if (state === 'source') return 'source_language'
+  if (state === 'translated') return 'already_current'
+  if (state === 'manual') return 'manual_translation'
+  if (state === 'unknown') return 'legacy_translation'
+  if (state === 'stale' && value.meta?.langs?.[lang]?.by === 'manual') return 'manual_translation'
+  return null
+}
+
 /**
  * `value` with the translation state of this save recorded on it.
  *
@@ -137,17 +192,9 @@ export const withTranslationState = (value, report, previous = null, now = new D
       continue
     }
 
-    const entry = {}
     // Only what was actually recorded for the text being kept. A translation
     // that predates this metadata has no provenance, and none is invented.
-    if (outcome.using === 'previous' && hasProvenance(earlier[lang])) {
-      entry.from = earlier[lang].from
-      entry.by = earlier[lang].by
-      if (typeof earlier[lang].at === 'string') entry.at = earlier[lang].at
-    }
-    entry.error = outcome.reason
-    entry.errorAt = stamp
-    langs[lang] = entry
+    langs[lang] = failedEntry(outcome.using === 'previous' ? earlier[lang] : null, outcome.reason, stamp)
   }
 
   return { ...value, meta: { sourceHash: hash, langs } }

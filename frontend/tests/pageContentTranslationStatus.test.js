@@ -19,6 +19,7 @@ import { PAGE_CONTENT_CATALOGUE_PATHS, catalogueText } from '../src/lib/pageCont
 import {
   ATTENTION_STATUSES,
   DISPLAY_STATUSES,
+  RETRY_OPTIONS,
   TRANSLATION_STATUS_LANGUAGES,
   describeFieldTranslations,
   failureKind,
@@ -26,7 +27,7 @@ import {
   summarizePageTranslations,
 } from '../src/lib/pageContentTranslationStatus.js'
 import { resolveCmsField } from '../src/lib/pageContentResolve.js'
-import { sourceHash, translationStatesOf, TRANSLATION_STATES } from '../../backend/utils/translationState.js'
+import { sourceHash, translationStatesOf, retryBlockedBy, TRANSLATION_STATES } from '../../backend/utils/translationState.js'
 import { TRANSLATION_FAILURE_REASONS } from '../../backend/utils/autoTranslate.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -126,7 +127,7 @@ test('display: backend source → Source', () => {
 test('display: backend translated → Current, shown from the stored value', () => {
   const field = tracked('Discover Our Services', { de: 'Entdecken Sie unsere Leistungen' }, { de: { from: sourceHash('Discover Our Services'), by: 'machine', at } })
   const de = byLang(describe('home', BUTTON, field)).de
-  assert.deepEqual(de, { lang: 'de', status: 'current', text: 'Entdecken Sie unsere Leistungen', origin: 'stored', failure: null, attention: false })
+  assert.deepEqual(de, { lang: 'de', status: 'current', text: 'Entdecken Sie unsere Leistungen', origin: 'stored', failure: null, attention: false, retry: null })
 })
 
 test('display: backend manual → Manual', () => {
@@ -140,7 +141,7 @@ test('display: backend manual → Manual', () => {
 test('display: backend unknown (a stored value with no provenance) → Existing, and not a warning', () => {
   const field = { type: 'text', sourceLang: 'en', en: 'Explore Services', de: 'Leistungen entdecken', verified: false }
   const de = byLang(describe('home', BUTTON, field)).de
-  assert.deepEqual(de, { lang: 'de', status: 'existing', text: 'Leistungen entdecken', origin: 'stored', failure: null, attention: false })
+  assert.deepEqual(de, { lang: 'de', status: 'existing', text: 'Leistungen entdecken', origin: 'stored', failure: null, attention: false, retry: null })
 })
 
 test('display: backend missing + built-in text + source still the default → Built-in (healthy)', () => {
@@ -148,7 +149,7 @@ test('display: backend missing + built-in text + source still the default → Bu
   const field = { type: 'text', sourceLang: 'en', en: `${HEADING.default}\n`, verified: false }
   const rows = byLang(describe('home', HEADING, field))
   for (const lang of TARGETS) {
-    assert.deepEqual(rows[lang], { lang, status: 'builtin', text: translations[lang].hero.heading1, origin: 'builtin', failure: null, attention: false }, lang)
+    assert.deepEqual(rows[lang], { lang, status: 'builtin', text: translations[lang].hero.heading1, origin: 'builtin', failure: null, attention: false, retry: null }, lang)
   }
 })
 
@@ -176,7 +177,7 @@ test('display: backend missing + built-in text + EDITED source → Needs attenti
 test('display: backend stale → Stale, still showing the old stored text', () => {
   const field = tracked('Discover Our Services', { de: 'Leistungen entdecken' }, { de: { from: sourceHash('Explore Services'), by: 'machine', at } })
   const de = byLang(describe('home', BUTTON, field)).de
-  assert.deepEqual(de, { lang: 'de', status: 'stale', text: 'Leistungen entdecken', origin: 'stored', failure: null, attention: true })
+  assert.deepEqual(de, { lang: 'de', status: 'stale', text: 'Leistungen entdecken', origin: 'stored', failure: null, attention: true, retry: 'allowed' })
 })
 
 test('display: backend missing with NO built-in text → Missing, and visitors get the source text', () => {
@@ -184,7 +185,7 @@ test('display: backend missing with NO built-in text → Missing, and visitors g
   const orphan = { key: 'notInTheCatalogue', type: 'text', default: 'Something' }
   const rows = byLang(describeFieldTranslations({ pageKey: 'home', def: orphan, field: { type: 'text', sourceLang: 'en', en: 'Something new' }, states: { en: 'source', tr: 'missing', ar: 'missing', de: 'missing', ru: 'missing', ur: 'missing' } }))
   for (const lang of TARGETS) {
-    assert.deepEqual(rows[lang], { lang, status: 'missing', text: 'Something new', origin: 'source', failure: null, attention: true }, lang)
+    assert.deepEqual(rows[lang], { lang, status: 'missing', text: 'Something new', origin: 'source', failure: null, attention: true, retry: 'allowed' }, lang)
   }
 })
 
@@ -325,4 +326,127 @@ test('summary: attention counts stale, edited-source fallbacks, missing and fail
   assert.deepEqual(summary.counts, { current: 1, manual: 1, builtin: 225, existing: 6, stale: 1, outdated: 1, missing: 0 })
   assert.equal(summary.failures, 3)
   assert.equal(summary.attention, 3, 'the stale one, the edited-source fallback, and the legacy value whose retranslation failed')
+})
+
+/* ══════════════ 5. CMS Phase C2 — which languages offer Retry ══════════════ */
+
+const retries = (rows) => Object.fromEntries(rows.map((row) => [row.lang, row.retry]))
+const H_NOW = sourceHash('Discover Our Services')
+const H_OLD = sourceHash('Explore Services')
+
+// One field holding every state at once: TR current, AR hand-written, DE a
+// stale machine translation, RU never translated, UR text from before tracking.
+const mixedField = () => tracked('Discover Our Services', { tr: 'Hizmetlerimizi Keşfedin', ar: 'اكتشف خدماتنا', de: 'Leistungen entdecken', ur: 'خدمات دیکھیں' }, {
+  tr: { from: H_NOW, by: 'machine', at },
+  ar: { from: H_NOW, by: 'manual', at },
+  de: { from: H_OLD, by: 'machine', at },
+})
+
+test('retry: the option is one of the documented values, on every row', () => {
+  assert.deepEqual(RETRY_OPTIONS, ['allowed', 'protected'])
+  for (const row of describe('home', BUTTON, mixedField())) {
+    assert.ok(row.retry === null || RETRY_OPTIONS.includes(row.retry), `${row.lang}: ${row.retry}`)
+  }
+})
+
+test('retry: offered for Stale, Needs attention and Missing — and for nothing else', () => {
+  const rows = describe('home', BUTTON, mixedField())
+  assert.deepEqual(statuses(rows), { en: 'source', tr: 'current', ar: 'manual', de: 'stale', ru: 'outdated', ur: 'existing' })
+  assert.deepEqual(retries(rows), { en: null, tr: null, ar: null, de: 'allowed', ru: 'allowed', ur: null })
+
+  const orphan = { key: 'notInTheCatalogue', type: 'text', default: 'Something' }
+  const missing = describeFieldTranslations({ pageKey: 'home', def: orphan, field: { type: 'text', sourceLang: 'en', en: 'Something new' }, states: { en: 'source', tr: 'missing', ar: 'missing', de: 'missing', ru: 'missing', ur: 'missing' } })
+  assert.deepEqual(statuses(missing), { en: 'source', tr: 'missing', ar: 'missing', de: 'missing', ru: 'missing', ur: 'missing' })
+  assert.deepEqual(retries(missing), { en: null, tr: 'allowed', ar: 'allowed', de: 'allowed', ru: 'allowed', ur: 'allowed' })
+})
+
+test('retry: Built-in is healthy and offers nothing', () => {
+  for (const field of [undefined, { type: 'text', sourceLang: 'en', en: HEADING.default }]) {
+    const rows = describe('home', HEADING, field)
+    assert.deepEqual(statuses(rows), { en: 'source', tr: 'builtin', ar: 'builtin', de: 'builtin', ru: 'builtin', ur: 'builtin' })
+    assert.deepEqual(retries(rows), { en: null, tr: null, ar: null, de: null, ru: null, ur: null })
+  }
+})
+
+test('retry: EXISTING text is never offered a retry — a recorded failure only adds the "kept as it is" note', () => {
+  const quiet = byLang(describe('home', BUTTON, mixedField())).ur
+  assert.equal(quiet.status, 'existing')
+  assert.equal(quiet.retry, null)
+
+  const field = mixedField()
+  field.meta.langs.ur = { error: 'provider_error', errorAt: at }
+  const flagged = byLang(describe('home', BUTTON, field)).ur
+  assert.equal(flagged.status, 'existing')
+  assert.equal(flagged.attention, true)
+  assert.equal(flagged.retry, 'protected', 'failure information does not make it retryable')
+})
+
+test('retry: the production homepage offers no retry anywhere', () => {
+  const rows = rowsFor('home', productionHome())
+  for (const [key, fieldRows] of Object.entries(rows)) {
+    for (const row of fieldRows) assert.equal(row.retry, null, `${key}.${row.lang}`)
+  }
+  for (const pageKey of PAGE_CONTENT_KEYS.filter((key) => key !== 'home')) {
+    for (const fieldRows of Object.values(rowsFor(pageKey, {}))) {
+      for (const row of fieldRows) assert.equal(row.retry, null, pageKey)
+    }
+  }
+})
+
+test('retry: a hand-written translation is protected whether it is current or stale', () => {
+  const field = mixedField()
+  field.meta.langs.de = { from: H_OLD, by: 'manual', at }
+  const rows = byLang(describe('home', BUTTON, field))
+  assert.equal(rows.de.status, 'stale')
+  assert.equal(rows.de.retry, 'protected')
+  assert.equal(rows.ar.status, 'manual')
+  assert.equal(rows.ar.retry, null, 'a healthy hand-written translation needs no note')
+})
+
+test('retry: a failed attempt leaves a retryable language retryable', () => {
+  const field = mixedField()
+  field.meta.langs.de = { from: H_OLD, by: 'machine', at, error: 'timeout', errorAt: at }
+  field.meta.langs.ru = { error: 'quota', errorAt: at }
+  const rows = byLang(describe('home', BUTTON, field))
+  assert.deepEqual([rows.de.status, rows.de.failure, rows.de.retry], ['stale', 'failed', 'allowed'])
+  assert.deepEqual([rows.ru.status, rows.ru.failure, rows.ru.retry], ['outdated', 'quota', 'allowed'])
+})
+
+test('retry: a language with no text is not offered a retry until a source is saved', () => {
+  const orphan = { key: 'notInTheCatalogue', type: 'text', default: 'Something' }
+  for (const field of [undefined, { type: 'text', sourceLang: 'en', en: '' }]) {
+    const rows = describeFieldTranslations({ pageKey: 'home', def: orphan, field, states: undefined })
+    for (const row of rows.filter((r) => r.lang !== 'en')) {
+      assert.equal(row.status, 'missing')
+      assert.equal(row.retry, null, 'there is nothing stored to translate from')
+    }
+  }
+})
+
+test('retry: what the editor offers is exactly what the backend allows', () => {
+  const failed = mixedField()
+  failed.meta.langs.ur = { error: 'provider_error', errorAt: at }
+  failed.meta.langs.ru = { error: 'echo', errorAt: at }
+  const handStale = mixedField()
+  handStale.meta.langs.de = { from: H_OLD, by: 'manual', at }
+  const turkish = tracked('Hizmetlerimizi Keşfedin', { en: 'Discover Our Services', de: 'Leistungen entdecken' }, { en: { from: sourceHash('Hizmetlerimizi Keşfedin'), by: 'machine', at }, de: { from: H_OLD, by: 'machine', at } }, 'tr')
+  const fixtures = [mixedField(), failed, handStale, turkish, productionHome().heroCtaPrimary, productionHome().heroLabel,
+    { type: 'text', sourceLang: 'en', en: 'We Plan, Build' }]
+
+  let offered = 0
+  for (const field of fixtures) {
+    for (const row of describe('home', BUTTON, field)) {
+      const blocked = retryBlockedBy(field, row.lang)
+      if (row.retry === 'allowed') { offered += 1; assert.equal(blocked, null, `${row.lang} (${row.status}) is offered but the backend refuses: ${blocked}`) }
+      if (row.status === 'existing') assert.equal(blocked, 'legacy_translation', row.lang)
+      if (row.retry === 'protected') assert.ok(['legacy_translation', 'manual_translation'].includes(blocked), `${row.lang}: ${blocked}`)
+      if (['source', 'current', 'manual'].includes(row.status)) assert.notEqual(blocked, null, `${row.lang} (${row.status})`)
+    }
+  }
+  assert.ok(offered >= 8, `only ${offered} retryable rows were exercised`)
+})
+
+test('retry: the option adds nothing internal to a row', () => {
+  const serialized = JSON.stringify(describe('home', BUTTON, mixedField()))
+  for (const internal of [H_NOW, H_OLD, 'sourceHash', '"from"', '"by"', 'errorAt']) assert.equal(serialized.includes(internal), false, internal)
 })

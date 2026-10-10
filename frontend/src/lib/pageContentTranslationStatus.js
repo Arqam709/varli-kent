@@ -43,6 +43,36 @@ export const ATTENTION_STATUSES = ['stale', 'outdated', 'missing']
 /** Where the text a visitor sees comes from. */
 export const TEXT_ORIGINS = ['stored', 'builtin', 'source']
 
+/**
+ * What the editor may offer for one language of one field.
+ *
+ *   allowed     a Retry action: the backend will translate it again
+ *   protected   no action, and a line saying why: the text is kept as it is
+ *
+ * Anything else has no retry at all (null).
+ */
+export const RETRY_OPTIONS = ['allowed', 'protected']
+
+/*
+ * Mirrors the backend's rule (utils/translationState.js retryBlockedBy), which
+ * is the one that is enforced: only a tracked MACHINE translation of an earlier
+ * source, or a language with nothing stored, is ever translated again. Text
+ * from before tracking and hand-written text are never replaced — whatever
+ * failure is recorded beside them.
+ */
+const retryOf = ({ status, field, lang, failure }) => {
+  const byHand = field?.meta?.langs?.[lang]?.by === 'manual'
+
+  if (status === 'stale') return byHand ? 'protected' : 'allowed'
+  if (status === 'outdated') return 'allowed'
+  // Nothing stored and no built-in text: retryable once there is a saved
+  // source to translate from.
+  if (status === 'missing') return field && isUsable(field[field.sourceLang]) ? 'allowed' : null
+  // Kept as it is. Only said when something has drawn attention to it.
+  if ((status === 'existing' || status === 'manual') && failure) return 'protected'
+  return null
+}
+
 // Failure identifiers (backend TRANSLATION_FAILURE_REASONS) → the handful of
 // things worth telling an admin apart. Anything unrecognised is 'failed'.
 const FAILURE_KINDS = {
@@ -82,7 +112,7 @@ const BACKEND_TO_DISPLAY = { source: 'source', translated: 'current', manual: 'm
  *   states    the backend's translationStates[fieldKey] — undefined for a
  *             field that is not stored
  *
- * Each row: { lang, status, text, origin, failure, attention }
+ * Each row: { lang, status, text, origin, failure, attention, retry }
  *
  *   text        what a visitor of that language sees right now, from the same
  *               resolver the public pages use
@@ -91,6 +121,7 @@ const BACKEND_TO_DISPLAY = { source: 'source', translated: 'current', manual: 'm
  *               ('failed' | 'quota' | 'tooLong' | 'echo')
  *   attention   true when the status is one of ATTENTION_STATUSES, or the last
  *               automatic attempt failed
+ *   retry       'allowed' | 'protected' | null — see RETRY_OPTIONS
  */
 export const describeFieldTranslations = ({ pageKey, def, field, states }) => {
   const sourceLang = field?.sourceLang || 'en'
@@ -117,7 +148,11 @@ export const describeFieldTranslations = ({ pageKey, def, field, states }) => {
 
     const failure = failureKind(field?.meta?.langs?.[lang]?.error)
 
-    return { lang, status, text, origin, failure, attention: ATTENTION_STATUSES.includes(status) || Boolean(failure) }
+    return {
+      lang, status, text, origin, failure,
+      attention: ATTENTION_STATUSES.includes(status) || Boolean(failure),
+      retry: retryOf({ status, field, lang, failure }),
+    }
   })
 }
 

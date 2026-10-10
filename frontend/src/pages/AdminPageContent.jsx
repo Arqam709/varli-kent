@@ -77,7 +77,7 @@ function ImageField({ label, value, onChange, pc }) {
   )
 }
 
-function FieldRows({ fields, values, setField, pc, translations, language }) {
+function FieldRows({ fields, values, setField, pc, translations, language, retry }) {
   if (!fields.length) {
     return <p className="text-sm italic text-slate-400">{pc.managedElsewhere || 'The records in this section are managed on their own admin page — here you can only show or hide it.'}</p>
   }
@@ -103,7 +103,16 @@ function FieldRows({ fields, values, setField, pc, translations, language }) {
                   onChange={(e) => setField(f.key, e.target.value)}
                 />
                 {translations?.[f.key] && (
-                  <FieldTranslationStatus rows={translations[f.key]} caption={caption} language={language} pc={pc} />
+                  <FieldTranslationStatus
+                    rows={translations[f.key]}
+                    caption={caption}
+                    language={language}
+                    pc={pc}
+                    onRetry={(lang) => retry.start(f.key, lang)}
+                    retrying={retry.inFlight(f.key)}
+                    locked={retry.locked}
+                    dirty={retry.isDirty(f.key)}
+                  />
                 )}
               </div>
             )}
@@ -131,7 +140,7 @@ function ExpandButton({ open, onClick, pc }) {
   )
 }
 
-function SectionCard({ section, title, visible, onToggleVisible, values, setField, pc, translations, language }) {
+function SectionCard({ section, title, visible, onToggleVisible, values, setField, pc, translations, language, retry }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -154,7 +163,7 @@ function SectionCard({ section, title, visible, onToggleVisible, values, setFiel
       </div>
       {open && (
         <div className="border-t border-slate-100 px-6 py-6" style={{ background: 'linear-gradient(180deg, #FAFAF7, #F7F6F2)' }}>
-          <FieldRows fields={section.fields} values={values} setField={setField} pc={pc} translations={translations} language={language} />
+          <FieldRows fields={section.fields} values={values} setField={setField} pc={pc} translations={translations} language={language} retry={retry} />
         </div>
       )}
     </div>
@@ -230,6 +239,14 @@ const AdminPageContent = () => {
    * status display — the form's values and baseline never come from here.
    */
   const [stored, setStored] = useState(null)
+  /*
+   * The retries in flight, as "page|field|lang". The ref is the guard — it is
+   * current the instant a click lands, so a double click cannot start a second
+   * request before React has re-rendered the disabled button. The state is the
+   * same set, kept only so the buttons re-render.
+   */
+  const retryGuard = useRef(new Set())
+  const [retrying, setRetrying] = useState(() => new Set())
 
   /*
    * What the server last told us this page contains. Every save diffs against
@@ -256,6 +273,8 @@ const AdminPageContent = () => {
    * axios instance in lib/api.js.
    */
   const loadTicket = useRef(0)
+  // The same idea for the status re-reads that follow a save or a retry.
+  const refreshTurn = useRef(0)
 
   /*
    * Stored text is a localized object; the form needs one editable string.
@@ -355,15 +374,20 @@ const AdminPageContent = () => {
    * Re-reads the stored translation state after a save, so the chips describe
    * what was just written. A read only. If it fails the status is withdrawn
    * rather than left showing what was true before the save.
+   *
+   * Several can overlap (two retries finishing close together). Only the one
+   * asked for LAST may answer, so an older read can never land on top of a
+   * newer one and show a state that has already moved on.
    */
   const refreshStored = async (key) => {
     const ticket = loadTicket.current
+    const turn = ++refreshTurn.current
     try {
       const res = await api.get(`/page-content/${key}/admin`)
-      if (ticket !== loadTicket.current) return
+      if (ticket !== loadTicket.current || turn !== refreshTurn.current) return
       setStored(res.data.translationStates ? { fields: res.data.fields || {}, states: res.data.translationStates } : null)
     } catch {
-      if (ticket === loadTicket.current) setStored(null)
+      if (ticket === loadTicket.current && turn === refreshTurn.current) setStored(null)
     }
   }
 
@@ -418,6 +442,57 @@ const AdminPageContent = () => {
     } finally {
       setSaving(false)
     }
+  }
+
+  /*
+   * Translate ONE language of ONE field again.
+   *
+   * The request carries no text: the backend translates the source it has
+   * stored, and it — not this page — decides whether the translation may be
+   * replaced. No confirmation is asked for, because nothing here can replace
+   * text someone wrote: only a stale machine translation, or nothing at all.
+   *
+   * Whatever the answer, the stored state is read again afterwards, so the
+   * chips and the preview show what is true now rather than what was assumed.
+   */
+  const retryTranslation = async (fieldKey, lang) => {
+    const key = pageKey
+    const id = `${key}|${fieldKey}|${lang}`
+    if (saving || retryGuard.current.has(id)) return
+    retryGuard.current.add(id)
+    setRetrying(new Set(retryGuard.current))
+
+    const named = (message) => message.replace('{language}', () => languageList([lang], language))
+    try {
+      const res = await api.post(`/page-content/${key}/fields/${fieldKey}/translations/${lang}/retry`)
+      if (res.data?.translated) toast.success(named(pc.retrySucceeded))
+      // The request worked; the translation service produced nothing. The row
+      // says why once it is refreshed.
+      else toast.warn(named(pc.retryFailed))
+    } catch (err) {
+      const reason = err?.response?.status === 409 ? err.response.data?.reason : null
+      if (reason === 'source_changed') toast.warn(pc.retrySourceChanged)
+      else if (reason === 'already_current') toast.info(pc.retryAlreadyCurrent)
+      // The stored record does not allow it (text that is kept as it is).
+      else if (reason) toast.warn(pc.retryUnavailable)
+      else toast.error(pc.retryError)
+    } finally {
+      await refreshStored(key)
+      retryGuard.current.delete(id)
+      setRetrying(new Set(retryGuard.current))
+    }
+  }
+
+  // What the status display needs to offer a retry, for the page on screen.
+  const retry = {
+    start: retryTranslation,
+    inFlight: (fieldKey) => [...retrying]
+      .map((id) => id.split('|'))
+      .filter(([page, field]) => page === pageKey && field === fieldKey)
+      .map(([, , lang]) => lang),
+    // A save rewrites the page's fields, so no retry starts while one runs.
+    locked: saving,
+    isDirty: (fieldKey) => values[fieldKey] !== baseline.values[fieldKey],
   }
 
   return (
@@ -479,7 +554,7 @@ const AdminPageContent = () => {
               </div>
               {heroOpen && (
                 <div className="border-t border-slate-100 px-6 py-6" style={{ background: 'linear-gradient(180deg, #FAFAF7, #F7F6F2)' }}>
-                  <FieldRows fields={page.hero.fields} values={values} setField={setField} pc={pc} translations={translations} language={language} />
+                  <FieldRows fields={page.hero.fields} values={values} setField={setField} pc={pc} translations={translations} language={language} retry={retry} />
                 </div>
               )}
             </div>
@@ -496,6 +571,7 @@ const AdminPageContent = () => {
                 pc={pc}
                 translations={translations}
                 language={language}
+                retry={retry}
               />
             ))}
 
@@ -522,7 +598,7 @@ const AdminPageContent = () => {
           <p className="text-sm text-slate-600">{pc.unsavedChanges || 'You have unsaved changes.'}</p>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || retrying.size > 0}
             className="rounded-full px-8 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60 cursor-pointer"
             style={{ backgroundColor: GREEN }}
           >

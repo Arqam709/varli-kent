@@ -34,6 +34,7 @@ import {
   translateOne,
   localizeText,
   localizeTextWithReport,
+  translateFromTo,
   TRANSLATION_FAILURE_REASONS,
   TRANSLATE_TIMEOUT_MS,
 } from '../utils/autoTranslate.js'
@@ -767,4 +768,67 @@ test('Phase A: every reason the report can carry is one of the documented identi
     seen.add(report.targets.de.reason)
   }
   assert.deepEqual([...seen].sort(), ['echo', 'invalid_response', 'provider_error', 'quota', 'same_language', 'timeout', 'too_long'])
+})
+
+/* ══════════════ CMS Phase C2 — one target, from a known source language ══════════════ */
+
+const pairOf = (url) => new URL(url).searchParams.get('langpair')
+const recording = (provider) => {
+  const calls = []
+  return { calls, fetch: async (url) => { calls.push(String(url)); return typeof provider === 'function' ? provider(url) : provider } }
+}
+const translatesPair = async (url) => ok({ responseStatus: 200, responseData: { translatedText: `[${pairOf(url)}] ${sourceOf(url)}` } })
+
+test('Phase C2: translateFromTo asks the provider for exactly one explicit language pair', async () => {
+  const provider = recording(translatesPair)
+
+  const result = await translateFromTo(NEW_SOURCE, 'en', 'de', provider.fetch)
+
+  assert.deepEqual(result, { value: `[en|de] ${NEW_SOURCE}` })
+  assert.equal(provider.calls.length, 1, 'one request, for one language')
+  assert.equal(pairOf(provider.calls[0]), 'en|de')
+  assert.equal(sourceOf(provider.calls[0]), NEW_SOURCE)
+})
+
+test('Phase C2: translateFromTo never asks the provider to detect the language', async () => {
+  for (const [source, target] of [['tr', 'en'], ['ar', 'ur'], ['en', 'ru'], ['tr', 'de']]) {
+    const provider = recording(translatesPair)
+    await translateFromTo('Hizmetleri Keşfedin', source, target, provider.fetch)
+    assert.deepEqual(provider.calls.map(pairOf), [`${source}|${target}`])
+    assert.equal(provider.calls.some((url) => url.includes('autodetect')), false)
+  }
+})
+
+test('Phase C2: translateFromTo answers a same-language pair itself, without a request', async () => {
+  const provider = recording(translatesPair)
+  assert.deepEqual(await translateFromTo(NEW_SOURCE, 'en', 'en', provider.fetch), { value: null, reason: 'same_language' })
+  assert.equal(provider.calls.length, 0)
+})
+
+test('Phase C2: translateFromTo reports every failure with a documented reason and no provider text', async () => {
+  const cases = [
+    [refuses, 'provider_error'],
+    [echo, 'echo'],
+    [timesOut, 'timeout'],
+    [ok({ responseStatus: 200, responseData: { translatedText: QUOTA_WARNING } }), 'quota'],
+    [ok({ responseStatus: 200, responseData: { translatedText: LENGTH_LIMIT } }), 'too_long'],
+    [ok({ responseStatus: 403, responseData: { translatedText: TWO_LANGUAGES } }), 'same_language'],
+    [ok({ responseStatus: 200, responseData: {} }), 'invalid_response'],
+    [ok(null), 'invalid_response'],
+  ]
+  for (const [failure, expected] of cases) {
+    const provider = recording(failure)
+    const result = await translateFromTo(NEW_SOURCE, 'en', 'de', provider.fetch)
+
+    assert.deepEqual(result, { value: null, reason: expected })
+    assert.ok(TRANSLATION_FAILURE_REASONS.includes(result.reason))
+    assert.ok(provider.calls.every((url) => pairOf(url) === 'en|de'), 'every attempt is for the one requested pair')
+  }
+})
+
+test('Phase C2: the detecting path used by a save is unchanged — it still asks for autodetect', async () => {
+  const provider = recording(goodProvider)
+  await localizeTextWithReport(NEW_SOURCE, null, provider.fetch)
+  assert.equal(provider.calls.length, 5)
+  assert.ok(provider.calls.every((url) => pairOf(url).startsWith('autodetect|')))
 })

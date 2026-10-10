@@ -189,11 +189,11 @@ export const isSameText = (a, b) =>
 const isRetryableStatus = (status) =>
   typeof status === 'number' && (status === 408 || status === 429 || status >= 500)
 
-const attemptTranslation = async (text, targetLang, fetchImpl) => {
+const attemptTranslation = async (text, targetLang, fetchImpl, sourceLang = 'autodetect') => {
   try {
     const url =
       'https://api.mymemory.translated.net/get' +
-      `?q=${encodeURIComponent(text)}&langpair=autodetect|${targetLang}`
+      `?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`
 
     const response = await fetchImpl(url, { signal: AbortSignal.timeout(TRANSLATE_TIMEOUT_MS) })
 
@@ -258,7 +258,7 @@ const RETRY_BACKOFF_MS = 300
  * indistinguishable from "the provider had nothing". Most calls still succeed
  * on the first attempt, so a save is not measurably slower.
  */
-const translateOneDetecting = async (text, targetLang, fetchImpl = fetch) => {
+const translateOneDetecting = async (text, targetLang, fetchImpl = fetch, sourceLang = 'autodetect') => {
   if (!isUsableText(text)) return { value: null, detected: null, reason: 'unknown' }
 
   let detected = null
@@ -266,7 +266,7 @@ const translateOneDetecting = async (text, targetLang, fetchImpl = fetch) => {
   let reason = 'unknown'
 
   for (let attempt = 1; attempt <= TRANSLATE_ATTEMPTS; attempt += 1) {
-    const result = await attemptTranslation(text, targetLang, fetchImpl)
+    const result = await attemptTranslation(text, targetLang, fetchImpl, sourceLang)
     detected = detected || result.detected
     if (result.ok) return { value: result.value, detected }
     reason = result.reason || 'unknown'
@@ -275,6 +275,28 @@ const translateOneDetecting = async (text, targetLang, fetchImpl = fetch) => {
   }
 
   return { value: null, detected, reason }
+}
+
+/**
+ * `text`, known to be written in `sourceLang`, translated into ONE language.
+ *
+ *   { value }           the translation
+ *   { value: null, reason }   none was produced — `reason` is one of
+ *                             TRANSLATION_FAILURE_REASONS
+ *
+ * Unlike localizeText this neither detects the source language nor touches any
+ * other target: the provider is asked for exactly `sourceLang|targetLang`, and
+ * for nothing else. It is what a retry of one stored translation uses — the
+ * source language there is already recorded, and re-deciding it would be a
+ * different operation. The same attempts, timeout, echo rejection and failure
+ * reasons apply as everywhere else in this file.
+ */
+export const translateFromTo = async (text, sourceLang, targetLang, fetchImpl = fetch) => {
+  // The provider refuses a same-language pair; answering here spares the request.
+  if (sourceLang === targetLang) return { value: null, reason: 'same_language' }
+
+  const { value, reason } = await translateOneDetecting(text, targetLang, fetchImpl, sourceLang)
+  return value === null ? { value: null, reason: reason || 'unknown' } : { value }
 }
 
 export const translateOne = async (text, targetLang, fetchImpl = fetch) => {

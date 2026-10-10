@@ -36,6 +36,21 @@ mock.module('../middleware/auth.js', {
 // ── Scripted database ───────────────────────────────────────────────────
 /** pageKey -> { pageKey, fields, sections }. Reset per test. */
 let store = new Map()
+/** Every conditional update the code under test issued: { filter, update }. */
+let updateCalls = []
+
+const valueAt = (object, dotted) =>
+  dotted.split('.').reduce((node, key) => (node === null || node === undefined ? undefined : node[key]), object)
+
+const setAt = (object, dotted, value) => {
+  const keys = dotted.split('.')
+  let node = object
+  for (const key of keys.slice(0, -1)) {
+    if (node[key] === null || typeof node[key] !== 'object') node[key] = {}
+    node = node[key]
+  }
+  node[keys.at(-1)] = value
+}
 
 class FakeDoc {
   constructor(data) {
@@ -63,6 +78,20 @@ mock.module('../models/PageContent.js', {
           lean: async () => (found ? structuredClone(found) : null),
         })
       },
+      // MongoDB's updateOne for the only shape the retry uses: an equality
+      // filter on dotted paths and a $set of dotted paths. A document that
+      // does not match the WHOLE filter is not touched.
+      updateOne: async (filter, update) => {
+        updateCalls.push(structuredClone({ filter, update }))
+        const found = store.get(filter.pageKey)
+        const matches = Boolean(found) && Object.entries(filter).every(([dotted, expected]) => valueAt(found, dotted) === expected)
+        if (!matches) return { acknowledged: true, matchedCount: 0, modifiedCount: 0 }
+
+        const next = structuredClone(found)
+        for (const [dotted, value] of Object.entries(update.$set || {})) setAt(next, dotted, structuredClone(value))
+        store.set(filter.pageKey, next)
+        return { acknowledged: true, matchedCount: 1, modifiedCount: 1 }
+      },
     }
   ),
 })
@@ -75,6 +104,8 @@ let providerCalls = []
  * `<lang>|<source text>` scripts one language for one field's text only.
  */
 let providerBehaviour = {}
+/** Runs while a translation request is in flight — how a concurrent save is staged. */
+let duringTranslation = null
 
 const realFetch = globalThis.fetch
 
@@ -90,6 +121,7 @@ const fakeFetch = async (url, options) => {
   if (!href.includes('api.mymemory.translated.net')) return realFetch(url, options)
 
   providerCalls.push(href)
+  if (duringTranslation) await duringTranslation(href)
   const lang = new URL(href).searchParams.get('langpair').split('|')[1]
   const text = new URL(href).searchParams.get('q')
 
@@ -129,8 +161,10 @@ after(async () => {
 beforeEach(() => {
   currentUser = null
   store = new Map()
+  updateCalls = []
   providerCalls = []
   providerBehaviour = {}
+  duringTranslation = null
   globalThis.fetch = fakeFetch
 })
 
@@ -1086,4 +1120,556 @@ test('11m. the save response still carries the Phase A report, with the saved me
     needsAttention: [{ lang: 'de', reason: 'provider_error', using: 'none' }],
   })
   assert.deepEqual(res.body.fields.heroCtaPrimary, stored('heroCtaPrimary'), 'the editor is given what was stored, meta included')
+})
+
+/* ══════════════════════ 12. CMS Phase C2 — retry ONE translation ══════════════════════
+ *
+ * POST /:pageKey/fields/:fieldKey/translations/:lang/retry translates one
+ * language of one stored text field again. What these tests pin down is as
+ * much what it must NOT do: replace text of unknown origin, take text from the
+ * caller, touch any other language or field, or write after the source moved.
+ */
+
+const retry = (lang, fieldKey = 'heroCtaPrimary', pageKey = 'home', body) =>
+  request('POST', `/api/page-content/${pageKey}/fields/${fieldKey}/translations/${lang}/retry`, body)
+
+const HASH_V1 = sourceHash('Explore Services')
+const HASH_V2 = sourceHash('Discover Our Services')
+const AT_V1 = '2026-10-01T10:00:00.000Z'
+const AT_V2 = '2026-10-08T12:30:00.000Z'
+const machine = (from, at) => ({ from, by: 'machine', at })
+
+/*
+ * A field as Phase B leaves it after the source was reworded and German alone
+ * failed: German is a translation of version 1 (stale), Urdu never translated
+ * (missing), everything else is current.
+ */
+const TRACKED_BUTTON = {
+  type: 'text',
+  sourceLang: 'en',
+  en: 'Discover Our Services',
+  tr: 'Hizmetlerimizi Keşfedin',
+  ar: 'اكتشف خدماتنا',
+  de: 'Leistungen entdecken',
+  ru: 'Откройте наши услуги',
+  meta: {
+    sourceHash: HASH_V2,
+    langs: {
+      tr: machine(HASH_V2, AT_V2),
+      ar: machine(HASH_V2, AT_V2),
+      de: { ...machine(HASH_V1, AT_V1), error: 'provider_error', errorAt: AT_V2 },
+      ru: machine(HASH_V2, AT_V2),
+      ur: { error: 'timeout', errorAt: AT_V2 },
+    },
+  },
+}
+
+// The two hero fields exactly as production stores them: six hand-written
+// languages and no metadata at all.
+const PRODUCTION_HERO = {
+  heroLabel: {
+    type: 'text', sourceLang: 'en', verified: false,
+    en: 'Istanbul · Architecture · Construction · Real Estate',
+    tr: 'İstanbul · Mimarlık · İnşaat · Gayrimenkul',
+    ar: 'إسطنبول · معمار · إنشاء · عقارات',
+    de: 'Istanbul · Architektur · Bau · Immobilien',
+    ru: 'Стамбул · Архитектура · Строительство · Недвижимость',
+    ur: 'استنبول · تعمیراتی ڈیزائن · تعمیرات · جائیداد',
+  },
+  heroCtaPrimary: {
+    type: 'text', sourceLang: 'en', verified: false,
+    en: 'Explore Services', tr: 'Hizmetleri Keşfedin', ar: 'استكشف الخدمات',
+    de: 'Leistungen entdecken', ru: 'Изучить услуги', ur: 'خدمات دیکھیں',
+  },
+}
+
+const seedHome = (fields, sections = { services: true, projects: false }) => {
+  store.set('home', structuredClone({ pageKey: 'home', fields, sections }))
+  return structuredClone(store.get('home'))
+}
+const seedTracked = () => seedHome({
+  heroCtaPrimary: TRACKED_BUTTON,
+  heroLabel: PRODUCTION_HERO.heroLabel,
+  heroImage: { type: 'image', url: '/images/hero.png' },
+})
+const pairOf = (href) => new URL(href).searchParams.get('langpair')
+const RETRY_REFUSALS = ['source_language', 'already_current', 'manual_translation', 'legacy_translation']
+
+test('12a. retry is guarded exactly like the save', async () => {
+  const before = seedTracked()
+
+  assert.equal((await retry('de')).status, 401, 'anonymous')
+  for (const user of [CUSTOMER, AGENT, ADMIN_WITHOUT]) {
+    currentUser = user
+    assert.equal((await retry('de')).status, 403, `${user.role} was allowed`)
+  }
+  assert.equal(providerCalls.length, 0, 'a refused caller spent no translation request')
+  assert.equal(updateCalls.length, 0)
+  assert.deepEqual(store.get('home'), before)
+
+  for (const user of [OWNER, ADMIN_WITH]) {
+    seedTracked()
+    currentUser = user
+    const res = await retry('de')
+    assert.equal(res.status, 200, `${user.role} was refused`)
+    assert.equal(res.body.translated, true)
+  }
+})
+
+test('12b. an address that is not a retryable translation is rejected before anything is read or sent', async () => {
+  const before = seedTracked()
+  currentUser = OWNER
+
+  const cases = [
+    [() => retry('de', 'heroCtaPrimary', 'nope'), 404, 'unknown_page'],
+    [() => retry('de', 'heroCtaPrimary', 'about'), 404, 'unknown_page'],
+    [() => retry('de', 'noSuchField'), 404, 'unknown_field'],
+    [() => retry('de', 'constructor'), 404, 'unknown_field'],
+    [() => retry('de', 'heroImage'), 400, 'not_text'],
+    [() => retry('fr'), 400, 'invalid_language'],
+    [() => retry('DE'), 400, 'invalid_language'],
+    [() => retry('autodetect'), 400, 'invalid_language'],
+    [() => retry('meta'), 400, 'invalid_language'],
+  ]
+  for (const [send, status, reason] of cases) {
+    const res = await send()
+    assert.equal(res.status, status, reason)
+    assert.equal(res.body.success, false)
+    assert.equal(res.body.reason, reason)
+  }
+
+  assert.equal(providerCalls.length, 0)
+  assert.equal(updateCalls.length, 0)
+  assert.deepEqual(store.get('home'), before)
+})
+
+test('12c. the source language itself, and a field with nothing saved, cannot be retried', async () => {
+  const before = seedTracked()
+  currentUser = OWNER
+
+  const source = await retry('en')
+  assert.equal(source.status, 409)
+  assert.equal(source.body.reason, 'source_language')
+
+  // Registered, but never saved on this page: there is no stored source to translate.
+  const unsaved = await retry('de', 'heroHeading1')
+  assert.equal(unsaved.status, 409)
+  assert.equal(unsaved.body.reason, 'no_source')
+
+  // No document at all.
+  const noDocument = await retry('de', 'heroHeading', 'contact')
+  assert.equal(noDocument.status, 409)
+  assert.equal(noDocument.body.reason, 'no_source')
+
+  assert.equal(providerCalls.length, 0)
+  assert.equal(updateCalls.length, 0)
+  assert.deepEqual(store.get('home'), before)
+})
+
+test('12d. a current machine translation is not retried', async () => {
+  const before = seedTracked()
+  currentUser = OWNER
+
+  for (const lang of ['tr', 'ar', 'ru']) {
+    const res = await retry(lang)
+    assert.equal(res.status, 409, lang)
+    assert.equal(res.body.reason, 'already_current', lang)
+  }
+  assert.equal(providerCalls.length, 0)
+  assert.deepEqual(store.get('home'), before)
+})
+
+test('12e. a hand-written translation is not retried — current or stale', async () => {
+  const field = structuredClone(TRACKED_BUTTON)
+  field.meta.langs.tr = { from: HASH_V2, by: 'manual', at: AT_V2 }
+  field.meta.langs.de = { from: HASH_V1, by: 'manual', at: AT_V1, error: 'provider_error', errorAt: AT_V2 }
+  const before = seedHome({ heroCtaPrimary: field })
+  currentUser = OWNER
+
+  for (const lang of ['tr', 'de']) {
+    const res = await retry(lang)
+    assert.equal(res.status, 409, lang)
+    assert.equal(res.body.reason, 'manual_translation', lang)
+  }
+  assert.equal(providerCalls.length, 0)
+  assert.equal(updateCalls.length, 0)
+  assert.deepEqual(store.get('home'), before)
+})
+
+test('12f. EXISTING TEXT OF UNKNOWN ORIGIN IS NEVER OVERWRITTEN: the production hero translations are refused', async () => {
+  const before = seedHome(PRODUCTION_HERO)
+  currentUser = OWNER
+
+  for (const fieldKey of ['heroLabel', 'heroCtaPrimary']) {
+    for (const lang of ['tr', 'ar', 'de', 'ru', 'ur']) {
+      const res = await retry(lang, fieldKey)
+      assert.equal(res.status, 409, `${fieldKey}.${lang}`)
+      assert.equal(res.body.success, false)
+      assert.equal(res.body.reason, 'legacy_translation', `${fieldKey}.${lang}`)
+    }
+  }
+
+  assert.equal(providerCalls.length, 0, 'not one translation was even requested')
+  assert.equal(updateCalls.length, 0, 'not one write was attempted')
+  assert.deepEqual(store.get('home'), before, 'the document is byte-for-byte what it was')
+  assert.equal(containsMeta(store.get('home')), false, 'and no metadata was created')
+})
+
+test('12g. a recorded failure does not make unknown text retryable', async () => {
+  // Phase B, after a save whose German translation failed: the legacy German
+  // text was kept and a failure recorded beside it. It is still legacy text.
+  store.set('home', { pageKey: 'home', fields: { heroCtaPrimary: structuredClone(LEGACY_BUTTON) }, sections: {} })
+  currentUser = OWNER
+  providerBehaviour = { de: 'fail' }
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+  assert.equal(stored('heroCtaPrimary').meta.langs.de.error, 'provider_error')
+  assert.equal(translationStatesOf(stored('heroCtaPrimary')).de, 'unknown')
+  const before = structuredClone(store.get('home'))
+  providerBehaviour = {}
+  providerCalls = []
+
+  const res = await retry('de')
+
+  assert.equal(res.status, 409)
+  assert.equal(res.body.reason, 'legacy_translation')
+  assert.equal(providerCalls.length, 0)
+  assert.equal(stored('heroCtaPrimary').de, 'Leistungen entdecken')
+  assert.deepEqual(store.get('home'), before)
+})
+
+test('12h. SUCCESSFUL STALE RETRY: new text, fresh provenance, no error — the state becomes translated', async () => {
+  seedTracked()
+  currentUser = OWNER
+  const started = Date.now()
+
+  const res = await retry('de')
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(res.body, { success: true, fieldKey: 'heroCtaPrimary', lang: 'de', translated: true, translationState: 'translated' })
+
+  const field = stored('heroCtaPrimary')
+  assert.equal(field.de, '[de] Discover Our Services', 'the German text is the translation of the CURRENT source')
+  assert.deepEqual(Object.keys(field.meta.langs.de).sort(), ['at', 'by', 'from'], 'error and errorAt are gone')
+  assert.equal(field.meta.langs.de.from, HASH_V2)
+  assert.equal(field.meta.langs.de.by, 'machine')
+  assert.match(field.meta.langs.de.at, ISO)
+  assert.ok(Date.parse(field.meta.langs.de.at) >= started - 1000, 'stamped now, not with the old time')
+  assert.equal(field.meta.sourceHash, HASH_V2)
+  assert.equal(translationStatesOf(field).de, 'translated')
+})
+
+test('12i. SUCCESSFUL MISSING RETRY: the text and its provenance are created', async () => {
+  seedTracked()
+  currentUser = OWNER
+  assert.equal('ur' in stored('heroCtaPrimary'), false)
+
+  const res = await retry('ur')
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(res.body, { success: true, fieldKey: 'heroCtaPrimary', lang: 'ur', translated: true, translationState: 'translated' })
+  const field = stored('heroCtaPrimary')
+  assert.equal(field.ur, '[ur] Discover Our Services')
+  assert.deepEqual(Object.keys(field.meta.langs.ur).sort(), ['at', 'by', 'from'], 'the earlier failure is cleared')
+  assert.equal(field.meta.langs.ur.from, HASH_V2)
+  assert.equal(field.meta.langs.ur.by, 'machine')
+  assert.equal(translationStatesOf(field).ur, 'translated')
+})
+
+test('12j. exactly ONE provider request is made, for the one language, from the stored source language', async () => {
+  seedTracked()
+  currentUser = OWNER
+
+  await retry('de')
+
+  assert.equal(providerCalls.length, 1)
+  assert.equal(pairOf(providerCalls[0]), 'en|de')
+  assert.equal(new URL(providerCalls[0]).searchParams.get('q'), 'Discover Our Services')
+  assert.equal(providerCalls.some((href) => href.includes('autodetect')), false, 'the source language is not detected again')
+})
+
+test('12k. the source text and language come from the database — nothing the caller sends is used', async () => {
+  const field = { type: 'text', sourceLang: 'tr', tr: 'Hizmetlerimizi Keşfedin', en: 'Discover Our Services', meta: { sourceHash: sourceHash('Hizmetlerimizi Keşfedin'), langs: { en: machine(sourceHash('Hizmetlerimizi Keşfedin'), AT_V2) } } }
+  seedHome({ heroCtaPrimary: field })
+  currentUser = OWNER
+
+  const res = await retry('de', 'heroCtaPrimary', 'home', {
+    value: 'ATTACKER TEXT', text: 'ATTACKER TEXT', source: 'ATTACKER TEXT', sourceLang: 'en', lang: 'ru',
+    translation: 'ATTACKER TRANSLATION', fields: { heroLabel: { type: 'text', value: 'ATTACKER TEXT' } },
+  })
+
+  assert.equal(res.status, 200)
+  assert.equal(providerCalls.length, 1)
+  assert.equal(pairOf(providerCalls[0]), 'tr|de', 'a Turkish-source field is translated FROM Turkish')
+  assert.equal(new URL(providerCalls[0]).searchParams.get('q'), 'Hizmetlerimizi Keşfedin')
+  assert.equal(stored('heroCtaPrimary').de, '[de] Hizmetlerimizi Keşfedin')
+  assert.equal(JSON.stringify(store.get('home')).includes('ATTACKER'), false)
+  assert.equal('ru' in stored('heroCtaPrimary'), false, 'the language is the one in the address')
+  assert.equal(stored('heroCtaPrimary').sourceLang, 'tr')
+})
+
+test('12l. FAILED STALE RETRY: the old text and its real provenance are kept; only the failure is updated', async () => {
+  const before = seedTracked()
+  currentUser = OWNER
+  providerBehaviour = { de: 'fail' }
+
+  const res = await retry('de')
+
+  assert.equal(res.status, 200, 'the request was carried out; the provider produced nothing')
+  assert.deepEqual(res.body, { success: true, fieldKey: 'heroCtaPrimary', lang: 'de', translated: false, reason: 'provider_error', translationState: 'stale' })
+
+  const field = stored('heroCtaPrimary')
+  assert.equal(field.de, 'Leistungen entdecken', 'the German text is exactly what it was')
+  assert.equal(field.meta.langs.de.from, HASH_V1, 'still a translation of version 1')
+  assert.equal(field.meta.langs.de.by, 'machine')
+  assert.equal(field.meta.langs.de.at, AT_V1, 'the time of the last real translation is not moved')
+  assert.equal(field.meta.langs.de.error, 'provider_error')
+  assert.match(field.meta.langs.de.errorAt, ISO)
+  assert.notEqual(field.meta.langs.de.errorAt, AT_V2, 'the failure time is this attempt')
+  assert.deepEqual(Object.keys(field.meta.langs.de).sort(), ['at', 'by', 'error', 'errorAt', 'from'])
+  assert.equal(translationStatesOf(field).de, 'stale')
+
+  // Nothing else moved.
+  const expected = structuredClone(before)
+  expected.fields.heroCtaPrimary.meta.langs.de = field.meta.langs.de
+  assert.deepEqual(store.get('home'), expected)
+  assert.ok(providerCalls.every((href) => pairOf(href) === 'en|de'), 'every attempt was for German only')
+})
+
+test('12m. FAILED MISSING RETRY: no empty value is stored, only the failure', async () => {
+  const before = seedTracked()
+  currentUser = OWNER
+  providerBehaviour = { ur: 'fail' }
+
+  const res = await retry('ur')
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(res.body, { success: true, fieldKey: 'heroCtaPrimary', lang: 'ur', translated: false, reason: 'provider_error', translationState: 'missing' })
+  const field = stored('heroCtaPrimary')
+  assert.equal('ur' in field, false, 'no `ur: ""` was written')
+  assert.deepEqual(Object.keys(field.meta.langs.ur).sort(), ['error', 'errorAt'], 'no provenance is invented')
+  assert.equal(field.meta.langs.ur.error, 'provider_error')
+  assert.match(field.meta.langs.ur.errorAt, ISO)
+  assert.equal(translationStatesOf(field).ur, 'missing')
+
+  const expected = structuredClone(before)
+  expected.fields.heroCtaPrimary.meta.langs.ur = field.meta.langs.ur
+  assert.deepEqual(store.get('home'), expected)
+})
+
+test('12n. an echoed or quota-poisoned answer is a failure with a stable reason — never stored, never relayed', async () => {
+  for (const [mode, reason] of [['echo', 'echo'], ['poison', 'quota']]) {
+    for (const [lang, state, kept] of [['de', 'stale', 'Leistungen entdecken'], ['ur', 'missing', undefined]]) {
+      seedTracked()
+      currentUser = OWNER
+      providerBehaviour = { [lang]: mode }
+
+      const res = await retry(lang)
+
+      assert.equal(res.status, 200)
+      assert.equal(res.body.translated, false)
+      assert.equal(res.body.reason, reason, `${mode} for ${lang}`)
+      assert.equal(res.body.translationState, state)
+      assert.equal(stored('heroCtaPrimary')[lang], kept)
+      assert.equal(stored('heroCtaPrimary').meta.langs[lang].error, reason)
+      assert.equal(JSON.stringify(res.body).includes('MYMEMORY'), false, 'provider text reached the client')
+      assert.equal(JSON.stringify(store.get('home')).includes('MYMEMORY'), false, 'provider text reached the database')
+    }
+  }
+})
+
+test('12o. SINGLE-LANGUAGE ISOLATION: a German retry changes German and nothing else', async () => {
+  const before = seedTracked()
+  currentUser = OWNER
+
+  await retry('de')
+
+  const after = store.get('home')
+  const field = after.fields.heroCtaPrimary
+  for (const lang of ['en', 'tr', 'ar', 'ru', 'ur']) {
+    assert.deepEqual(field[lang], before.fields.heroCtaPrimary[lang], `${lang} text changed`)
+    assert.deepEqual(field.meta.langs[lang], before.fields.heroCtaPrimary.meta.langs[lang], `${lang} metadata changed`)
+  }
+  assert.equal(field.sourceLang, 'en')
+  assert.equal(field.type, 'text')
+  assert.deepEqual(after.fields.heroLabel, before.fields.heroLabel, 'another text field changed')
+  assert.deepEqual(after.fields.heroImage, before.fields.heroImage, 'an image field changed')
+  assert.deepEqual(after.sections, before.sections, 'section visibility changed')
+  assert.deepEqual(Object.keys(after.fields).sort(), Object.keys(before.fields).sort())
+
+  // Put German back and the whole document is what it was.
+  const restored = structuredClone(after)
+  restored.fields.heroCtaPrimary.de = before.fields.heroCtaPrimary.de
+  restored.fields.heroCtaPrimary.meta.langs.de = before.fields.heroCtaPrimary.meta.langs.de
+  assert.deepEqual(restored, before)
+})
+
+test('12p. the write is ONE update whose every path belongs to the one field and language', async () => {
+  seedTracked()
+  currentUser = OWNER
+
+  await retry('de')
+
+  assert.equal(updateCalls.length, 1)
+  const { filter, update } = updateCalls[0]
+  assert.deepEqual(Object.keys(update), ['$set'], 'nothing but $set — no replacement document, no $unset')
+  assert.deepEqual(Object.keys(update.$set).sort(), [
+    'fields.heroCtaPrimary.de',
+    'fields.heroCtaPrimary.meta.langs.de',
+    'fields.heroCtaPrimary.meta.sourceHash',
+  ])
+  assert.equal(update.$set['fields.heroCtaPrimary.meta.sourceHash'], HASH_V2, 'the hash of the stored source, as it already was')
+  // The update only applies while the stored source is the text that was translated.
+  assert.deepEqual(filter, {
+    pageKey: 'home',
+    'fields.heroCtaPrimary.sourceLang': 'en',
+    'fields.heroCtaPrimary.en': 'Discover Our Services',
+  })
+
+  // A failed attempt writes even less: no text path at all.
+  seedTracked()
+  updateCalls = []
+  providerBehaviour = { de: 'fail' }
+  await retry('de')
+  assert.deepEqual(Object.keys(updateCalls[0].update.$set).sort(), [
+    'fields.heroCtaPrimary.meta.langs.de',
+    'fields.heroCtaPrimary.meta.sourceHash',
+  ])
+})
+
+test('12q. THE RACE: the source is saved again while the retry is translating — nothing is written', async () => {
+  seedTracked()
+  currentUser = OWNER
+  // Another admin's save lands between the retry's read and its write.
+  let concurrent
+  duringTranslation = () => {
+    const doc = structuredClone(store.get('home'))
+    doc.fields.heroCtaPrimary = {
+      type: 'text', sourceLang: 'en', en: 'See What We Build', de: '[de] See What We Build',
+      meta: { sourceHash: sourceHash('See What We Build'), langs: { de: machine(sourceHash('See What We Build'), '2026-10-09T09:15:00.000Z') } },
+    }
+    store.set('home', doc)
+    concurrent = structuredClone(doc)
+  }
+
+  const res = await retry('de')
+
+  assert.equal(res.status, 409)
+  assert.equal(res.body.success, false)
+  assert.equal(res.body.reason, 'source_changed')
+  assert.equal('translated' in res.body, false, 'a conflict is not reported as a translation result')
+  assert.deepEqual(store.get('home'), concurrent, 'the newer save is intact')
+  assert.equal(stored('heroCtaPrimary').de, '[de] See What We Build', 'the translation of the OLD source was not stored over it')
+  assert.equal(JSON.stringify(store.get('home')).includes('Discover Our Services'), false)
+})
+
+test('12r. THE RACE: a change of source LANGUAGE, or the field being emptied, is also a conflict', async () => {
+  for (const change of [
+    (field) => { field.sourceLang = 'tr' },
+    (field) => { field.en = '' },
+    (field) => { field.en = 'Discover Our Services ' },
+  ]) {
+    seedTracked()
+    currentUser = OWNER
+    let concurrent
+    duringTranslation = () => {
+      const doc = structuredClone(store.get('home'))
+      change(doc.fields.heroCtaPrimary)
+      store.set('home', doc)
+      concurrent = structuredClone(doc)
+    }
+
+    const res = await retry('de')
+
+    assert.equal(res.status, 409)
+    assert.equal(res.body.reason, 'source_changed')
+    assert.deepEqual(store.get('home'), concurrent)
+  }
+})
+
+test('12s. the four kinds of answer are distinguishable from the response alone', async () => {
+  seedTracked()
+  currentUser = OWNER
+
+  const translated = await retry('ur')
+  assert.deepEqual([translated.status, translated.body.success, translated.body.translated], [200, true, true])
+
+  providerBehaviour = { de: 'fail' }
+  const providerFailure = await retry('de')
+  assert.deepEqual([providerFailure.status, providerFailure.body.success, providerFailure.body.translated], [200, true, false])
+  assert.equal(RETRY_REFUSALS.includes(providerFailure.body.reason), false)
+
+  const refused = await retry('tr')
+  assert.deepEqual([refused.status, refused.body.success], [409, false])
+  assert.ok(RETRY_REFUSALS.includes(refused.body.reason))
+  assert.equal(typeof refused.body.message, 'string')
+
+  const invalid = await retry('fr')
+  assert.deepEqual([invalid.status, invalid.body.success], [400, false])
+
+  currentUser = null
+  assert.equal((await retry('de')).status, 401)
+})
+
+test('12t. after a retry the admin read reports the new state, and the public read still shows no metadata', async () => {
+  seedTracked()
+  currentUser = OWNER
+  assert.equal((await adminRead()).body.translationStates.heroCtaPrimary.de, 'stale')
+
+  await retry('de')
+
+  const admin = await adminRead()
+  assert.deepEqual(admin.body.translationStates.heroCtaPrimary, { en: 'source', tr: 'translated', ar: 'translated', de: 'translated', ru: 'translated', ur: 'missing' })
+  assert.equal(admin.body.fields.heroCtaPrimary.de, '[de] Discover Our Services')
+
+  currentUser = null
+  const visitor = await request('GET', '/api/page-content/home')
+  assert.equal(visitor.body.fields.heroCtaPrimary.de, '[de] Discover Our Services')
+  assert.equal(containsMeta(visitor.body), false)
+})
+
+test('12u. a language missing on a field saved BEFORE tracking can be filled without touching its legacy text', async () => {
+  // German and Turkish are legacy text; Arabic has never existed.
+  const before = seedHome({ heroCtaPrimary: LEGACY_BUTTON })
+  currentUser = OWNER
+
+  assert.equal((await retry('de')).body.reason, 'legacy_translation')
+  assert.equal((await retry('tr')).body.reason, 'legacy_translation')
+  assert.equal(providerCalls.length, 0)
+
+  const res = await retry('ar')
+
+  assert.equal(res.status, 200)
+  assert.equal(res.body.translationState, 'translated')
+  const field = stored('heroCtaPrimary')
+  assert.equal(field.ar, '[ar] Explore Services')
+  assert.equal(field.de, before.fields.heroCtaPrimary.de)
+  assert.equal(field.tr, before.fields.heroCtaPrimary.tr)
+  assert.deepEqual(Object.keys(field.meta.langs), ['ar'], 'no provenance was invented for the legacy languages')
+  assert.deepEqual(translationStatesOf(field), { en: 'source', tr: 'unknown', ar: 'translated', de: 'unknown', ru: 'missing', ur: 'missing' })
+})
+
+test('12v. a retry that follows a real failed save turns the language current, end to end', async () => {
+  currentUser = OWNER
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Explore Services') } })
+  providerBehaviour = { de: 'fail' }
+  await request('PUT', '/api/page-content/home', { fields: { heroCtaPrimary: text('Discover Our Services') } })
+  assert.equal(translationStatesOf(stored('heroCtaPrimary')).de, 'stale')
+  const others = structuredClone(stored('heroCtaPrimary'))
+  providerBehaviour = {}
+  providerCalls = []
+
+  const res = await retry('de')
+
+  assert.equal(res.body.translationState, 'translated')
+  assert.equal(providerCalls.length, 1)
+  const field = stored('heroCtaPrimary')
+  assert.equal(field.de, '[de] Discover Our Services')
+  assert.deepEqual(translationStatesOf(field), { en: 'source', tr: 'translated', ar: 'translated', de: 'translated', ru: 'translated', ur: 'translated' })
+  for (const lang of ['en', 'tr', 'ar', 'ru', 'ur']) {
+    assert.equal(field[lang], others[lang], lang)
+    assert.deepEqual(field.meta.langs[lang], others.meta.langs[lang], lang)
+  }
+
+  // And once it is current it is no longer retryable.
+  assert.equal((await retry('de')).body.reason, 'already_current')
 })

@@ -423,9 +423,18 @@ test('Phase A: the request the editor sends is unchanged', async () => {
 /* ══════════════ CMS Phase C1 — translation status and read-only preview ══════════════
  *
  * The editor shows, per text field, the state of each language and what its
- * visitors currently see. It is display only: C1 adds no way to retry, edit or
- * otherwise change a translation.
+ * visitors currently see. C1 itself was display only; the one action added
+ * since is C2's single-language Retry (its own section, below). There is still
+ * no way to edit a translation here.
  */
+
+// The strings C2's Retry action reads (catalogue: adminPages.pageContent).
+const RETRY_UI_KEYS = [
+  'retryAction', 'retryLanguage', 'retrying',
+  'retrySucceeded', 'retryFailed', 'retrySourceChanged',
+  'retryUnavailable', 'retryAlreadyCurrent', 'retryError',
+  'retrySaveFirst', 'retryProtected',
+]
 
 const STATUS_UI_KEYS = [
   'statusSource', 'statusCurrent', 'statusManual', 'statusBuiltin', 'statusExisting', 'statusStale', 'statusOutdated', 'statusMissing',
@@ -459,11 +468,11 @@ test('Phase C1: every string the status component reads is one of those keys', a
   const viaTables = [...src.matchAll(/: '((?:status|explain|origin|failure)[A-Za-z]+)'/g)].map((m) => m[1])
   const used = [...new Set([...direct, ...viaTables])]
   assert.ok(used.length >= 28, `only ${used.length} keys found`)
-  for (const key of used) assert.ok(STATUS_UI_KEYS.includes(key), `${key} is read but not a Phase C1 key`)
+  for (const key of used) assert.ok([...STATUS_UI_KEYS, ...RETRY_UI_KEYS].includes(key), `${key} is read but not a Phase C1 or C2 key`)
   for (const key of STATUS_UI_KEYS.filter((k) => k !== 'statusUnavailable')) assert.ok(used.includes(key), `${key} is never shown`)
 })
 
-test('Phase C1: status is written out, the disclosure is a real button, and the preview is read-only', async () => {
+test('Phase C1: status is written out, the disclosure is a real button, and the preview shows text without editing it', async () => {
   const src = await readSrc('components', 'PageContentTranslationStatus.jsx')
 
   // Never colour alone: every chip and preview row prints the status label.
@@ -480,22 +489,22 @@ test('Phase C1: status is written out, the disclosure is a real button, and the 
   // Each language's text is set in its own language and direction.
   assert.match(src, /lang=\{row\.lang\}\s+dir=\{RTL_LANGUAGES\.includes\(row\.lang\) \? 'rtl' : 'ltr'\}/)
 
-  // Display only: one button (the disclosure), no field, no request, no handler that changes anything.
-  assert.equal((src.match(/<button/g) || []).length, 1)
+  // Two buttons in all: the disclosure, and C2's Retry. No field, and no request made from here.
+  assert.equal((src.match(/<button/g) || []).length, 2)
   assert.equal(/<(input|textarea|select|form)\b/.test(src), false, 'nothing editable')
   assert.equal(/contentEditable|onChange|onSubmit/.test(src), false)
   assert.equal(/\bapi\b|fetch\(|axios/.test(src), false, 'the component makes no request')
-  assert.equal(/retry/i.test(src), false, 'no retry in C1')
 })
 
-test('Phase C1: no retry, and no second write, anywhere in the editor', async () => {
+test('Phase C1 + C2: the editor writes in exactly three ways — the save, the image upload, and one retry', async () => {
   const src = await readSrc('pages', 'AdminPageContent.jsx')
-  assert.equal((src.match(/api\.put\(/g) || []).length, 1, 'exactly one write: the save')
-  assert.equal(/api\.(post|patch|delete)\(/.test(src.replace(/api\.post\('\/upload'/, '')), false, 'no other write besides the image upload')
-  assert.equal(/retry/i.test(src), false)
+  assert.equal((src.match(/api\.put\(/g) || []).length, 1, 'exactly one PUT: the save')
+  assert.equal(/api\.(patch|delete)\(/.test(src), false)
+  const posts = [...src.matchAll(/api\.post\(([^,)]+)/g)].map((m) => m[1])
+  assert.deepEqual(posts, ["'/upload'", '`/page-content/${key}/fields/${fieldKey}/translations/${lang}/retry`'])
   for (const lib of ['pageContentTranslationStatus.js', 'pageContentCatalogue.js']) {
     const helper = await readSrc('lib', lib)
-    assert.equal(/\bapi\b|fetch\(|axios|retry/i.test(helper), false, `${lib} is pure`)
+    assert.equal(/\bapi\b|fetch\(|axios/i.test(helper), false, `${lib} is pure`)
   }
 })
 
@@ -520,4 +529,127 @@ test('Phase C1: the editor reads the protected endpoint first and falls back to 
   assert.match(derive, /describeFieldTranslations\(\{ pageKey, def, field: stored\.fields\[def\.key\], states: stored\.states\[def\.key\] \}\)/)
   assert.match(derive, /\}, \[stored, pageKey\]\)/)
   assert.equal(/\bvalues\b/.test(derive), false)
+})
+
+/* ══════════════ CMS Phase C2 — retry ONE translation ══════════════
+ *
+ * One action is added to the preview: "Retry translation", for one language of
+ * one field. These pin down where it lives, what it sends, and what it must
+ * never become — a bulk action, an editor, or a second way to save.
+ */
+
+test('Phase C2: every retry string exists in all six languages, in its own words', () => {
+  for (const key of RETRY_UI_KEYS) {
+    for (const lang of ALL_LANGUAGES) assert.ok(isText(pc(lang)[key]), `${lang}.adminPages.pageContent.${key} is missing`)
+    for (const lang of ALL_LANGUAGES.filter((l) => l !== 'en')) {
+      assert.notEqual(pc(lang)[key], pc('en')[key], `${lang}.adminPages.pageContent.${key} is still English`)
+    }
+  }
+  for (const lang of ALL_LANGUAGES) {
+    // The messages that name a language carry the placeholder; the others must not expect one.
+    for (const key of ['retryLanguage', 'retrySucceeded', 'retryFailed']) assert.match(pc(lang)[key], /\{language\}/, `${lang}.${key}`)
+    for (const key of RETRY_UI_KEYS.filter((k) => !['retryLanguage', 'retrySucceeded', 'retryFailed'].includes(k))) {
+      assert.equal(/\{[a-z]+\}/i.test(pc(lang)[key]), false, `${lang}.${key} has a placeholder nothing fills`)
+    }
+    // Idle and busy are told apart by words.
+    assert.notEqual(pc(lang).retryAction, pc(lang).retrying, lang)
+    assert.notEqual(pc(lang).retrySucceeded, pc(lang).retryFailed, lang)
+  }
+  assert.equal(pc('en').retryLanguage.replace('{language}', 'German'), 'Retry German translation')
+  assert.equal(pc('en').retrySourceChanged, 'The source text changed while the translation was being retried. Please try again.')
+})
+
+test('Phase C2: the action lives in the preview row — never on a chip — and is a labelled, disableable text button', async () => {
+  const src = await readSrc('components', 'PageContentTranslationStatus.jsx')
+
+  const chip = src.slice(src.indexOf('function StatusChip('), src.indexOf('function RetryAction('))
+  assert.equal(/<button|onClick|onRetry/.test(chip), false, 'a status chip is not interactive')
+
+  const action = src.slice(src.indexOf('function RetryAction('), src.indexOf('function PreviewRow('))
+  assert.equal((action.match(/<button/g) || []).length, 1)
+  assert.match(action, /type="button"/)
+  assert.match(action, /data-testid="translation-retry"/)
+  // Only for a language the status model marks retryable.
+  assert.match(action, /if \(row\.retry !== 'allowed' \|\| !onRetry\) return null/)
+  assert.match(action, /if \(row\.retry === 'protected'\) \{\s*return <p[^>]*>\{pc\.retryProtected\}<\/p>/)
+  // The accessible name carries the language; the visible label is words, and changes while busy.
+  assert.match(action, /aria-label=\{busy \? undefined : pc\.retryLanguage\.replace\('\{language\}', \(\) => languageName\(row\.lang, language\)\)\}/)
+  assert.match(action, /\{busy \? pc\.retrying : pc\.retryAction\}/)
+  assert.match(action, /disabled=\{busy \|\| locked\}/)
+  assert.match(action, /onClick=\{\(\) => onRetry\(row\.lang\)\}/)
+  assert.equal(/<svg|<img/.test(action), false, 'no icon-only action')
+  assert.match(action, /focus-visible:ring-2/)
+
+  // It is rendered inside the preview row, after the explanation and failure.
+  const row = src.slice(src.indexOf('function PreviewRow('), src.indexOf('export function FieldTranslationStatus('))
+  assert.ok(row.indexOf('<RetryAction') > row.indexOf('pc[FAILURE_LABEL[row.failure]]'))
+  assert.equal((src.match(/<RetryAction/g) || []).length, 1, 'one place only')
+
+  // The component asks; it never sends.
+  assert.equal(/\bapi\b|fetch\(|axios/.test(src), false)
+})
+
+test('Phase C2: the editor sends one bodiless POST for one field and one language', async () => {
+  const src = await readSrc('pages', 'AdminPageContent.jsx')
+  const retry = src.slice(src.indexOf('const retryTranslation = async (fieldKey, lang) => {'), src.indexOf('// What the status display needs to offer a retry'))
+  assert.ok(retry.length > 200, 'retryTranslation was not found')
+
+  // The address names page, field and language; nothing else is sent — no text, no source language.
+  assert.ok(retry.includes('await api.post(`/page-content/${key}/fields/${fieldKey}/translations/${lang}/retry`)'))
+  assert.equal((retry.match(/api\.post\(/g) || []).length, 1)
+  assert.equal(/api\.(put|patch|delete)\(/.test(retry), false)
+  assert.equal(/\bvalues\b|\bpayload\b|baseline/.test(retry), false, 'what is typed in the form is never part of a retry')
+
+  // A second click on the same language cannot start a second request.
+  assert.match(retry, /if \(saving \|\| retryGuard\.current\.has\(id\)\) return\s+retryGuard\.current\.add\(id\)/)
+  assert.ok(retry.indexOf('retryGuard.current.add(id)') < retry.indexOf('api.post('))
+
+  // Each outcome has its own message.
+  assert.match(retry, /if \(res\.data\?\.translated\) toast\.success\(named\(pc\.retrySucceeded\)\)/)
+  assert.match(retry, /else toast\.warn\(named\(pc\.retryFailed\)\)/)
+  assert.match(retry, /reason === 'source_changed'\) toast\.warn\(pc\.retrySourceChanged\)/)
+  assert.match(retry, /reason === 'already_current'\) toast\.info\(pc\.retryAlreadyCurrent\)/)
+  assert.match(retry, /else if \(reason\) toast\.warn\(pc\.retryUnavailable\)/)
+  assert.match(retry, /else toast\.error\(pc\.retryError\)/)
+  // The server's English message is never shown in place of a localized one.
+  assert.equal(/data\?\.message|data\.message/.test(retry), false)
+
+  // Whatever happened, the stored state is read again before the button is released.
+  assert.match(retry, /\} finally \{\s+await refreshStored\(key\)\s+retryGuard\.current\.delete\(id\)/)
+})
+
+test('Phase C2: no Retry All, no bulk or automatic retry, no manual editing', async () => {
+  const editor = await readSrc('pages', 'AdminPageContent.jsx')
+  const component = await readSrc('components', 'PageContentTranslationStatus.jsx')
+
+  // retryTranslation is reached from exactly one place: a click on one row.
+  assert.equal((editor.match(/retryTranslation\b/g) || []).length, 2, 'defined once, referenced once')
+  assert.match(editor, /start: retryTranslation,/)
+  assert.match(editor, /onRetry=\{\(lang\) => retry\.start\(f\.key, lang\)\}/)
+  const retry = editor.slice(editor.indexOf('const retryTranslation = '), editor.indexOf('// What the status display needs to offer a retry'))
+  assert.equal(/\bfor \(|\.forEach\(|\.map\(|Promise\.all|setInterval|setTimeout|useEffect/.test(retry), false, 'one request per click, never a loop or a timer')
+  const componentCode = component.replace(/^\s*\*.*$/gm, '') // without its doc comments
+  assert.equal(/onRetry\(/.test(componentCode.replace('onClick={() => onRetry(row.lang)}', '')), false, 'the component only calls onRetry from that one click')
+
+  for (const src of [editor, component]) {
+    assert.equal(/retry ?all|retryAll|bulk/i.test(src), false)
+    assert.equal(/window\.confirm|confirm\(/.test(src), false, 'no confirmation step')
+  }
+  for (const lang of ALL_LANGUAGES) {
+    for (const key of Object.keys(pc(lang))) assert.equal(/retryAll|bulk/i.test(key), false, `${lang}.${key}`)
+  }
+  // Still nothing editable in the status display.
+  assert.equal(/<(input|textarea|select|form)\b|contentEditable|onChange|onSubmit/.test(component), false)
+})
+
+test('Phase C2: a retry and a save never run over each other in one editor', async () => {
+  const src = await readSrc('pages', 'AdminPageContent.jsx')
+  // No retry starts while a save is in flight…
+  assert.match(src, /locked: saving,/)
+  // …and Save waits for a retry that is in flight.
+  assert.match(src, /onClick=\{handleSave\}\s+disabled=\{saving \|\| retrying\.size > 0\}/)
+  // An unsaved edit to the field is saved before its translations are retried.
+  assert.match(src, /isDirty: \(fieldKey\) => values\[fieldKey\] !== baseline\.values\[fieldKey\],/)
+  const component = await readSrc('components', 'PageContentTranslationStatus.jsx')
+  assert.match(component, /if \(dirty && !busy\) \{\s*return <p[^>]*>\{pc\.retrySaveFirst\}<\/p>/)
 })

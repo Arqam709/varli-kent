@@ -4,6 +4,7 @@ import { protect } from '../middleware/auth.js'
 import { requireRole, requirePermission } from '../middleware/checkPermission.js'
 import { sanitizePoisonedTranslations, isUnchangedSource, localizeTextWithReport } from '../utils/autoTranslate.js'
 import { withTranslationState, withoutTranslationState, translationStatesOf } from '../utils/translationState.js'
+import { retryPageContentTranslation } from '../services/pageContentTranslationRetry.js'
 import {
   isKnownPage,
   isKnownSection,
@@ -243,6 +244,32 @@ router.put(
         // Additive: a client that predates it simply does not read it.
         translation: { fields: translatedFields },
       })
+    } catch (err) {
+      next(err)
+    }
+  }
+)
+
+/*
+ * POST /api/page-content/:pageKey/fields/:fieldKey/translations/:lang/retry
+ *
+ * Asks for ONE language of ONE text field to be translated again from the
+ * source text that is stored. The request has no body: what is translated, and
+ * from which language, is read from the database, never from the caller.
+ *
+ * Guarded exactly as the PUT above is. Everything it may and may not do is in
+ * services/pageContentTranslationRetry.js; this route only authorises and relays.
+ */
+router.post(
+  '/:pageKey/fields/:fieldKey/translations/:lang/retry',
+  protect,
+  requireRole('owner', 'admin'),
+  requirePermission('manage_page_content'),
+  async (req, res, next) => {
+    try {
+      const { pageKey, fieldKey, lang } = req.params
+      const { status, body } = await retryPageContentTranslation({ PageContent, pageKey, fieldKey, lang })
+      res.status(status).json(body)
     } catch (err) {
       next(err)
     }

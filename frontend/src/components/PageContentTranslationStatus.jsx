@@ -1,17 +1,20 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { DISPLAY_STATUSES, summarizePageTranslations } from '../lib/pageContentTranslationStatus'
 import { languageList } from '../lib/pageContentSaveReport'
 
 /*
- * Read-only translation status for the Page Content editor.
- *
- * Two pieces, both display only — nothing here edits, saves or retries:
+ * Translation status for the Page Content editor.
  *
  *   FieldTranslationStatus   under one text field: a row of six small chips
  *                            (one per language), and a disclosure that opens
  *                            what visitors of each language currently see
  *   PageTranslationSummary   one line above the page: how its translations
  *                            are doing, and whether any need a look
+ *
+ * Nothing here edits text or saves. The one action is "Retry translation", and
+ * it lives inside the opened preview, beside the language it concerns — never
+ * on a chip. This component only asks for it (onRetry); the request, and every
+ * decision about what may be retried, belong to the editor and the backend.
  *
  * Most languages of most fields are fine, so the default look is quiet:
  * outlined chips in the form's own greys. Only a language that needs attention
@@ -58,9 +61,63 @@ function StatusChip({ row, language, pc }) {
   )
 }
 
-function PreviewRow({ row, language, pc }) {
+/*
+ * The action for one language. Always words, never an icon alone; its
+ * accessible name carries the language, because six of these can be on screen.
+ * While its request is in flight it says so and cannot be pressed again.
+ */
+function RetryAction({ row, language, pc, busy, locked, dirty, onRetry }) {
+  if (row.retry === 'protected') {
+    return <p data-testid="translation-retry-note" className="mt-2 text-xs text-slate-500">{pc.retryProtected}</p>
+  }
+  if (row.retry !== 'allowed' || !onRetry) return null
+
+  // A retry translates the text that is SAVED. With an edit pending, that is
+  // not the text on screen — so the edit is saved first.
+  if (dirty && !busy) {
+    return <p data-testid="translation-retry-note" className="mt-2 text-xs text-slate-500">{pc.retrySaveFirst}</p>
+  }
+
   return (
-    <li data-testid="translation-preview-row" data-lang={row.lang} data-status={row.status} className="py-3 first:pt-0 last:pb-0">
+    <button
+      type="button"
+      data-testid="translation-retry"
+      data-lang={row.lang}
+      onClick={() => onRetry(row.lang)}
+      disabled={busy || locked}
+      aria-busy={busy || undefined}
+      aria-label={busy ? undefined : pc.retryLanguage.replace('{language}', () => languageName(row.lang, language))}
+      className="mt-2 inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4b6741]/50 disabled:cursor-default disabled:opacity-60 disabled:hover:bg-white motion-reduce:transition-none cursor-pointer"
+    >
+      {busy ? pc.retrying : pc.retryAction}
+    </button>
+  )
+}
+
+function PreviewRow({ row, language, pc, busy, locked, dirty, onRetry }) {
+  /*
+   * A successful retry removes the button that was just pressed. Keyboard
+   * focus would fall back to the top of the document, so when a retry of this
+   * row finishes and focus is nowhere, it is put on the row itself.
+   */
+  const rowRef = useRef(null)
+  const wasBusy = useRef(false)
+  useEffect(() => {
+    if (wasBusy.current && !busy && (!document.activeElement || document.activeElement === document.body)) {
+      rowRef.current?.focus({ preventScroll: true })
+    }
+    wasBusy.current = busy
+  }, [busy])
+
+  return (
+    <li
+      ref={rowRef}
+      tabIndex={-1}
+      data-testid="translation-preview-row"
+      data-lang={row.lang}
+      data-status={row.status}
+      className="rounded py-3 first:pt-0 last:pb-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4b6741]/50"
+    >
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <span className="font-semibold text-slate-800">{languageName(row.lang, language)}</span>
         <span className={`inline-flex items-center gap-1 ${row.attention ? 'font-semibold text-amber-800' : 'text-slate-500'}`}>
@@ -91,11 +148,18 @@ function PreviewRow({ row, language, pc }) {
       {row.failure && (
         <p className="mt-1 text-xs font-medium text-amber-800">{pc[FAILURE_LABEL[row.failure]]}</p>
       )}
+      <RetryAction row={row} language={language} pc={pc} busy={busy} locked={locked} dirty={dirty} onRetry={onRetry} />
     </li>
   )
 }
 
-export function FieldTranslationStatus({ rows, caption, language, pc }) {
+/*
+ *   onRetry(lang)   asks for one language to be translated again
+ *   retrying        the languages of this field whose retry is in flight
+ *   locked          no retry can start right now (a save is in progress)
+ *   dirty           the field has an edit that is not saved yet
+ */
+export function FieldTranslationStatus({ rows, caption, language, pc, onRetry, retrying = [], locked = false, dirty = false }) {
   const [open, setOpen] = useState(false)
   const panelId = useId()
   const source = rows.find((row) => row.status === 'source')
@@ -130,7 +194,18 @@ export function FieldTranslationStatus({ rows, caption, language, pc }) {
             </p>
           )}
           <ul className="divide-y divide-slate-200">
-            {rows.map((row) => <PreviewRow key={row.lang} row={row} language={language} pc={pc} />)}
+            {rows.map((row) => (
+              <PreviewRow
+                key={row.lang}
+                row={row}
+                language={language}
+                pc={pc}
+                busy={retrying.includes(row.lang)}
+                locked={locked}
+                dirty={dirty}
+                onRetry={onRetry}
+              />
+            ))}
           </ul>
         </div>
       )}
